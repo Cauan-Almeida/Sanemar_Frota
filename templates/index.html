@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Frota</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="manifest" href="/static/manifest.json">
+</head>
+<body>
+    <div class="container">
+        <div class="site-header">
+            <img src="/static/Logo_frota_sanemar.png" alt="Sanemar Frota" class="site-logo">
+            <h1>Controle de Frota</h1>
+        </div>
+
+        <!-- Seção para Registrar Saída -->
+        <div class="form-section">
+            <h2>Registrar Saída</h2>
+            <form id="form-saida">
+                <div class="form-group">
+                    <label for="saida-veiculo">Veículo (Placa)</label>
+                    <input list="veiculos-list" id="saida-veiculo" name="veiculo" placeholder="Digite ou selecione a placa" required>
+                    <datalist id="veiculos-list">
+                        {% for veiculo in veiculos %}
+                        <option value="{{ veiculo }}">
+                        {% endfor %}
+                    </datalist>
+                </div>
+                <div class="form-group">
+                    <label for="saida-motorista">Motorista</label>
+                    <input type="text" list="motoristas-list" id="saida-motorista" name="motorista" placeholder="Nome do Motorista" required>
+                    <datalist id="motoristas-list">
+                        {% for motorista in motoristas %}
+                        <option value="{{ motorista }}">
+                        {% endfor %}
+                    </datalist>
+                </div>
+                <div class="form-group">
+                    <label for="saida-solicitante">Solicitante</label>
+                    <input type="text" id="saida-solicitante" name="solicitante" placeholder="Quem solicitou" required>
+                </div>
+                <div class="form-group">
+                    <label for="saida-trajeto">Trajeto</label>
+                    <input type="text" id="saida-trajeto" name="trajeto" placeholder="Destino do veículo" required>
+                </div>
+                <div class="form-group">
+                    <label for="saida-horario">Horário de Saída</label>
+                    <input type="time" id="saida-horario" name="horario">
+                    <button type="button" id="btn-agora">Usar Hora Atual</button>
+                </div>
+                <button type="submit">Registrar Saída</button>
+            </form>
+        </div>
+
+        <div id="response-message"></div>
+
+        <!-- Seção para Veículos em Curso -->
+        <div class="table-section">
+            <h2>Veículos em Curso</h2>
+            <table id="veiculos-em-curso-table">
+                <thead>
+                    <tr>
+                        <th>Placa</th>
+                        <th>Motorista</th>
+                        <th>Saída</th>
+                        <th>Horário Chegada</th>
+                        <th>Ação</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Linhas serão adicionadas dinamicamente -->
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Abastecimentos agora são gerenciados na aba Veículos (veiculo_detalhes) -->
+
+        <!-- Pequeno cartão para Abastecer rápido (no final da página) -->
+        <div class="form-section mt-6 quick-refuel-card">
+            <h2 class="text-lg font-semibold mb-2">Registrar Abastecimento Rápido</h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
+                <div>
+                    <label class="text-sm">Placa</label>
+                    <input list="veiculos-list" id="quick-refuel-placa" class="quick-refuel-input" placeholder="Placa">
+                </div>
+                <div>
+                    <label class="text-sm">Motorista</label>
+                    <input list="motoristas-list" id="quick-refuel-motorista" class="quick-refuel-input" placeholder="Nome do motorista">
+                </div>
+                <div>
+                    <label class="text-sm">Litros</label>
+                    <input type="number" step="0.1" id="quick-refuel-litros" class="quick-refuel-input" placeholder="Litros">
+                </div>
+                <div class="flex gap-2">
+                    <div style="flex:1">
+                        <label class="text-sm">Odômetro (opcional)</label>
+                        <input type="number" id="quick-refuel-odometro" class="quick-refuel-input" placeholder="Odômetro">
+                    </div>
+                    <p></p>
+                    <div class="flex items-center">
+                        <button id="quick-refuel-submit" class="quick-refuel-submit">Salvar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/toast.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="/static/app.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').then(registration => {
+                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                }, err => {
+                    console.log('ServiceWorker registration failed: ', err);
+                });
+            });
+        }
+    </script>
+</body>
+</html>

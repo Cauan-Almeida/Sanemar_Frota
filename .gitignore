@@ -1,0 +1,13 @@
+# Arquivos de ambiente
+.env
+
+# Credenciais e configurações sensíveis
+firebase-credentials.json
+*.json
+
+# Pasta de ambiente virtual
+venv/
+
+# Arquivos de cache do Python
+__pycache__/
+*.pyc

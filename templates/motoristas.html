@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciar Motoristas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .modal {
+            display: none;
+        }
+        .modal.is-open {
+            display: flex;
+        }
+    </style>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="bg-gray-100 text-gray-800">
+    <div class="flex h-screen">
+        <!-- Sidebar -->
+        <aside class="w-64 bg-gray-800 text-white flex-col fixed inset-y-0 left-0 transform md:relative md:translate-x-0 transition-transform duration-300 ease-in-out z-30">
+            <div class="p-4 text-2xl font-bold border-b border-gray-700">
+                <a href="/">Gestão de Frota</a>
+            </div>
+            <nav class="flex-1 p-4 space-y-2">
+                <a href="/dashboard" class="flex items-center p-3 rounded-lg hover:bg-gray-600">
+                    <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+                    Dashboard
+                </a>
+                <a href="/motoristas" class="flex items-center p-3 rounded-lg bg-gray-700">
+                    <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.124-1.28-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.653.124-1.28.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                    Motoristas
+                </a>
+                <a href="/dashboard" class="flex items-center p-3 rounded-lg hover:bg-gray-600">
+                    <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16l-4-4m0 0l4-4m-4 4h18"></path></svg>
+                    Veículos
+                </a>
+                 <a href="/" class="flex items-center p-3 rounded-lg hover:bg-gray-600">
+                    <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                    Lançamentos
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <div class="flex-1 flex flex-col">
+            <header class="bg-white shadow-md p-4 flex items-center space-x-4">
+                <img src="/static/Logo_frota_sanemar.png" alt="Sanemar Frota" class="site-logo">
+                <h1 class="text-2xl font-bold">Gerenciar Motoristas</h1>
+            </header>
+
+            <main class="flex-1 p-6 md:p-8 overflow-y-auto">
+                <!-- Add Driver Form -->
+                <div class="bg-white p-6 rounded-xl shadow-md mb-6">
+                    <h2 class="text-2xl font-bold mb-4">Adicionar Novo Motorista</h2>
+                    <form id="add-motorista-form" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label for="nome" class="block text-sm font-medium text-gray-700">Nome</label>
+                            <input type="text" id="nome" name="nome" required class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="empresa" class="block text-sm font-medium text-gray-700">Empresa</label>
+                            <input type="text" id="empresa" name="empresa" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="funcao" class="block text-sm font-medium text-gray-700">Cargo</label>
+                            <input type="text" id="funcao" name="funcao" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        </div>
+                        <div class="md:col-span-3">
+                            <button type="submit" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">Adicionar Motorista</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Driver List -->
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h2 class="text-xl font-semibold mb-4">Lista de Motoristas</h2>
+                    <div class="table-responsive">
+                        <table class="w-full text-left">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="p-3">Nome</th>
+                                    <th class="p-3">Empresa</th>
+                                    <th class="p-3">Cargo</th>
+                                    <th class="p-3">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabela-motoristas">
+                                <!-- Driver rows will be inserted here by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="edit-modal" class="modal fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full items-center justify-center">
+        <div class="relative mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+            <div class="mt-3 text-center">
+                <h3 class="text-lg leading-6 font-medium text-gray-900">Editar Motorista</h3>
+                <div class="mt-2 px-7 py-3">
+                    <form id="edit-motorista-form">
+                        <input type="hidden" id="edit-motorista-id">
+                        <div class="mb-4">
+                            <label for="edit-empresa" class="block text-sm font-medium text-gray-700">Empresa</label>
+                            <input type="text" id="edit-empresa" name="empresa" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        </div>
+                        <div class="mb-4">
+                            <label for="edit-funcao" class="block text-sm font-medium text-gray-700">Cargo</label>
+                            <input type="text" id="edit-funcao" name="funcao" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        </div>
+                    </form>
+                </div>
+                <div class="items-center px-4 py-3">
+                    <button id="save-edit-button" class="px-4 py-2 bg-green-500 text-white text-base font-medium rounded-md w-auto shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-300">Salvar</button>
+                    <button id="cancel-edit-button" class="px-4 py-2 bg-gray-500 text-white text-base font-medium rounded-md w-auto shadow-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-300">Cancelar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const addForm = document.getElementById('add-motorista-form');
+            const motoristasTable = document.getElementById('tabela-motoristas');
+            const editModal = document.getElementById('edit-modal');
+            const editForm = document.getElementById('edit-motorista-form');
+            const cancelEditButton = document.getElementById('cancel-edit-button');
+            const saveEditButton = document.getElementById('save-edit-button');
+
+            // Fetch and display motoristas
+            function fetchMotoristas() {
+                fetch('/api/motoristas')
+                    .then(response => response.json())
+                    .then(data => {
+                        motoristasTable.innerHTML = '';
+                        data.forEach(motorista => {
+                            const row = document.createElement('tr');
+                            row.innerHTML = `
+                                <td class="p-3">${motorista.nome}</td>
+                                <td class="p-3">${motorista.empresa || '-'}</td>
+                                <td class="p-3">${motorista.funcao || '-'}</td>
+                                <td class="p-3">
+                                    <button class="text-blue-500 hover:underline edit-button" data-id="${motorista.id}" data-empresa="${motorista.empresa || ''}" data-funcao="${motorista.funcao || ''}">Editar</button>
+                                    <button class="text-red-500 hover:underline delete-button" data-id="${motorista.id}">Excluir</button>
+                                    <a href="/motorista/${motorista.nome}" class="text-green-500 hover:underline">Detalhes</a>
+                                </td>
+                            `;
+                            motoristasTable.appendChild(row);
+                        });
+                    });
+            }
+
+            // Add new motorista
+            addForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const formData = new FormData(addForm);
+                const data = Object.fromEntries(formData.entries());
+
+                fetch('/api/motoristas', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.message) {
+                        fetchMotoristas();
+                        addForm.reset();
+                    } else {
+                        alert('Erro: ' + result.error);
+                    }
+                });
+            });
+
+            // Edit and Delete buttons event delegation
+            motoristasTable.addEventListener('click', function(e) {
+                if (e.target.classList.contains('edit-button')) {
+                    const button = e.target;
+                    const id = button.dataset.id;
+                    const empresa = button.dataset.empresa;
+                    const funcao = button.dataset.funcao;
+
+                    document.getElementById('edit-motorista-id').value = id;
+                    document.getElementById('edit-empresa').value = empresa;
+                    document.getElementById('edit-funcao').value = funcao;
+
+                    editModal.classList.add('is-open');
+                }
+
+                if (e.target.classList.contains('delete-button')) {
+                    if (confirm('Tem certeza que deseja excluir este motorista?')) {
+                        const id = e.target.dataset.id;
+                        fetch(`/api/motoristas/${id}`, {
+                            method: 'DELETE'
+                        })
+                        .then(response => response.json())
+                        .then(result => {
+                            if (result.message) {
+                                fetchMotoristas();
+                            } else {
+                                alert('Erro: ' + result.error);
+                            }
+                        });
+                    }
+                }
+            });
+
+            // Modal close
+            cancelEditButton.addEventListener('click', function() {
+                editModal.classList.remove('is-open');
+            });
+
+            // Save edited motorista
+            saveEditButton.addEventListener('click', function() {
+                const id = document.getElementById('edit-motorista-id').value;
+                const empresa = document.getElementById('edit-empresa').value;
+                const funcao = document.getElementById('edit-funcao').value;
+
+                fetch(`/api/motoristas/${id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ empresa, funcao })
+                })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.message) {
+                        editModal.classList.remove('is-open');
+                        fetchMotoristas();
+                    } else {
+                        alert('Erro: ' + result.error);
+                    }
+                });
+            });
+
+            // Initial fetch
+            fetchMotoristas();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Frota</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 40vh; /* Altura relativa para melhor responsividade */
+            max-height: 350px; /* Altura máxima para telas maiores */
+        }
+        .table-responsive {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="flex h-screen bg-gray-100">
+        <!-- Sidebar -->
+        <aside id="sidebar" class="w-64 bg-gray-800 text-white flex-col fixed inset-y-0 left-0 transform -translate-x-full md:relative md:translate-x-0 transition-transform duration-300 ease-in-out z-30">
+            <div class="p-4 text-2xl font-bold border-b border-gray-700 flex justify-between items-center">
+                <a href="/">Gestão de Frota</a>
+                <button id="close-sidebar" class="md:hidden text-gray-400 hover:text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <nav class="flex-1 p-4 space-y-2">
+                <a href="#" class="tab-link flex items-center p-3 rounded-lg bg-gray-700 hover:bg-gray-600" data-tab="dashboard">
+                    <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+                    Dashboard
+                </a>
+                <a href="#" class="tab-link flex items-center p-3 rounded-lg hover:bg-gray-600" data-tab="motoristas">
+                    <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.124-1.28-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.653.124-1.28.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                    Motoristas
+                </a>
+                <a href="#" class="tab-link flex items-center p-3 rounded-lg hover:bg-gray-600" data-tab="veiculos">
+                    <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16l-4-4m0 0l4-4m-4 4h18"></path></svg>
+                    Veículos
+                </a>
+                 <a href="/" class="flex items-center p-3 rounded-lg hover:bg-gray-600">
+                    <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                    Lançamentos
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <div class="flex-1 flex flex-col">
+            <header class="bg-white shadow-md p-4 flex justify-between items-center">
+                <button id="open-sidebar" class="text-gray-500 hover:text-gray-700 md:hidden">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                </button>
+                <!-- Logo Sanemar Frota -->
+                <div class="site-header">
+                    <img src="/static/Logo_frota_sanemar.png" alt="Sanemar Frota" class="site-logo">
+                    <h1 id="main-title">Dashboard</h1>
+                </div>
+                <div></div> <!-- Espaçador -->
+            </header>
+
+            <main class="flex-1 p-6 md:p-8 overflow-y-auto">
+                <!-- Conteúdo do Dashboard -->
+                <div id="dashboard-content" class="main-content">
+                    <h1 class="text-3xl font-bold mb-6">Dashboard Analítico</h1>
+                    
+                    <!-- Cards de Estatísticas -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-6">
+                        <div class="bg-white p-6 rounded-xl shadow-md">
+                            <h3 class="text-gray-500">Viagens em Curso</h3>
+                            <p id="stat-viagens-em-curso" class="text-3xl font-bold">0</p>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-md">
+                            <h3 class="text-gray-500">Viagens Hoje</h3>
+                            <p id="stat-viagens-hoje" class="text-3xl font-bold">0</p>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-md">
+                            <h3 class="text-gray-500">Horas na Rua (Total)</h3>
+                            <p id="stat-total-horas-na-rua" class="text-3xl font-bold">00:00</p>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-md">
+                            <h3 class="text-gray-500">Motorista do Mês</h3>
+                            <p id="stat-motorista-do-mes" class="text-2xl font-bold">N/A</p>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-md">
+                            <h3 class="text-gray-500">Veículo do Mês</h3>
+                            <p id="stat-veiculo-do-mes" class="text-2xl font-bold">N/A</p>
+                        </div>
+                    </div>
+
+                    <!-- Gráficos -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                        <div class="bg-white p-6 rounded-xl shadow-md">
+                            <h2 class="text-xl font-semibold mb-4">Viagens por Veículo</h2>
+                            <div class="chart-container">
+                                <canvas id="viagensPorVeiculoChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-md">
+                            <h2 class="text-xl font-semibold mb-4">Viagens por Motorista</h2>
+                            <div class="chart-container">
+                                <canvas id="viagensPorMotoristaChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Gráficos Totais Gerais -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                        <div class="bg-white p-6 rounded-xl shadow-md">
+                            <h2 class="text-xl font-semibold mb-4">Total Geral - Viagens por Veículo</h2>
+                            <div class="chart-container">
+                                <canvas id="viagensPorVeiculoChartTotal"></canvas>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-md">
+                            <h2 class="text-xl font-semibold mb-4">Total Geral - Viagens por Motorista</h2>
+                            <div class="chart-container">
+                                <canvas id="viagensPorMotoristaChartTotal"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Gráficos de Abastecimento (Totais e Mensal) -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                        <div class="bg-white p-6 rounded-xl shadow-md">
+                            <h2 class="text-xl font-semibold mb-4">Litros Abastecidos - Total por Veículo (Pizza)</h2>
+                            <div class="chart-container">
+                                <canvas id="refuelPieTotal"></canvas>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-md">
+                            <h2 class="text-xl font-semibold mb-4">Litros Abastecidos - Mês (Pizza)</h2>
+                            <div class="chart-container">
+                                <canvas id="refuelPieMonth"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tabela de Histórico -->
+                    <div class="bg-white p-6 rounded-xl shadow-md">
+                        <h2 class="text-xl font-semibold mb-4">Histórico Recente</h2>
+                        
+                        <!-- Filtros de Busca -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 items-center">
+                            <input type="text" id="filtro-data" placeholder="Filtrar por Data (DD/MM/AAAA)" class="p-2 border rounded">
+                            <input type="text" id="filtro-placa" placeholder="Filtrar por Placa" class="p-2 border rounded">
+                            <input type="text" id="filtro-motorista" placeholder="Filtrar por Motorista" class="p-2 border rounded">
+                            <div class="flex items-center gap-2">
+                                <input type="month" id="filtro-mes" class="p-2 border rounded" aria-label="Filtrar por mês">
+                                <button id="limpar-mes" class="p-2 bg-gray-200 rounded hover:bg-gray-300">Limpar mês</button>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="w-full text-left">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="p-3">Status</th>
+                                        <th class="p-3">Veículo</th>
+                                        <th class="p-3">Motorista</th>
+                                        <th class="p-3">Solicitante</th>
+                                        <th class="p-3">Saída</th>
+                                        <th class="p-3">Chegada</th>
+                                        <th class="p-3">Trajeto</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabela-historico">
+                                    <!-- Linhas serão inseridas aqui via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Conteúdo de Motoristas -->
+                <div id="motoristas-content" class="main-content hidden bg-white p-6 rounded-xl shadow-md">
+                    <h1 class="text-3xl font-bold mb-6">Gestão de Motoristas</h1>
+                    <div class="table-responsive">
+                        <table class="w-full text-left">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="p-3">Nome</th>
+                                    <th class="p-3">Status</th>
+                                    <th class="p-3">Data de Cadastro</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabela-motoristas">
+                                <!-- Linhas serão inseridas aqui via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Conteúdo de Veículos -->
+                <div id="veiculos-content" class="main-content hidden bg-white p-6 rounded-xl shadow-md">
+                    <h1 class="text-3xl font-bold mb-6">Gestão de Veículos</h1>
+                    <div class="table-responsive">
+                        <table class="w-full text-left">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="p-3">Placa</th>
+                                    <th class="p-3">Data de Cadastro</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabela-veiculos">
+                                <!-- Linhas serão inseridas aqui via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="/static/toast.js" defer></script>
+    <script src="/static/dashboard.js?v=1.2" defer></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').then(registration => {
+                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                }, err => {
+                    console.log('ServiceWorker registration failed: ', err);
+                });
+            });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Serviço Indisponível</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .maintenance { max-width: 720px; margin: 6rem auto; text-align: center; padding: 2rem; background: #fff; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
+        .maintenance h1 { color: var(--primary-color); font-size: 2rem; }
+        .maintenance p { color: var(--muted-color); font-size: 1rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="maintenance">
+            <h1>Serviço temporariamente indisponível</h1>
+            <p>Estamos com problemas de comunicação com o banco de dados (Firestore). Isso pode ocorrer por limite de uso (quota excedida) ou manutenção do serviço.<br>
+            Tente novamente em alguns minutos. Se o problema persistir, por favor verifique o painel do Firebase ou contate o administrador.</p>
+            <p><small>Código: FIRESTORE_UNAVAILABLE</small></p>
+        </div>
+    </div>
+</body>
+</html>
