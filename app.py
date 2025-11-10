@@ -80,8 +80,12 @@ def initialize_firebase():
         
         if credentials_json:
             print("🔧 Modo PRODUÇÃO: Lendo credenciais da variável de ambiente")
-            # Cria arquivo temporário com as credenciais
+            # Parse das credenciais JSON
             credentials_dict = json.loads(credentials_json)
+            
+            # Cria objeto de credenciais do Google
+            from google.oauth2 import service_account
+            google_credentials = service_account.Credentials.from_service_account_info(credentials_dict)
             
             # Inicializa Firebase Admin SDK
             if not firebase_admin._apps:
@@ -90,8 +94,8 @@ def initialize_firebase():
                     'storageBucket': 'frota-sanemar.firebasestorage.app'
                 })
             
-            # Inicializa Firestore (usa as credenciais do ambiente)
-            db = firestore.Client()
+            # Inicializa Firestore com as credenciais explícitas
+            db = firestore.Client(credentials=google_credentials, project=credentials_dict['project_id'])
             bucket = firebase_storage.bucket()
             
             print("✅ Firebase inicializado com sucesso (PRODUÇÃO)")
