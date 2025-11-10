@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gerenciar Motoristas</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -54,6 +55,13 @@
             </header>
 
             <main class="flex-1 p-6 md:p-8 overflow-y-auto">
+                <!-- Botão Gerar PDF -->
+                <div class="mb-4 flex justify-end">
+                    <a href="/pdf/motoristas" target="_blank" class="inline-flex items-center px-6 py-3 bg-red-600 text-white rounded-xl font-semibold shadow-lg hover:bg-red-700 transition-all">
+                        📄 Gerar PDF
+                    </a>
+                </div>
+                
                 <!-- Add Driver Form -->
                 <div class="bg-white p-6 rounded-xl shadow-md mb-6">
                     <h2 class="text-2xl font-bold mb-4">Adicionar Novo Motorista</h2>
@@ -173,10 +181,24 @@
                 .then(response => response.json())
                 .then(result => {
                     if (result.message) {
+                        if (window.showToast) {
+                            showToast('success', result.message);
+                        }
                         fetchMotoristas();
                         addForm.reset();
                     } else {
-                        alert('Erro: ' + result.error);
+                        if (window.showToast) {
+                            showToast('error', result.error || 'Erro ao adicionar motorista');
+                        } else {
+                            alert('Erro: ' + result.error);
+                        }
+                    }
+                })
+                .catch(error => {
+                    if (window.showToast) {
+                        showToast('error', 'Erro de conexão com o servidor');
+                    } else {
+                        alert('Erro de conexão');
                     }
                 });
             });
@@ -205,9 +227,23 @@
                         .then(response => response.json())
                         .then(result => {
                             if (result.message) {
+                                if (window.showToast) {
+                                    showToast('success', result.message);
+                                }
                                 fetchMotoristas();
                             } else {
-                                alert('Erro: ' + result.error);
+                                if (window.showToast) {
+                                    showToast('error', result.error || 'Erro ao excluir motorista');
+                                } else {
+                                    alert('Erro: ' + result.error);
+                                }
+                            }
+                        })
+                        .catch(error => {
+                            if (window.showToast) {
+                                showToast('error', 'Erro de conexão com o servidor');
+                            } else {
+                                alert('Erro de conexão');
                             }
                         });
                     }
@@ -235,10 +271,24 @@
                 .then(response => response.json())
                 .then(result => {
                     if (result.message) {
+                        if (window.showToast) {
+                            showToast('success', result.message);
+                        }
                         editModal.classList.remove('is-open');
                         fetchMotoristas();
                     } else {
-                        alert('Erro: ' + result.error);
+                        if (window.showToast) {
+                            showToast('error', result.error || 'Erro ao atualizar motorista');
+                        } else {
+                            alert('Erro: ' + result.error);
+                        }
+                    }
+                })
+                .catch(error => {
+                    if (window.showToast) {
+                        showToast('error', 'Erro de conexão com o servidor');
+                    } else {
+                        alert('Erro de conexão');
                     }
                 });
             });
@@ -247,5 +297,6 @@
             fetchMotoristas();
         });
     </script>
+    <script src="/static/toast.js" defer></script>
 </body>
 </html>

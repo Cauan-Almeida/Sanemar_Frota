@@ -1,13 +1,125 @@
-# Arquivos de ambiente
+# ===================================
+# Arquivos de Ambiente e Credenciais
+# ===================================
 .env
+.env.local
+.env.production
 
-# Credenciais e configurações sensíveis
+# Credenciais Firebase (NUNCA commite!)
 firebase-credentials.json
-*.json
+*-credentials.json
 
-# Pasta de ambiente virtual
+# ===================================
+# Python
+# ===================================
+# Ambiente virtual
 venv/
+env/
+ENV/
+.venv
 
-# Arquivos de cache do Python
+# Bytecode e cache
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribuição / Pacotes
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Testes
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Logs
+*.log
+logs/
+debug.log
+
+# ===================================
+# IDEs e Editores
+# ===================================
+# VSCode
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ===================================
+# Sistema Operacional
+# ===================================
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+
+# ===================================
+# Arquivos Temporários e Backups
+# ===================================
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+*.swp
+*.swo
+*~
+
+# ===================================
+# Banco de Dados Local (se houver)
+# ===================================
+*.db
+*.sqlite
+*.sqlite3
+
+# ===================================
+# Arquivos Específicos do Projeto
+# ===================================
+# Backups e testes
+backups/
+temp/
+test_*.py
+
+# JSON sensíveis (exceto manifest e package)
+*.json
+!manifest.json
+!package.json
+!render.yaml

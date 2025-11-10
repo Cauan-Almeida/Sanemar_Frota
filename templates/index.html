@@ -3,122 +3,715 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Controle de Frota</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <title>Controle de Frota - Sanemar</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="manifest" href="/static/manifest.json">
-</head>
-<body>
-    <div class="container">
-        <div class="site-header">
-            <img src="/static/Logo_frota_sanemar.png" alt="Sanemar Frota" class="site-logo">
-            <h1>Controle de Frota</h1>
-        </div>
-
-        <!-- Seção para Registrar Saída -->
-        <div class="form-section">
-            <h2>Registrar Saída</h2>
-            <form id="form-saida">
-                <div class="form-group">
-                    <label for="saida-veiculo">Veículo (Placa)</label>
-                    <input list="veiculos-list" id="saida-veiculo" name="veiculo" placeholder="Digite ou selecione a placa" required>
-                    <datalist id="veiculos-list">
-                        {% for veiculo in veiculos %}
-                        <option value="{{ veiculo }}">
-                        {% endfor %}
-                    </datalist>
-                </div>
-                <div class="form-group">
-                    <label for="saida-motorista">Motorista</label>
-                    <input type="text" list="motoristas-list" id="saida-motorista" name="motorista" placeholder="Nome do Motorista" required>
-                    <datalist id="motoristas-list">
-                        {% for motorista in motoristas %}
-                        <option value="{{ motorista }}">
-                        {% endfor %}
-                    </datalist>
-                </div>
-                <div class="form-group">
-                    <label for="saida-solicitante">Solicitante</label>
-                    <input type="text" id="saida-solicitante" name="solicitante" placeholder="Quem solicitou" required>
-                </div>
-                <div class="form-group">
-                    <label for="saida-trajeto">Trajeto</label>
-                    <input type="text" id="saida-trajeto" name="trajeto" placeholder="Destino do veículo" required>
-                </div>
-                <div class="form-group">
-                    <label for="saida-horario">Horário de Saída</label>
-                    <input type="time" id="saida-horario" name="horario">
-                    <button type="button" id="btn-agora">Usar Hora Atual</button>
-                </div>
-                <button type="submit">Registrar Saída</button>
-            </form>
-        </div>
-
-        <div id="response-message"></div>
-
-        <!-- Seção para Veículos em Curso -->
-        <div class="table-section">
-            <h2>Veículos em Curso</h2>
-            <table id="veiculos-em-curso-table">
-                <thead>
-                    <tr>
-                        <th>Placa</th>
-                        <th>Motorista</th>
-                        <th>Saída</th>
-                        <th>Horário Chegada</th>
-                        <th>Ação</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Linhas serão adicionadas dinamicamente -->
-                </tbody>
-            </table>
-        </div>
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+        .glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+        .card-hover { transition: all 0.3s ease; }
+        .card-hover:hover { transform: translateY(-2px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.5s ease-out; }
+        .gradient-btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); transition: all 0.3s; }
+        .gradient-btn:hover { transform: scale(1.02); box-shadow: 0 10px 25px -5px rgba(102, 126, 234, 0.5); }
         
-        <!-- Abastecimentos agora são gerenciados na aba Veículos (veiculo_detalhes) -->
-
-        <!-- Pequeno cartão para Abastecer rápido (no final da página) -->
-        <div class="form-section mt-6 quick-refuel-card">
-            <h2 class="text-lg font-semibold mb-2">Registrar Abastecimento Rápido</h2>
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
-                <div>
-                    <label class="text-sm">Placa</label>
-                    <input list="veiculos-list" id="quick-refuel-placa" class="quick-refuel-input" placeholder="Placa">
-                </div>
-                <div>
-                    <label class="text-sm">Motorista</label>
-                    <input list="motoristas-list" id="quick-refuel-motorista" class="quick-refuel-input" placeholder="Nome do motorista">
-                </div>
-                <div>
-                    <label class="text-sm">Litros</label>
-                    <input type="number" step="0.1" id="quick-refuel-litros" class="quick-refuel-input" placeholder="Litros">
-                </div>
-                <div class="flex gap-2">
-                    <div style="flex:1">
-                        <label class="text-sm">Odômetro (opcional)</label>
-                        <input type="number" id="quick-refuel-odometro" class="quick-refuel-input" placeholder="Odômetro">
-                    </div>
-                    <p></p>
-                    <div class="flex items-center">
-                        <button id="quick-refuel-submit" class="quick-refuel-submit">Salvar</button>
-                    </div>
+        /* Esconde forçadamente qualquer badge/botão de "em curso" */
+        a[href*="curso"]:not([href="/dashboard"]),
+        button:not(.gradient-btn):not([type="submit"]):not([type="button"]):has-text("curso") {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            position: absolute !important;
+            left: -9999px !important;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <!-- Header -->
+    <div class="glass rounded-2xl shadow-2xl p-6 mb-6 animate-fade-in">
+        <div class="flex items-center justify-between flex-wrap gap-6">
+            <div class="flex items-center gap-4">
+                <img src="/static/Logo_frota_sanemar.png" alt="Logo" class="h-16 w-16 rounded-xl shadow-lg">
+                <div class="flex flex-col gap-1">
+                    <h1 class="text-3xl md:text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent leading-tight">
+                        Controle de Frota
+                    </h1>
+                    <p class="text-gray-600 text-sm">Sistema de Gestão de Veículos</p>
                 </div>
             </div>
+            <a href="/dashboard" class="gradient-btn text-white px-6 py-3 rounded-xl font-semibold shadow-lg">
+                📊 Dashboard
+            </a>
         </div>
     </div>
 
-    <script src="/static/toast.js" defer></script>
+    <div class="max-w-7xl mx-auto space-y-6">
+        <!-- Registrar Saída -->
+        <div class="glass rounded-2xl shadow-2xl p-8 card-hover animate-fade-in">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-3">
+                <span class="bg-gradient-to-r from-green-500 to-emerald-500 text-white p-3 rounded-xl">🚗</span>
+                Registrar Saída
+            </h2>
+            <form id="form-saida" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Veículo (Placa)</label>
+                    <input list="veiculos-list" id="saida-veiculo" name="veiculo" 
+                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
+                           placeholder="Digite a placa" required>
+                    <datalist id="veiculos-list">{% for v in veiculos %}<option value="{{ v }}">{% endfor %}</datalist>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Motorista</label>
+                    <input list="motoristas-list" id="saida-motorista" name="motorista"
+                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
+                           placeholder="Nome do motorista" required>
+                    <datalist id="motoristas-list">{% for m in motoristas %}<option value="{{ m }}">{% endfor %}</datalist>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Solicitante</label>
+                    <input type="text" id="saida-solicitante" name="solicitante"
+                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
+                           placeholder="Quem solicitou" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Trajeto</label>
+                    <input type="text" id="saida-trajeto" name="trajeto"
+                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
+                           placeholder="Destino" required>
+                </div>
+                <div class="md:col-span-2 lg:col-span-2">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Horário de Saída</label>
+                    <div class="flex gap-2">
+                        <input type="time" id="saida-horario" name="horario"
+                               class="flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all">
+                        <button type="button" id="btn-agora" class="px-6 py-3 bg-gray-200 hover:bg-gray-300 rounded-xl font-semibold transition-all whitespace-nowrap">
+                            ⏱️ Agora
+                        </button>
+                    </div>
+                </div>
+                <div class="md:col-span-2 lg:col-span-3">
+                    <button type="submit" class="w-full gradient-btn text-white py-4 rounded-xl font-bold text-lg shadow-lg">
+                        ✅ Registrar Saída
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Veículos em Curso -->
+        <div class="glass rounded-2xl shadow-2xl p-8 card-hover animate-fade-in">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-3">
+                <span class="bg-gradient-to-r from-orange-500 to-red-500 text-white p-3 rounded-xl">🚦</span>
+                Veículos em Curso
+            </h2>
+            <div class="overflow-x-auto">
+                <table class="w-full min-w-[800px]" id="veiculos-em-curso-table">
+                    <thead>
+                        <tr class="border-b-2 border-gray-200">
+                            <th class="text-left py-4 px-4 font-bold text-gray-700">Placa</th>
+                            <th class="text-left py-4 px-4 font-bold text-gray-700">Motorista</th>
+                            <th class="text-left py-4 px-4 font-bold text-gray-700">Saída</th>
+                            <th class="text-left py-4 px-4 font-bold text-gray-700">Chegada</th>
+                            <th class="text-left py-4 px-4 font-bold text-gray-700">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Abastecimento Rápido -->
+        <div class="glass rounded-2xl shadow-2xl p-8 card-hover animate-fade-in">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-3">
+                <span class="bg-gradient-to-r from-blue-500 to-cyan-500 text-white p-3 rounded-xl">⛽</span>
+                Abastecimento Rápido
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Placa</label>
+                    <input list="veiculos-list" id="quick-refuel-placa"
+                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all"
+                           placeholder="Placa">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Motorista</label>
+                    <input list="motoristas-list" id="quick-refuel-motorista"
+                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all"
+                           placeholder="Motorista">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Litros</label>
+                    <input type="number" step="0.1" id="quick-refuel-litros"
+                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all"
+                           placeholder="Litros">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Odômetro (opcional)</label>
+                    <input type="number" id="quick-refuel-odometro"
+                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all"
+                           placeholder="Km">
+                </div>
+            </div>
+            <button id="quick-refuel-submit" class="w-full md:w-auto mt-4 gradient-btn text-white px-8 py-3 rounded-xl font-bold shadow-lg">
+                💾 Salvar Abastecimento
+            </button>
+        </div>
+    </div>
+
+    <script src="/static/toast.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="/static/app.js"></script>
+    
+    <!-- Dummy function para compatibilidade com app-melhorado.js -->
+    <script>
+        // showResponseMessage é usada pelo app-melhorado.js
+        function showResponseMessage(message, type) {
+            if (typeof showToast === 'function') {
+                showToast(message, type);
+            } else {
+                console.log(`[${type}] ${message}`);
+            }
+        }
+        
+        // Remove elementos indesejados do header (específico)
+        function removerElementosIndesejados() {
+            // Procura por elementos que contenham exatamente "0em curso" ou variações
+            document.querySelectorAll('*').forEach(el => {
+                const texto = el.textContent?.trim() || '';
+                // Remove se for exatamente o texto indesejado e não for um elemento grande
+                if ((texto === '🚗0em curso' || texto === '0em curso' || texto.match(/^\s*🚗?\s*\d+\s*em\s*curso\s*$/i)) 
+                    && el.children.length === 0) {
+                    console.log('🗑️ Removendo elemento indesejado:', texto);
+                    el.remove();
+                }
+            });
+        }
+        
+        // Handler para abastecimento rápido
+        document.addEventListener('DOMContentLoaded', () => {
+            // Remove elementos indesejados após pequeno delay
+            setTimeout(removerElementosIndesejados, 200);
+            setTimeout(removerElementosIndesejados, 500);
+            setTimeout(removerElementosIndesejados, 1000);
+            
+            // Observa mudanças no header
+            const observer = new MutationObserver(() => {
+                removerElementosIndesejados();
+            });
+            
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+            
+            const btnRefuel = document.getElementById('quick-refuel-submit');
+            if (btnRefuel) {
+                btnRefuel.addEventListener('click', async () => {
+                    const placa = document.getElementById('quick-refuel-placa').value.trim();
+                    const motorista = document.getElementById('quick-refuel-motorista').value.trim();
+                    const litros = document.getElementById('quick-refuel-litros').value.trim();
+                    const odometro = document.getElementById('quick-refuel-odometro').value.trim();
+                    
+                    if (!placa || !motorista || !litros) {
+                        showToast('error', '⚠️ Preencha placa, motorista e litros', 5000);
+                        return;
+                    }
+                    
+                    // Confirmação com modal customizado
+                    const confirmed = await showCustomConfirm(
+                        '⛽ Confirmar Abastecimento',
+                        `Registrar ${litros}L para o veículo ${placa}?`,
+                        'success'
+                    );
+                    
+                    if (!confirmed) {
+                        showToast('info', 'ℹ️ Abastecimento cancelado', 3000);
+                        return;
+                    }
+                    
+                    try {
+                        const response = await fetch('/api/abastecimento', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ placa, motorista, litros, odometro })
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (response.ok) {
+                            showToast('success', '✅ ' + (result.message || 'Abastecimento registrado!'), 3000);
+                            document.getElementById('quick-refuel-placa').value = '';
+                            document.getElementById('quick-refuel-motorista').value = '';
+                            document.getElementById('quick-refuel-litros').value = '';
+                            document.getElementById('quick-refuel-odometro').value = '';
+                        } else {
+                            showToast('error', '❌ ' + (result.error || 'Erro ao registrar'), 5000);
+                        }
+                    } catch (error) {
+                        console.error('Erro:', error);
+                        showToast('error', '❌ Erro de conexão', 5000);
+                    }
+                });
+            }
+        });
+        
+        console.log('✅ Funções auxiliares carregadas');
+    </script>
+    
+    <script src="/static/app-melhorado.js"></script>
+    
+    <!-- Funções globais para veículos em curso -->
+    <script>
+        // Função para buscar e exibir veículos em curso
+        async function fetchVeiculosEmCurso() {
+            try {
+                const response = await fetch('/api/veiculos_em_curso');
+                if (!response.ok) throw new Error('Erro ao buscar veículos');
+                
+                const veiculos = await response.json();
+                const tbody = document.querySelector('#veiculos-em-curso-table tbody');
+                if (!tbody) return;
+
+                tbody.innerHTML = '';
+
+                if (veiculos.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-gray-500">Nenhum veículo em curso</td></tr>';
+                    return;
+                }
+
+                veiculos.forEach((v, index) => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'border-b border-gray-100 hover:bg-blue-50 transition-colors';
+                    const inputId = `horario-chegada-${index}`;
+                    
+                    // Serializa os dados do veículo para passar na chamada
+                    const veiculoDataStr = JSON.stringify({
+                        veiculo: v.veiculo,
+                        motorista: v.motorista,
+                        solicitante: v.solicitante || 'Não informado',
+                        trajeto: v.trajeto || 'Não informado',
+                        horarioSaida: v.horarioSaida || 'Não informado'
+                    }).replace(/"/g, '&quot;');
+                    
+                    tr.innerHTML = `
+                        <td class="py-3 px-4 font-semibold">${v.veiculo}</td>
+                        <td class="py-3 px-4">${v.motorista}</td>
+                        <td class="py-3 px-4">${v.horarioSaida || '-'}</td>
+                        <td class="py-3 px-4">
+                            <input type="time" id="${inputId}" 
+                                   class="px-3 py-1 rounded-lg border-2 border-gray-300 focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-all"
+                                   placeholder="HH:MM">
+                        </td>
+                        <td class="py-3 px-4">
+                            <div class="flex gap-2">
+                                <button onclick='registrarChegadaComHorario("${v.veiculo}", "${inputId}", ${veiculoDataStr})' 
+                                        class="px-3 py-1 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-semibold transition-all">
+                                    Chegada
+                                </button>
+                                <button onclick="cancelarViagem('${v.veiculo}')" 
+                                        class="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-semibold transition-all">
+                                    Cancelar
+                                </button>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+                console.log(`✅ ${veiculos.length} veículos em curso carregados`);
+            } catch (error) {
+                console.error('❌ Erro ao buscar veículos em curso:', error);
+            }
+        }
+
+        // Função para registrar chegada com horário do input
+        async function registrarChegadaComHorario(placa, inputId, veiculoData) {
+            const horarioInput = document.getElementById(inputId);
+            const horario = horarioInput ? horarioInput.value : '';
+            const horarioChegada = horario || 'Agora';
+            
+            // Mostra modal detalhado com todos os dados
+            const confirmed = await showDetailedConfirm({
+                title: '✅ Confirmar Chegada',
+                type: 'chegada',
+                data: {
+                    placa: veiculoData.veiculo,
+                    motorista: veiculoData.motorista,
+                    solicitante: veiculoData.solicitante || 'Não informado',
+                    trajeto: veiculoData.trajeto || 'Não informado',
+                    horarioSaida: veiculoData.horarioSaida || 'Não informado',
+                    horarioChegada: horarioChegada
+                }
+            });
+            
+            if (!confirmed) {
+                // Cancelou a confirmação - não faz nada
+                return;
+            }
+            
+            try {
+                const body = { veiculo: placa };
+                if (horario) {
+                    body.horario = horario;
+                }
+                
+                const response = await fetch('/api/chegada', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    if (window.showToast) {
+                        const msg = horario ? `Chegada registrada: ${placa} às ${horario}` : `Chegada registrada: ${placa}`;
+                        showToast('success', msg, 3000);
+                    }
+                    fetchVeiculosEmCurso(); // Atualiza a lista
+                } else {
+                    if (window.showToast) {
+                        showToast('error', result.error || 'Erro ao registrar chegada', 5000);
+                    }
+                }
+            } catch (error) {
+                console.error('Erro:', error);
+                if (window.showToast) {
+                    showToast('error', 'Erro ao registrar chegada', 5000);
+                }
+            }
+        }
+
+        // Função para cancelar viagem
+        async function cancelarViagem(placa) {
+            const confirmed = await showCustomConfirm(
+                '⚠️ Cancelar Viagem',
+                `Tem certeza que deseja CANCELAR a viagem do veículo ${placa}?\n\nEsta ação não pode ser desfeita!`,
+                'danger'
+            );
+            
+            if (!confirmed) return;
+            
+            try {
+                const response = await fetch('/api/cancelar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ veiculo: placa })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    if (window.showToast) {
+                        showToast('success', `Viagem cancelada: ${placa}`, 3000);
+                    }
+                    fetchVeiculosEmCurso(); // Atualiza a lista
+                } else {
+                    if (window.showToast) {
+                        showToast('error', result.error || 'Erro ao cancelar viagem', 5000);
+                    }
+                }
+            } catch (error) {
+                console.error('Erro:', error);
+                if (window.showToast) {
+                    showToast('error', 'Erro ao cancelar viagem', 5000);
+                }
+            }
+        }
+
+        console.log('✅ Funções de veículos em curso carregadas');
+    </script>
+    
+    <!-- Firebase SDK para tempo real -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getFirestore, collection, onSnapshot, query, where } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyD7_wJ2Rj8VU_Jc0LvRbQnFZzTxb3qmUqI",
+            authDomain: "frota-sanemar.firebaseapp.com",
+            projectId: "frota-sanemar",
+            storageBucket: "frota-sanemar.firebasestorage.app",
+            messagingSenderId: "287722972546",
+            appId: "1:287722972546:web:0a3f3c9d4e5f6a7b8c9d0e"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // Listener para veículos em curso
+        const saidasQuery = query(
+            collection(db, 'saidas'),
+            where('status', '==', 'em_curso')
+        );
+
+        onSnapshot(saidasQuery, (snapshot) => {
+            console.log('📊 Atualização detectada: veículos em curso');
+            
+            // Atualiza a tabela de veículos em curso (função global)
+            if (typeof fetchVeiculosEmCurso === 'function') {
+                fetchVeiculosEmCurso();
+            }
+
+            // Notificações
+            snapshot.docChanges().forEach((change) => {
+                const data = change.doc.data();
+                
+                if (change.type === 'added' && window.showToast) {
+                    showToast('info', `Nova saída: ${data.veiculo} - ${data.motorista}`, 3000);
+                } else if (change.type === 'removed' && window.showToast) {
+                    showToast('success', `Chegada registrada: ${data.veiculo}`, 3000);
+                }
+            });
+        }, (error) => {
+            console.error('❌ Erro no listener:', error);
+        });
+
+        // Carrega veículos em curso na inicialização
+        if (typeof fetchVeiculosEmCurso === 'function') {
+            fetchVeiculosEmCurso();
+        }
+
+        console.log('🔥 Firebase inicializado - Tempo real ativo!');
+    </script>
+
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js').then(registration => {
-                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                    console.log('[SW v7] Registrado com sucesso:', registration.scope);
+                    
+                    // Força atualização se houver nova versão
+                    registration.addEventListener('updatefound', () => {
+                        const newWorker = registration.installing;
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'activated') {
+                                console.log('[SW v7] Nova versão ativada - recarregando página');
+                                window.location.reload();
+                            }
+                        });
+                    });
                 }, err => {
-                    console.log('ServiceWorker registration failed: ', err);
+                    console.warn('[SW v7] Falha no registro:', err);
                 });
             });
         }
     </script>
-</body>
-</html>
+    
+    <!-- Modal de Confirmação Personalizado -->
+    <div id="custom-confirm-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full animate-fade-in">
+            <div id="modal-header" class="p-6 border-b border-gray-200">
+                <h3 id="modal-title" class="text-xl font-bold text-gray-800"></h3>
+            </div>
+            <div class="p-6">
+                <p id="modal-message" class="text-gray-600 text-lg"></p>
+            </div>
+            <div class="p-6 border-t border-gray-200 flex gap-3 justify-end">
+                <button id="modal-cancel" class="px-6 py-3 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold transition-all">
+                    Cancelar
+                </button>
+                <button id="modal-confirm" class="px-6 py-3 rounded-xl text-white font-semibold transition-all">
+                    Confirmar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Detalhado de Confirmação -->
+    <div id="detailed-confirm-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full animate-fade-in">
+            <div class="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-t-2xl">
+                <h3 id="detailed-modal-title" class="text-2xl font-bold"></h3>
+            </div>
+            <div class="p-6" id="detailed-modal-content">
+                <!-- Conteúdo dinâmico será inserido aqui -->
+            </div>
+            <div class="p-6 border-t border-gray-200 flex gap-3 justify-end">
+                <button id="detailed-modal-cancel" class="px-8 py-3 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold transition-all text-lg">
+                    ❌ Cancelar
+                </button>
+                <button id="detailed-modal-confirm" class="px-8 py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-semibold transition-all text-lg">
+                    ✅ Confirmar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Função para mostrar modal customizado
+        function showCustomConfirm(title, message, type = 'info') {
+            return new Promise((resolve) => {
+                const modal = document.getElementById('custom-confirm-modal');
+                const modalTitle = document.getElementById('modal-title');
+                const modalMessage = document.getElementById('modal-message');
+                const modalConfirm = document.getElementById('modal-confirm');
+                const modalCancel = document.getElementById('modal-cancel');
+                const modalHeader = document.getElementById('modal-header');
+                
+                // Define cores baseado no tipo
+                let bgColor = 'bg-blue-500 hover:bg-blue-600';
+                let headerBg = 'bg-gradient-to-r from-blue-500 to-cyan-500';
+                
+                if (type === 'danger') {
+                    bgColor = 'bg-red-500 hover:bg-red-600';
+                    headerBg = 'bg-gradient-to-r from-red-500 to-pink-500';
+                } else if (type === 'success') {
+                    bgColor = 'bg-green-500 hover:bg-green-600';
+                    headerBg = 'bg-gradient-to-r from-green-500 to-emerald-500';
+                }
+                
+                // Aplica cores
+                modalHeader.className = `p-6 border-b border-gray-200 ${headerBg} text-white rounded-t-2xl`;
+                modalTitle.className = 'text-xl font-bold text-white';
+                modalConfirm.className = `px-6 py-3 rounded-xl text-white font-semibold transition-all ${bgColor}`;
+                
+                // Define conteúdo
+                modalTitle.textContent = title;
+                modalMessage.textContent = message;
+                
+                // Mostra modal
+                modal.classList.remove('hidden');
+                
+                // Handlers
+                const confirmHandler = () => {
+                    modal.classList.add('hidden');
+                    modalConfirm.removeEventListener('click', confirmHandler);
+                    modalCancel.removeEventListener('click', cancelHandler);
+                    resolve(true);
+                };
+                
+                const cancelHandler = () => {
+                    modal.classList.add('hidden');
+                    modalConfirm.removeEventListener('click', confirmHandler);
+                    modalCancel.removeEventListener('click', cancelHandler);
+                    resolve(false);
+                };
+                
+                modalConfirm.addEventListener('click', confirmHandler);
+                modalCancel.addEventListener('click', cancelHandler);
+                
+                // Fecha ao clicar fora
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        cancelHandler();
+                    }
+                });
+            });
+        }
+
+        // Modal detalhado com todos os dados
+        function showDetailedConfirm(options) {
+            return new Promise((resolve) => {
+                const modal = document.getElementById('detailed-confirm-modal');
+                const modalTitle = document.getElementById('detailed-modal-title');
+                const modalContent = document.getElementById('detailed-modal-content');
+                const modalConfirm = document.getElementById('detailed-modal-confirm');
+                const modalCancel = document.getElementById('detailed-modal-cancel');
+                
+                // Define título
+                modalTitle.textContent = options.title || 'Confirmar';
+                
+                // Monta conteúdo baseado no tipo
+                let content = '';
+                if (options.type === 'saida') {
+                    content = `
+                        <div class="space-y-4">
+                            <div class="bg-blue-50 p-4 rounded-xl">
+                                <p class="text-sm font-semibold text-gray-600">Placa do Veículo</p>
+                                <p class="text-2xl font-bold text-blue-600">${options.data.placa}</p>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="bg-gray-50 p-4 rounded-xl">
+                                    <p class="text-sm font-semibold text-gray-600">👤 Motorista</p>
+                                    <p class="text-lg font-bold text-gray-800">${options.data.motorista}</p>
+                                </div>
+                                <div class="bg-gray-50 p-4 rounded-xl">
+                                    <p class="text-sm font-semibold text-gray-600">📝 Solicitante</p>
+                                    <p class="text-lg font-bold text-gray-800">${options.data.solicitante}</p>
+                                </div>
+                            </div>
+                            <div class="bg-purple-50 p-4 rounded-xl">
+                                <p class="text-sm font-semibold text-gray-600">📍 Trajeto</p>
+                                <p class="text-lg font-bold text-purple-600">${options.data.trajeto}</p>
+                            </div>
+                            <div class="bg-green-50 p-4 rounded-xl">
+                                <p class="text-sm font-semibold text-gray-600">⏰ Horário de Saída</p>
+                                <p class="text-lg font-bold text-green-600">${options.data.horario}</p>
+                            </div>
+                        </div>
+                    `;
+                } else if (options.type === 'chegada') {
+                    content = `
+                        <div class="space-y-4">
+                            <div class="bg-green-50 p-4 rounded-xl">
+                                <p class="text-sm font-semibold text-gray-600">Placa do Veículo</p>
+                                <p class="text-2xl font-bold text-green-600">${options.data.placa}</p>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="bg-gray-50 p-4 rounded-xl">
+                                    <p class="text-sm font-semibold text-gray-600">👤 Motorista</p>
+                                    <p class="text-lg font-bold text-gray-800">${options.data.motorista}</p>
+                                </div>
+                                <div class="bg-gray-50 p-4 rounded-xl">
+                                    <p class="text-sm font-semibold text-gray-600">📝 Solicitante</p>
+                                    <p class="text-lg font-bold text-gray-800">${options.data.solicitante}</p>
+                                </div>
+                            </div>
+                            <div class="bg-purple-50 p-4 rounded-xl">
+                                <p class="text-sm font-semibold text-gray-600">📍 Trajeto</p>
+                                <p class="text-lg font-bold text-purple-600">${options.data.trajeto}</p>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="bg-blue-50 p-4 rounded-xl">
+                                    <p class="text-sm font-semibold text-gray-600">⏰ Saída</p>
+                                    <p class="text-lg font-bold text-blue-600">${options.data.horarioSaida}</p>
+                                </div>
+                                <div class="bg-green-50 p-4 rounded-xl">
+                                    <p class="text-sm font-semibold text-gray-600">⏰ Chegada</p>
+                                    <p class="text-lg font-bold text-green-600">${options.data.horarioChegada}</p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                modalContent.innerHTML = content;
+                
+                // Mostra modal
+                modal.classList.remove('hidden');
+                
+                // Handlers
+                const confirmHandler = () => {
+                    modal.classList.add('hidden');
+                    modalConfirm.removeEventListener('click', confirmHandler);
+                    modalCancel.removeEventListener('click', cancelHandler);
+                    resolve(true);
+                };
+                
+                const cancelHandler = () => {
+                    modal.classList.add('hidden');
+                    modalConfirm.removeEventListener('click', confirmHandler);
+                    modalCancel.removeEventListener('click', cancelHandler);
+                    resolve(false);
+                };
+                
+                modalConfirm.addEventListener('click', confirmHandler);
+                modalCancel.addEventListener('click', cancelHandler);
+                
+                // Fecha ao clicar fora
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        cancelHandler();
+                    }
+                });
+            });
+        }
+
+        // Disponibiliza globalmente
+            window.showDetailedConfirm = showDetailedConfirm;
+        </script>
+    </body>
+    </html>

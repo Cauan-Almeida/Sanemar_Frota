@@ -4,109 +4,336 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard de Frota</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="manifest" href="/static/manifest.json">
-    <link rel="stylesheet" href="/static/style.css">
     <style>
-        body { font-family: 'Inter', sans-serif; }
-        .chart-container {
+        * { font-family: 'Inter', sans-serif; }
+        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+        .glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+        .glass-dark { background: rgba(31, 41, 55, 0.95); backdrop-filter: blur(10px); }
+        .chart-container { position: relative; width: 100%; height: 40vh; max-height: 350px; }
+        .table-responsive { max-height: 500px; overflow-y: auto; }
+        .stat-card { transition: all 0.3s ease; }
+        .stat-card:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.5s ease-out; }
+        .gradient-btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); transition: all 0.3s; }
+        .gradient-btn:hover { transform: scale(1.02); box-shadow: 0 10px 25px -5px rgba(102, 126, 234, 0.5); }
+        .sidebar-link { 
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
             position: relative;
-            width: 100%;
-            height: 40vh; /* Altura relativa para melhor responsividade */
-            max-height: 350px; /* Altura máxima para telas maiores */
+            overflow: hidden;
         }
-        .table-responsive {
-            max-height: 500px;
-            overflow-y: auto;
+        .sidebar-link::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            transition: left 0.5s;
+        }
+        .sidebar-link:hover::before {
+            left: 100%;
+        }
+        .sidebar-link:hover { 
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%);
+            transform: translateX(5px) scale(1.02);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+        .sidebar-link.active { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-left: 4px solid #fff;
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.5);
+            font-weight: 600;
+        }
+        .sidebar-link svg {
+            transition: all 0.3s;
+        }
+        .sidebar-link:hover svg {
+            transform: scale(1.15) rotate(5deg);
+        }
+        .sidebar-link.active svg {
+            filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.5));
+        }
+        /* Custom scrollbar for sidebar */
+        nav::-webkit-scrollbar {
+            width: 6px;
+        }
+        nav::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+        }
+        nav::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+        }
+        nav::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        /* ==========================================
+           🌐 INDICADOR DE CONEXÃO - DISCRETO
+           ========================================== */
+        
+        /* Banner Offline - Barra fina no topo */
+        #offline-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #dc3545;
+            color: white;
+            padding: 0.5rem;
+            text-align: center;
+            font-weight: 500;
+            font-size: 0.875rem;
+            box-shadow: 0 2px 8px rgba(220, 53, 69, 0.2);
+            z-index: 9999;
+            transform: translateY(-100%);
+            transition: transform 0.3s ease;
+        }
+        
+        #offline-banner.show {
+            transform: translateY(0);
+        }
+        
+        /* Banner Online - Barra fina verde */
+        #online-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #28a745;
+            color: white;
+            padding: 0.5rem;
+            text-align: center;
+            font-weight: 500;
+            font-size: 0.875rem;
+            box-shadow: 0 2px 8px rgba(40, 167, 69, 0.2);
+            z-index: 9999;
+            transform: translateY(-100%);
+            transition: transform 0.3s ease;
+        }
+        
+        #online-banner.show {
+            transform: translateY(0);
+        }
+        
+        /* Badge de Status - Canto superior esquerdo, DISCRETO */
+        #connection-status {
+            position: fixed;
+            top: 12px;
+            left: 12px;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 0.4rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            z-index: 9998;
+            transition: all 0.3s ease;
+        }
+        
+        #connection-status .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            transition: background 0.3s ease;
+        }
+        
+        #connection-status.online .status-dot {
+            background: #28a745;
+        }
+        
+        #connection-status.offline .status-dot {
+            background: #dc3545;
+            animation: pulse-dot 2s ease-in-out infinite;
+        }
+        
+        #connection-status.online .status-text {
+            color: #28a745;
+        }
+        
+        #connection-status.offline .status-text {
+            color: #dc3545;
+        }
+        
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
         }
     </style>
 </head>
-<body class="bg-gray-100 text-gray-800">
+<body class="overflow-hidden" data-active-tab="{{ active_tab|default('dashboard') }}">
 
-    <div class="flex h-screen bg-gray-100">
+    <div class="flex h-screen">
         <!-- Sidebar -->
-        <aside id="sidebar" class="w-64 bg-gray-800 text-white flex-col fixed inset-y-0 left-0 transform -translate-x-full md:relative md:translate-x-0 transition-transform duration-300 ease-in-out z-30">
-            <div class="p-4 text-2xl font-bold border-b border-gray-700 flex justify-between items-center">
-                <a href="/">Gestão de Frota</a>
-                <button id="close-sidebar" class="md:hidden text-gray-400 hover:text-white">
+        <aside id="sidebar" class="w-64 glass-dark text-white flex-col fixed inset-y-0 left-0 transform -translate-x-full md:relative md:translate-x-0 transition-transform duration-300 ease-in-out z-30 shadow-2xl">
+            <div class="p-6 border-b border-white border-opacity-20 flex justify-between items-center bg-gradient-to-r from-purple-900 to-indigo-900">
+                <div class="flex items-center gap-3">
+                    <div class="bg-white bg-opacity-20 p-2 rounded-xl backdrop-blur-sm">
+                        <img src="/static/Logo_frota_sanemar.png" alt="Logo" class="h-8 w-8">
+                    </div>
+                    <span class="text-lg font-bold tracking-tight">Gestão de Frota</span>
+                </div>
+                <button id="close-sidebar" class="md:hidden text-gray-300 hover:text-white transition-colors">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
             </div>
-            <nav class="flex-1 p-4 space-y-2">
-                <a href="#" class="tab-link flex items-center p-3 rounded-lg bg-gray-700 hover:bg-gray-600" data-tab="dashboard">
-                    <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
-                    Dashboard
-                </a>
-                <a href="#" class="tab-link flex items-center p-3 rounded-lg hover:bg-gray-600" data-tab="motoristas">
-                    <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.124-1.28-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.653.124-1.28.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
-                    Motoristas
-                </a>
-                <a href="#" class="tab-link flex items-center p-3 rounded-lg hover:bg-gray-600" data-tab="veiculos">
-                    <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16l-4-4m0 0l4-4m-4 4h18"></path></svg>
-                    Veículos
-                </a>
-                 <a href="/" class="flex items-center p-3 rounded-lg hover:bg-gray-600">
-                    <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
-                    Lançamentos
+            
+            <nav class="flex-1 p-4 space-y-1 overflow-y-auto">
+                <!-- Seção Principal -->
+                <div class="mb-6">
+                    <a href="#" class="sidebar-link tab-link active flex items-center gap-3 p-3 rounded-xl" data-tab="dashboard">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                        <span class="font-medium">Dashboard</span>
+                    </a>
+                </div>
+
+                <!-- Seção Cadastros -->
+                <div class="mb-4">
+                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider px-3 mb-2">Cadastros</p>
+                    <a href="#" class="sidebar-link tab-link flex items-center gap-3 p-3 rounded-xl mb-1" data-tab="motoristas">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.124-1.28-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.653.124-1.28.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                        <span class="font-medium">Motoristas</span>
+                    </a>
+                    <a href="#" class="sidebar-link tab-link flex items-center gap-3 p-3 rounded-xl" data-tab="veiculos">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"></path></svg>
+                        <span class="font-medium">Veículos</span>
+                    </a>
+                </div>
+
+                <!-- Seção Controle -->
+                <div class="mb-4">
+                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider px-3 mb-2">Controle Operacional</p>
+                    <a href="#" class="sidebar-link tab-link flex items-center gap-3 p-3 rounded-xl mb-1" data-tab="km-mensal">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                        <span class="font-medium">KM Mensal</span>
+                    </a>
+                    <a href="#" class="sidebar-link tab-link flex items-center gap-3 p-3 rounded-xl mb-1" data-tab="multas">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                        <span class="font-medium">Multas</span>
+                    </a>
+                    <a href="#" class="sidebar-link tab-link flex items-center gap-3 p-3 rounded-xl" data-tab="revisoes">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        <span class="font-medium">Revisões</span>
+                    </a>
+                </div>
+
+                <!-- Seção Relatórios -->
+                <div class="mb-4">
+                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider px-3 mb-2">Análises</p>
+                    <a href="#" class="sidebar-link tab-link flex items-center gap-3 p-3 rounded-xl" data-tab="relatorios">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        <span class="font-medium">Relatórios</span>
+                    </a>
+                </div>
+
+                <!-- Divisor -->
+                <div class="border-t border-white border-opacity-20 my-4"></div>
+
+                <!-- Ações -->
+                <a href="/" class="sidebar-link flex items-center gap-3 p-3 rounded-xl">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                    <span class="font-medium">Lançamentos</span>
                 </a>
             </nav>
         </aside>
 
         <!-- Main Content -->
-        <div class="flex-1 flex flex-col">
-            <header class="bg-white shadow-md p-4 flex justify-between items-center">
-                <button id="open-sidebar" class="text-gray-500 hover:text-gray-700 md:hidden">
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <header class="glass shadow-xl p-6 flex justify-between items-center animate-fade-in">
+                <button id="open-sidebar" class="text-gray-600 hover:text-indigo-600 md:hidden transition-colors">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
                 </button>
-                <!-- Logo Sanemar Frota -->
-                <div class="site-header">
-                    <img src="/static/Logo_frota_sanemar.png" alt="Sanemar Frota" class="site-logo">
-                    <h1 id="main-title">Dashboard</h1>
+                <div class="flex items-center gap-4">
+                    <img src="/static/Logo_frota_sanemar.png" alt="Sanemar Frota" class="h-12 w-12 rounded-xl shadow-lg">
+                    <h1 id="main-title" class="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent"></h1>
                 </div>
-                <div></div> <!-- Espaçador -->
+                <div class="flex items-center gap-4">
+                    <button id="refresh-cache-btn" class="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white rounded-xl font-semibold shadow-lg transition-all transform hover:scale-105" title="Atualizar dados (limpa cache)">
+                        🔄 Atualizar
+                    </button>
+                    <div class="hidden md:block text-sm text-gray-600 font-medium">
+                        <span id="current-date"></span>
+                    </div>
+                </div>
             </header>
 
             <main class="flex-1 p-6 md:p-8 overflow-y-auto">
                 <!-- Conteúdo do Dashboard -->
-                <div id="dashboard-content" class="main-content">
-                    <h1 class="text-3xl font-bold mb-6">Dashboard Analítico</h1>
+                <div id="dashboard-content" class="main-content animate-fade-in">
                     
                     <!-- Cards de Estatísticas -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-6">
-                        <div class="bg-white p-6 rounded-xl shadow-md">
-                            <h3 class="text-gray-500">Viagens em Curso</h3>
-                            <p id="stat-viagens-em-curso" class="text-3xl font-bold">0</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
+                        <div class="glass stat-card p-6 rounded-2xl shadow-lg">
+                            <div class="flex items-center justify-between mb-2">
+                                <h3 class="text-sm font-semibold text-gray-500 uppercase">Em Curso</h3>
+                                <span class="text-2xl">🚗</span>
+                            </div>
+                            <p id="stat-viagens-em-curso" class="text-4xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">0</p>
                         </div>
-                        <div class="bg-white p-6 rounded-xl shadow-md">
-                            <h3 class="text-gray-500">Viagens Hoje</h3>
-                            <p id="stat-viagens-hoje" class="text-3xl font-bold">0</p>
+                        <div class="glass stat-card p-6 rounded-2xl shadow-lg relative">
+                            <div class="flex items-center justify-between mb-2">
+                                <h3 class="text-sm font-semibold text-gray-500 uppercase">Hoje</h3>
+                                <div class="flex items-center gap-2">
+                                    <button 
+                                        id="refresh-dashboard-btn" 
+                                        onclick="refreshDashboardManually()"
+                                        class="text-gray-400 hover:text-green-600 transition-colors"
+                                        title="Atualizar agora">
+                                        🔄
+                                    </button>
+                                    <span class="text-2xl">📅</span>
+                                </div>
+                            </div>
+                            <p id="stat-viagens-hoje" class="text-4xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">0</p>
                         </div>
-                        <div class="bg-white p-6 rounded-xl shadow-md">
-                            <h3 class="text-gray-500">Horas na Rua (Total)</h3>
-                            <p id="stat-total-horas-na-rua" class="text-3xl font-bold">00:00</p>
+                        <div class="glass stat-card p-6 rounded-2xl shadow-lg">
+                            <div class="flex items-center justify-between mb-2">
+                                <h3 class="text-sm font-semibold text-gray-500 uppercase">Horas na Rua</h3>
+                                <span class="text-2xl">⏱️</span>
+                            </div>
+                            <p id="stat-total-horas-na-rua" class="text-4xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">00:00</p>
                         </div>
-                        <div class="bg-white p-6 rounded-xl shadow-md">
-                            <h3 class="text-gray-500">Motorista do Mês</h3>
-                            <p id="stat-motorista-do-mes" class="text-2xl font-bold">N/A</p>
+                        <div class="glass stat-card p-6 rounded-2xl shadow-lg">
+                            <div class="flex items-center justify-between mb-2">
+                                <h3 class="text-sm font-semibold text-gray-500 uppercase">Motorista Destaque</h3>
+                                <span class="text-2xl">👤</span>
+                            </div>
+                            <p id="stat-motorista-do-mes" class="text-2xl font-bold text-gray-800">N/A</p>
                         </div>
-                        <div class="bg-white p-6 rounded-xl shadow-md">
-                            <h3 class="text-gray-500">Veículo do Mês</h3>
-                            <p id="stat-veiculo-do-mes" class="text-2xl font-bold">N/A</p>
+                        <div class="glass stat-card p-6 rounded-2xl shadow-lg">
+                            <div class="flex items-center justify-between mb-2">
+                                <h3 class="text-sm font-semibold text-gray-500 uppercase">Veículo Destaque</h3>
+                                <span class="text-2xl">🏆</span>
+                            </div>
+                            <p id="stat-veiculo-do-mes" class="text-2xl font-bold text-gray-800">N/A</p>
                         </div>
                     </div>
 
                     <!-- Gráficos -->
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                        <div class="bg-white p-6 rounded-xl shadow-md">
-                            <h2 class="text-xl font-semibold mb-4">Viagens por Veículo</h2>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                        <div class="glass p-6 rounded-2xl shadow-lg">
+                            <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+                                <span>📊</span> Viagens por Veículo
+                            </h2>
                             <div class="chart-container">
                                 <canvas id="viagensPorVeiculoChart"></canvas>
                             </div>
                         </div>
-                        <div class="bg-white p-6 rounded-xl shadow-md">
-                            <h2 class="text-xl font-semibold mb-4">Viagens por Motorista</h2>
+                        <div class="glass p-6 rounded-2xl shadow-lg">
+                            <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+                                <span>👥</span> Viagens por Motorista
+                            </h2>
                             <div class="chart-container">
                                 <canvas id="viagensPorMotoristaChart"></canvas>
                             </div>
@@ -114,15 +341,19 @@
                     </div>
 
                     <!-- Gráficos Totais Gerais -->
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                        <div class="bg-white p-6 rounded-xl shadow-md">
-                            <h2 class="text-xl font-semibold mb-4">Total Geral - Viagens por Veículo</h2>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                        <div class="glass p-6 rounded-2xl shadow-lg">
+                            <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+                                <span>📈</span> Total Geral - Viagens por Veículo
+                            </h2>
                             <div class="chart-container">
                                 <canvas id="viagensPorVeiculoChartTotal"></canvas>
                             </div>
                         </div>
-                        <div class="bg-white p-6 rounded-xl shadow-md">
-                            <h2 class="text-xl font-semibold mb-4">Total Geral - Viagens por Motorista</h2>
+                        <div class="glass p-6 rounded-2xl shadow-lg">
+                            <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+                                <span>📊</span> Total Geral - Viagens por Motorista
+                            </h2>
                             <div class="chart-container">
                                 <canvas id="viagensPorMotoristaChartTotal"></canvas>
                             </div>
@@ -130,15 +361,19 @@
                     </div>
 
                     <!-- Gráficos de Abastecimento (Totais e Mensal) -->
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                        <div class="bg-white p-6 rounded-xl shadow-md">
-                            <h2 class="text-xl font-semibold mb-4">Litros Abastecidos - Total por Veículo (Pizza)</h2>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                        <div class="glass p-6 rounded-2xl shadow-lg">
+                            <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+                                <span>⛽</span> Litros Abastecidos - Total por Veículo
+                            </h2>
                             <div class="chart-container">
                                 <canvas id="refuelPieTotal"></canvas>
                             </div>
                         </div>
-                        <div class="bg-white p-6 rounded-xl shadow-md">
-                            <h2 class="text-xl font-semibold mb-4">Litros Abastecidos - Mês (Pizza)</h2>
+                        <div class="glass p-6 rounded-2xl shadow-lg">
+                            <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+                                <span>⛽</span> Litros Abastecidos - Mês Atual
+                            </h2>
                             <div class="chart-container">
                                 <canvas id="refuelPieMonth"></canvas>
                             </div>
@@ -146,31 +381,43 @@
                     </div>
 
                     <!-- Tabela de Histórico -->
-                    <div class="bg-white p-6 rounded-xl shadow-md">
-                        <h2 class="text-xl font-semibold mb-4">Histórico Recente</h2>
+                    <div class="glass p-6 rounded-2xl shadow-lg">
+                        <div class="flex items-center justify-between mb-6">
+                            <h2 class="text-xl font-bold flex items-center gap-2">
+                                <span>📋</span> Histórico Recente
+                            </h2>
+                            <a href="/pdf/saidas" target="_blank" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl font-semibold text-sm shadow-lg transition-all">
+                                📄 Gerar PDF
+                            </a>
+                        </div>
                         
                         <!-- Filtros de Busca -->
-                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 items-center">
-                            <input type="text" id="filtro-data" placeholder="Filtrar por Data (DD/MM/AAAA)" class="p-2 border rounded">
-                            <input type="text" id="filtro-placa" placeholder="Filtrar por Placa" class="p-2 border rounded">
-                            <input type="text" id="filtro-motorista" placeholder="Filtrar por Motorista" class="p-2 border rounded">
-                            <div class="flex items-center gap-2">
-                                <input type="month" id="filtro-mes" class="p-2 border rounded" aria-label="Filtrar por mês">
-                                <button id="limpar-mes" class="p-2 bg-gray-200 rounded hover:bg-gray-300">Limpar mês</button>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                            <input type="text" id="filtro-data" placeholder="Data (DD/MM/AAAA)" 
+                                   class="px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all">
+                            <input type="text" id="filtro-placa" placeholder="Placa" 
+                                   class="px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all">
+                            <input type="text" id="filtro-motorista" placeholder="Motorista" 
+                                   class="px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all">
+                            <div class="flex gap-2">
+                                <input type="month" id="filtro-mes" 
+                                       class="flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all">
+                                <button id="limpar-mes" class="px-4 py-3 bg-gray-200 hover:bg-gray-300 rounded-xl font-semibold transition-all">🔄</button>
                             </div>
                         </div>
 
-                        <div class="table-responsive">
+                        <div class="table-responsive rounded-xl border border-gray-200">
                             <table class="w-full text-left">
-                                <thead class="bg-gray-50">
-                                    <tr>
-                                        <th class="p-3">Status</th>
-                                        <th class="p-3">Veículo</th>
-                                        <th class="p-3">Motorista</th>
-                                        <th class="p-3">Solicitante</th>
-                                        <th class="p-3">Saída</th>
-                                        <th class="p-3">Chegada</th>
-                                        <th class="p-3">Trajeto</th>
+                                <thead class="bg-gradient-to-r from-indigo-50 to-purple-50 sticky top-0">
+                                    <tr class="border-b-2 border-gray-200">
+                                        <th class="p-4 font-bold text-gray-700">Status</th>
+                                        <th class="p-4 font-bold text-gray-700">Veículo</th>
+                                        <th class="p-4 font-bold text-gray-700">Motorista</th>
+                                        <th class="p-4 font-bold text-gray-700">Solicitante</th>
+                                        <th class="p-4 font-bold text-gray-700">Saída</th>
+                                        <th class="p-4 font-bold text-gray-700">Chegada</th>
+                                        <th class="p-4 font-bold text-gray-700">Trajeto</th>
+                                        <th class="p-4 font-bold text-gray-700">Ações</th>
                                     </tr>
                                 </thead>
                                 <tbody id="tabela-historico">
@@ -182,48 +429,1131 @@
                 </div>
 
                 <!-- Conteúdo de Motoristas -->
-                <div id="motoristas-content" class="main-content hidden bg-white p-6 rounded-xl shadow-md">
-                    <h1 class="text-3xl font-bold mb-6">Gestão de Motoristas</h1>
-                    <div class="table-responsive">
-                        <table class="w-full text-left">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="p-3">Nome</th>
-                                    <th class="p-3">Status</th>
-                                    <th class="p-3">Data de Cadastro</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tabela-motoristas">
-                                <!-- Linhas serão inseridas aqui via JS -->
-                            </tbody>
-                        </table>
+                <div id="motoristas-content" class="main-content hidden animate-fade-in">
+                    <div class="glass p-8 rounded-2xl shadow-lg">
+                        <h1 class="text-3xl font-bold mb-6 flex items-center gap-3">
+                            <span class="bg-gradient-to-r from-indigo-500 to-purple-500 text-white p-3 rounded-xl">👥</span>
+                            Gestão de Motoristas
+                        </h1>
+                        
+                        <!-- Form para adicionar motorista -->
+                        <div class="bg-gradient-to-r from-indigo-50 to-purple-50 p-6 rounded-xl mb-6">
+                            <h2 class="text-xl font-bold mb-4">Cadastrar Novo Motorista</h2>
+                            <form id="form-motorista" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Nome Completo</label>
+                                    <input type="text" id="motorista-nome" required
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
+                                           placeholder="Nome do motorista">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Empresa</label>
+                                    <input type="text" id="motorista-empresa"
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
+                                           placeholder="Nome da empresa">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Como Atua / Função</label>
+                                    <input type="text" id="motorista-funcao"
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
+                                           placeholder="Ex: Motorista, Técnico, etc">
+                                </div>
+                                <div class="md:col-span-3">
+                                    <button type="submit" class="gradient-btn text-white px-8 py-3 rounded-xl font-bold shadow-lg">
+                                        ➕ Adicionar Motorista
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Barra de Pesquisa para Motoristas -->
+                        <div class="mb-6">
+                            <input 
+                                type="text" 
+                                id="search-motoristas" 
+                                placeholder="🔍 Pesquisar motorista por nome ou empresa..." 
+                                class="w-full px-5 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:outline-none transition-all shadow-sm"
+                                oninput="pesquisarMotoristas()"
+                            >
+                        </div>
+
+                        <div class="table-responsive rounded-xl border border-gray-200">
+                            <table class="w-full text-left">
+                                <thead class="bg-gradient-to-r from-indigo-50 to-purple-50 sticky top-0">
+                                    <tr class="border-b-2 border-gray-200">
+                                        <th class="p-4 font-bold text-gray-700">Nome</th>
+                                        <th class="p-4 font-bold text-gray-700">Empresa</th>
+                                        <th class="p-4 font-bold text-gray-700">Função</th>
+                                        <th class="p-4 font-bold text-gray-700">Status</th>
+                                        <th class="p-4 font-bold text-gray-700">CNH</th>
+                                        <th class="p-4 font-bold text-gray-700">Data de Cadastro</th>
+                                        <th class="p-4 font-bold text-gray-700">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabela-motoristas">
+                                    <!-- Linhas serão inseridas aqui via JS -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Conteúdo de Veículos -->
-                <div id="veiculos-content" class="main-content hidden bg-white p-6 rounded-xl shadow-md">
-                    <h1 class="text-3xl font-bold mb-6">Gestão de Veículos</h1>
-                    <div class="table-responsive">
-                        <table class="w-full text-left">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="p-3">Placa</th>
-                                    <th class="p-3">Data de Cadastro</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tabela-veiculos">
-                                <!-- Linhas serão inseridas aqui via JS -->
-                            </tbody>
-                        </table>
+                <!-- Veículos agora é uma página separada em /veiculos -->
+
+                <!-- Conteúdo de KM Mensal -->
+                <div id="km-mensal-content" class="main-content hidden animate-fade-in">
+                    <div class="glass p-8 rounded-2xl shadow-lg">
+                        <div class="flex items-center justify-between mb-6 flex-wrap gap-4">
+                            <h1 class="text-3xl font-bold flex items-center gap-3">
+                                <span class="bg-gradient-to-r from-blue-500 to-cyan-500 text-white p-3 rounded-xl">📊</span>
+                                Controle de KM Mensal
+                            </h1>
+                            <div class="flex gap-3 items-center flex-wrap">
+                                <!-- Botão de Alternar Visualização -->
+                                <button id="btn-toggle-km-view" class="bg-gradient-to-r from-purple-500 to-indigo-500 text-white px-6 py-3 rounded-xl font-semibold shadow-lg hover:scale-105 transition-all">
+                                    📋 Visualização Planilha
+                                </button>
+                                <!-- Filtros para PDF -->
+                                <div class="flex gap-2 items-center bg-white p-2 rounded-xl shadow">
+                                    <select id="filtro-pdf-tipo" class="px-3 py-2 rounded-lg border border-gray-300 text-sm">
+                                        <option value="todos">Todos os Meses</option>
+                                        <option value="mes">Mês Específico</option>
+                                        <option value="ano">Ano Completo</option>
+                                    </select>
+                                    <input type="month" id="filtro-pdf-mes" class="px-3 py-2 rounded-lg border border-gray-300 text-sm hidden">
+                                    <input type="number" id="filtro-pdf-ano" min="2020" max="2099" placeholder="Ano" class="px-3 py-2 rounded-lg border border-gray-300 text-sm w-24 hidden">
+                                </div>
+                                <button id="btn-gerar-pdf-km" class="bg-red-600 text-white px-6 py-3 rounded-xl font-semibold shadow-lg hover:bg-red-700 transition-all">
+                                    📄 Gerar PDF
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Form para adicionar/editar KM -->
+                        <div class="bg-gradient-to-r from-blue-50 to-cyan-50 p-6 rounded-xl mb-6">
+                            <h2 class="text-xl font-bold mb-4">Registrar KM do Mês</h2>
+                            <form id="form-km-mensal" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <input type="hidden" id="km-id">
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Veículo (Placa)</label>
+                                    <input list="veiculos-list-km" type="text" id="km-placa" required
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all uppercase"
+                                           placeholder="Placa">
+                                    <datalist id="veiculos-list-km"></datalist>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Mês/Ano</label>
+                                    <input type="month" id="km-mes-ano" required
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">KM (Odômetro)</label>
+                                    <input type="number" id="km-valor" min="0" required
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all"
+                                           placeholder="Digite o KM atual">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Observação</label>
+                                    <input type="text" id="km-observacao"
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all"
+                                           placeholder="Opcional">
+                                </div>
+                                <div class="md:col-span-4 flex gap-3">
+                                    <button type="submit" class="gradient-btn text-white px-8 py-3 rounded-xl font-bold shadow-lg">
+                                        ➕ Salvar Registro
+                                    </button>
+                                    <button type="button" id="km-cancelar" class="hidden px-8 py-3 bg-gray-300 hover:bg-gray-400 rounded-xl font-bold shadow-lg transition-all">
+                                        ❌ Cancelar
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Filtro por veículo -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">Filtrar por Veículo</label>
+                            <select id="km-filtro-placa" class="px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all">
+                                <option value="">Todos os veículos</option>
+                            </select>
+                        </div>
+
+                        <!-- Visualização Tabela Normal -->
+                        <div id="km-tabela-view" class="table-responsive rounded-xl border border-gray-200">
+                            <table class="w-full text-left">
+                                <thead class="bg-gradient-to-r from-blue-50 to-cyan-50 sticky top-0">
+                                    <tr class="border-b-2 border-gray-200">
+                                        <th class="p-4 font-bold text-gray-700">Placa</th>
+                                        <th class="p-4 font-bold text-gray-700">Mês/Ano</th>
+                                        <th class="p-4 font-bold text-gray-700">KM (Odômetro)</th>
+                                        <th class="p-4 font-bold text-gray-700">Observação</th>
+                                        <th class="p-4 font-bold text-gray-700">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabela-km-mensal">
+                                    <!-- Linhas serão inseridas aqui via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Visualização Planilha -->
+                        <div id="km-planilha-view" class="hidden">
+                            <div class="mb-4 flex gap-3 items-center flex-wrap">
+                                <label class="font-semibold text-gray-700">Ano:</label>
+                                <select id="planilha-ano" class="px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500">
+                                    <!-- Anos serão preenchidos via JS -->
+                                </select>
+                                <button onclick="adicionarVeiculoPlanilha()" class="px-6 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg font-semibold shadow-lg hover:scale-105 transition-all">
+                                    ➕ Adicionar Veículo
+                                </button>
+                                <button onclick="imprimirPlanilha()" class="px-6 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-lg font-semibold shadow-lg hover:scale-105 transition-all">
+                                    🖨️ Imprimir Planilha
+                                </button>
+                                <div class="text-sm text-gray-600 italic">
+                                    💡 Clique nas células para editar o KM Final do mês • 📦 Desativar veículo para manter histórico
+                                </div>
+                            </div>
+                            <div class="overflow-x-auto rounded-xl border-2 border-gray-200 shadow-lg">
+                                <div id="km-planilha-container" class="min-w-full">
+                                    <!-- Planilha será gerada aqui via JS -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Conteúdo de Multas -->
+                <div id="multas-content" class="main-content hidden animate-fade-in">
+                    <div class="glass p-8 rounded-2xl shadow-lg">
+                        <h1 class="text-3xl font-bold mb-6 flex items-center gap-3">
+                            <span class="bg-gradient-to-r from-red-500 to-pink-500 text-white p-3 rounded-xl">⚠️</span>
+                            Gestão de Multas
+                        </h1>
+                        
+                        <!-- Form para adicionar/editar multa -->
+                        <div class="bg-gradient-to-r from-red-50 to-pink-50 p-6 rounded-xl mb-6">
+                            <h2 class="text-xl font-bold mb-4">Registrar Multa</h2>
+                            <form id="form-multa" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <input type="hidden" id="multa-id">
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Veículo (Placa) *</label>
+                                    <input list="veiculos-list-multa" type="text" id="multa-placa" required
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-red-500 focus:ring-4 focus:ring-red-100 transition-all uppercase"
+                                           placeholder="Placa">
+                                    <datalist id="veiculos-list-multa"></datalist>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Descrição/Infração *</label>
+                                    <input type="text" id="multa-descricao" required
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-red-500 focus:ring-4 focus:ring-red-100 transition-all"
+                                           placeholder="Ex: Excesso de velocidade">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Valor (R$) *</label>
+                                    <input type="number" step="0.01" id="multa-valor" required min="0"
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-red-500 focus:ring-4 focus:ring-red-100 transition-all"
+                                           placeholder="0.00">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Data da Infração</label>
+                                    <input type="date" id="multa-data-infracao"
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-red-500 focus:ring-4 focus:ring-red-100 transition-all">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Data de Vencimento *</label>
+                                    <input type="date" id="multa-data-vencimento" required
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-red-500 focus:ring-4 focus:ring-red-100 transition-all">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Status</label>
+                                    <select id="multa-status"
+                                            class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-red-500 focus:ring-4 focus:ring-red-100 transition-all">
+                                        <option value="pendente">Pendente</option>
+                                        <option value="paga">Paga</option>
+                                        <option value="contestada">Contestada</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Motorista</label>
+                                    <input list="motoristas-list-multa" type="text" id="multa-motorista"
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-red-500 focus:ring-4 focus:ring-red-100 transition-all"
+                                           placeholder="Nome do motorista">
+                                    <datalist id="motoristas-list-multa"></datalist>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Local</label>
+                                    <input type="text" id="multa-local"
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-red-500 focus:ring-4 focus:ring-red-100 transition-all"
+                                           placeholder="Local da infração">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Observação</label>
+                                    <input type="text" id="multa-observacao"
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-red-500 focus:ring-4 focus:ring-red-100 transition-all"
+                                           placeholder="Observações">
+                                </div>
+                                <div class="md:col-span-3 flex gap-3">
+                                    <button type="submit" class="gradient-btn text-white px-8 py-3 rounded-xl font-bold shadow-lg">
+                                        ➕ Salvar Multa
+                                    </button>
+                                    <button type="button" id="multa-cancelar" class="hidden px-8 py-3 bg-gray-300 hover:bg-gray-400 rounded-xl font-bold shadow-lg transition-all">
+                                        ❌ Cancelar
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Filtros -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">Filtrar por Veículo</label>
+                                <select id="multa-filtro-placa" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-red-500 focus:ring-4 focus:ring-red-100 transition-all">
+                                    <option value="">Todos os veículos</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">Filtrar por Status</label>
+                                <select id="multa-filtro-status" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-red-500 focus:ring-4 focus:ring-red-100 transition-all">
+                                    <option value="">Todos os status</option>
+                                    <option value="pendente">Pendente</option>
+                                    <option value="paga">Paga</option>
+                                    <option value="contestada">Contestada</option>
+                                </select>
+                            </div>
+                            <div class="flex items-end">
+                                <button id="multa-limpar-filtros" class="w-full px-4 py-3 bg-gray-200 hover:bg-gray-300 rounded-xl font-semibold transition-all">
+                                    🔄 Limpar Filtros
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Estatísticas de multas -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                            <div class="bg-white p-4 rounded-xl shadow-md">
+                                <p class="text-sm text-gray-600">Total de Multas</p>
+                                <p id="stat-multas-total" class="text-2xl font-bold text-gray-900">0</p>
+                            </div>
+                            <div class="bg-yellow-50 p-4 rounded-xl shadow-md">
+                                <p class="text-sm text-yellow-700">Pendentes</p>
+                                <p id="stat-multas-pendentes" class="text-2xl font-bold text-yellow-900">0</p>
+                            </div>
+                            <div class="bg-green-50 p-4 rounded-xl shadow-md">
+                                <p class="text-sm text-green-700">Pagas</p>
+                                <p id="stat-multas-pagas" class="text-2xl font-bold text-green-900">0</p>
+                            </div>
+                            <div class="bg-red-50 p-4 rounded-xl shadow-md">
+                                <p class="text-sm text-red-700">Valor Total</p>
+                                <p id="stat-multas-valor-total" class="text-2xl font-bold text-red-900">R$ 0,00</p>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive rounded-xl border border-gray-200">
+                            <table class="w-full text-left">
+                                <thead class="bg-gradient-to-r from-red-50 to-pink-50 sticky top-0">
+                                    <tr class="border-b-2 border-gray-200">
+                                        <th class="p-4 font-bold text-gray-700">Status</th>
+                                        <th class="p-4 font-bold text-gray-700">Placa</th>
+                                        <th class="p-4 font-bold text-gray-700">Descrição</th>
+                                        <th class="p-4 font-bold text-gray-700">Valor</th>
+                                        <th class="p-4 font-bold text-gray-700">Vencimento</th>
+                                        <th class="p-4 font-bold text-gray-700">Motorista</th>
+                                        <th class="p-4 font-bold text-gray-700">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabela-multas">
+                                    <!-- Linhas serão inseridas aqui via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Conteúdo de Revisões -->
+                <div id="revisoes-content" class="main-content hidden animate-fade-in">
+                    <div class="glass p-8 rounded-2xl shadow-lg">
+                        <h1 class="text-3xl font-bold mb-6 flex items-center gap-3">
+                            <span class="bg-gradient-to-r from-purple-500 to-indigo-500 text-white p-3 rounded-xl">🔧</span>
+                            Gestão de Revisões Periódicas
+                        </h1>
+
+                        <!-- Estatísticas de Revisões -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                            <div class="bg-gradient-to-br from-purple-50 to-indigo-50 p-4 rounded-xl">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm font-semibold text-gray-600 uppercase">Total</p>
+                                        <p id="stat-revisoes-total" class="text-3xl font-bold text-purple-600">0</p>
+                                    </div>
+                                    <span class="text-4xl">📋</span>
+                                </div>
+                            </div>
+                            <div class="bg-gradient-to-br from-green-50 to-emerald-50 p-4 rounded-xl">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm font-semibold text-gray-600 uppercase">Em Dia</p>
+                                        <p id="stat-revisoes-em-dia" class="text-3xl font-bold text-green-600">0</p>
+                                    </div>
+                                    <span class="text-4xl">✅</span>
+                                </div>
+                            </div>
+                            <div class="bg-gradient-to-br from-yellow-50 to-orange-50 p-4 rounded-xl">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm font-semibold text-gray-600 uppercase">Próximas</p>
+                                        <p id="stat-revisoes-proximas" class="text-3xl font-bold text-yellow-600">0</p>
+                                    </div>
+                                    <span class="text-4xl">⚠️</span>
+                                </div>
+                            </div>
+                            <div class="bg-gradient-to-br from-red-50 to-pink-50 p-4 rounded-xl">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm font-semibold text-gray-600 uppercase">Atrasadas</p>
+                                        <p id="stat-revisoes-atrasadas" class="text-3xl font-bold text-red-600">0</p>
+                                    </div>
+                                    <span class="text-4xl">🚨</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Form para adicionar/editar revisão -->
+                        <div class="bg-gradient-to-r from-purple-50 to-indigo-50 p-6 rounded-xl mb-6">
+                            <h2 class="text-xl font-bold mb-4">Registrar Revisão</h2>
+                            <form id="form-revisao" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <input type="hidden" id="revisao-id">
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Veículo (Placa) *</label>
+                                    <input type="text" id="revisao-placa" required
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all uppercase"
+                                           placeholder="Placa">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Tipo de Revisão *</label>
+                                    <input type="text" id="revisao-tipo" required
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all"
+                                           placeholder="Ex: 10.000 km, 20.000 km">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">KM da Revisão *</label>
+                                    <input type="number" id="revisao-km" required min="0"
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all"
+                                           placeholder="0">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Data da Revisão *</label>
+                                    <input type="date" id="revisao-data" required
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">KM Próxima Revisão *</label>
+                                    <input type="number" id="revisao-km-proxima" required min="0"
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all"
+                                           placeholder="0">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Data Próxima Prevista</label>
+                                    <input type="date" id="revisao-data-proxima"
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Oficina</label>
+                                    <input type="text" id="revisao-oficina"
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all"
+                                           placeholder="Nome da oficina">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Valor (R$)</label>
+                                    <input type="number" step="0.01" id="revisao-valor" min="0"
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all"
+                                           placeholder="0.00">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Observação</label>
+                                    <input type="text" id="revisao-observacao"
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all"
+                                           placeholder="Observações">
+                                </div>
+                                <div class="md:col-span-3 flex gap-3">
+                                    <button type="submit" class="gradient-btn text-white px-8 py-3 rounded-xl font-bold shadow-lg">
+                                        ➕ Salvar Revisão
+                                    </button>
+                                    <button type="button" id="revisao-cancelar" class="hidden px-8 py-3 bg-gray-300 hover:bg-gray-400 rounded-xl font-bold shadow-lg transition-all">
+                                        ❌ Cancelar
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Filtros -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">Filtrar por Veículo</label>
+                                <select id="revisao-filtro-placa" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all">
+                                    <option value="">Todos os veículos</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">Filtrar por Status</label>
+                                <select id="revisao-filtro-status" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all">
+                                    <option value="">Todos os status</option>
+                                    <option value="em_dia">Em dia</option>
+                                    <option value="proxima">Próxima</option>
+                                    <option value="atrasada">Atrasada</option>
+                                </select>
+                            </div>
+                            <div class="flex items-end">
+                                <button id="revisao-limpar-filtros" class="w-full px-4 py-3 bg-gray-200 hover:bg-gray-300 rounded-xl font-semibold transition-all">
+                                    🔄 Limpar Filtros
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Tabela de Revisões -->
+                        <div class="overflow-x-auto rounded-xl border-2 border-gray-200">
+                            <table class="w-full">
+                                <thead class="bg-gradient-to-r from-purple-100 to-indigo-100">
+                                    <tr>
+                                        <th class="p-4 font-bold text-gray-700">Status</th>
+                                        <th class="p-4 font-bold text-gray-700">Placa</th>
+                                        <th class="p-4 font-bold text-gray-700">Tipo</th>
+                                        <th class="p-4 font-bold text-gray-700">KM Revisão</th>
+                                        <th class="p-4 font-bold text-gray-700">Data</th>
+                                        <th class="p-4 font-bold text-gray-700">KM Próxima</th>
+                                        <th class="p-4 font-bold text-gray-700">Restante</th>
+                                        <th class="p-4 font-bold text-gray-700">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabela-revisoes">
+                                    <!-- Linhas serão inseridas aqui via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Veículos Content -->
+                <div id="veiculos-content" class="main-content hidden animate-fade-in">
+                    <div class="glass p-8 rounded-2xl shadow-lg">
+                        <!-- Header -->
+                        <div class="flex items-center justify-between flex-wrap gap-4 mb-6">
+                            <div>
+                                <h1 class="text-3xl font-bold text-gray-800 flex items-center gap-3">
+                                    <span class="bg-gradient-to-r from-indigo-500 to-purple-500 text-white p-3 rounded-xl">🚗</span>
+                                    Veículos
+                                </h1>
+                                <p class="text-gray-600 mt-1">Gestão e acompanhamento da frota</p>
+                            </div>
+                            <div class="flex gap-3">
+                                <a href="/pdf/veiculos" target="_blank" class="bg-red-600 text-white px-6 py-3 rounded-xl font-semibold shadow-lg hover:bg-red-700 transition-all">
+                                    📄 Gerar PDF
+                                </a>
+                                <button id="btn-add-veiculo" class="bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-6 py-3 rounded-xl font-semibold shadow-lg hover:scale-105 transition-all">
+                                    ➕ Cadastrar Veículo
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Barra de Pesquisa e Toggle de Visualização -->
+                        <div class="flex flex-col md:flex-row gap-4 mb-6">
+                            <input 
+                                type="text" 
+                                id="search-veiculos" 
+                                placeholder="🔍 Pesquisar veículo por placa ou modelo..." 
+                                class="flex-1 px-5 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:outline-none transition-all shadow-sm"
+                                oninput="pesquisarVeiculos()"
+                            >
+                            <button 
+                                id="btn-toggle-veiculos-view" 
+                                onclick="toggleVeiculosView()" 
+                                class="bg-gradient-to-r from-purple-500 to-indigo-500 text-white px-6 py-3 rounded-xl font-semibold shadow-lg hover:scale-105 transition-all whitespace-nowrap"
+                            >
+                                📋 Visualizar como Lista
+                            </button>
+                        </div>
+
+                        <!-- Grid de Veículos -->
+                        <div id="veiculos-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            <!-- Cards serão inseridos aqui -->
+                        </div>
+                    </div>
+
+                    <!-- Modal Cadastrar/Editar Veículo -->
+                    <div id="modal-veiculo" class="hidden fixed inset-0 bg-black bg-opacity-50 items-center justify-center z-50 p-4">
+                        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8">
+                            <h2 id="modal-veiculo-title" class="text-2xl font-bold mb-6 text-gray-800">Cadastrar Veículo</h2>
+                            <form id="form-veiculo" class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Placa</label>
+                                    <input type="text" id="input-placa" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all uppercase" placeholder="ABC1234" required>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Modelo</label>
+                                    <input type="text" id="input-modelo" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all" placeholder="Ex: Fiat Uno">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Consumo Médio (km/L)</label>
+                                    <input type="number" step="0.01" id="input-media-kmpl" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all" placeholder="0.00">
+                                </div>
+                                <div class="flex gap-3 pt-4">
+                                    <button type="button" id="btn-cancel-veiculo" class="flex-1 px-6 py-3 bg-gray-200 hover:bg-gray-300 rounded-xl font-semibold transition-all">
+                                        Cancelar
+                                    </button>
+                                    <button type="submit" class="flex-1 px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl font-semibold shadow-lg hover:scale-105 transition-all">
+                                        Salvar
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Modal Upload Documento Veículo -->
+                    <div id="modal-upload-doc-veiculo" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full">
+                            <div class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-6 rounded-t-2xl">
+                                <h2 class="text-2xl font-bold">📄 Upload Documento</h2>
+                            </div>
+                            <form id="form-upload-doc-veiculo" class="p-6">
+                                <input type="hidden" id="upload-doc-veiculo-id">
+                                
+                                <div class="mb-4">
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Veículo</label>
+                                    <input type="text" id="upload-doc-veiculo-placa" readonly
+                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-gray-50">
+                                </div>
+
+                                <div class="mb-6">
+                                    <label class="block text-sm font-semibold text-gray-700 mb-4">Arquivo do Documento (PDF, JPG ou PNG)</label>
+                                    <div id="doc-veiculo-drop-zone" class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-indigo-500 transition-all cursor-pointer bg-gray-50 hover:bg-indigo-50">
+                                        <div id="doc-veiculo-drop-zone-content">
+                                            <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                                                <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                                            </svg>
+                                            <p class="mt-2 text-sm text-gray-600">
+                                                Arraste o arquivo aqui ou <span class="text-indigo-600 font-semibold">clique para selecionar</span>
+                                            </p>
+                                            <p class="text-xs text-gray-500 mt-1">PDF, JPG ou PNG (máx. 10MB)</p>
+                                        </div>
+                                        <div id="doc-veiculo-file-info" class="hidden">
+                                            <svg class="mx-auto h-12 w-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                            </svg>
+                                            <p id="doc-veiculo-file-name" class="mt-2 text-sm font-semibold text-gray-700"></p>
+                                            <p id="doc-veiculo-file-size" class="text-xs text-gray-500"></p>
+                                        </div>
+                                    </div>
+                                    <input type="file" id="doc-veiculo-file-input" accept=".pdf,.jpg,.jpeg,.png" class="hidden">
+                                </div>
+
+                                <div class="flex gap-3">
+                                    <button type="submit" id="btn-upload-doc-veiculo"
+                                            class="flex-1 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl font-bold transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
+                                        📤 Enviar Documento
+                                    </button>
+                                    <button type="button" onclick="fecharModalUploadDocVeiculo()" 
+                                            class="flex-1 px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl font-bold transition-all">
+                                        ❌ Cancelar
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Modal Visualizar Documento Veículo -->
+                    <div id="modal-visualizar-doc-veiculo" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                        <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+                            <div class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-6 rounded-t-2xl flex justify-between items-center">
+                                <h2 class="text-2xl font-bold">📄 Visualizar Documento</h2>
+                                <button onclick="fecharModalVisualizarDocVeiculo()" class="text-white hover:text-gray-200 transition-colors">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="p-6 flex-1 overflow-auto">
+                                <div id="doc-veiculo-viewer-content" class="flex items-center justify-center min-h-[500px]">
+                                    <div class="text-center">
+                                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+                                        <p class="mt-4 text-gray-600">Carregando documento...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal Upload Documento Multa -->
+                <div id="modal-upload-doc-multa" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                    <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full">
+                        <div class="bg-gradient-to-r from-red-600 to-pink-600 text-white p-6 rounded-t-2xl">
+                            <h2 class="text-2xl font-bold">📄 Upload Documento da Multa</h2>
+                        </div>
+                        <form id="form-upload-doc-multa" class="p-6">
+                            <input type="hidden" id="upload-doc-multa-id">
+                            
+                            <div class="mb-4">
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">Veículo</label>
+                                <input type="text" id="upload-doc-multa-placa" readonly
+                                       class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-gray-50">
+                            </div>
+
+                            <div class="mb-6">
+                                <label class="block text-sm font-semibold text-gray-700 mb-4">Arquivo do Documento (PDF, JPG ou PNG)</label>
+                                <div id="doc-multa-drop-zone" class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-red-500 transition-all cursor-pointer bg-gray-50 hover:bg-red-50">
+                                    <div id="doc-multa-drop-zone-content">
+                                        <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                                            <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                                        </svg>
+                                        <p class="mt-2 text-sm text-gray-600">
+                                            Arraste o arquivo aqui ou <span class="text-red-600 font-semibold">clique para selecionar</span>
+                                        </p>
+                                        <p class="text-xs text-gray-500 mt-1">PDF, JPG ou PNG (máx. 10MB)</p>
+                                    </div>
+                                    <div id="doc-multa-file-info" class="hidden">
+                                        <svg class="mx-auto h-12 w-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                        <p id="doc-multa-file-name" class="mt-2 text-sm font-semibold text-gray-700"></p>
+                                        <p id="doc-multa-file-size" class="text-xs text-gray-500"></p>
+                                    </div>
+                                </div>
+                                <input type="file" id="doc-multa-file-input" accept=".pdf,.jpg,.jpeg,.png" class="hidden">
+                            </div>
+
+                            <div class="flex gap-3">
+                                <button type="submit" id="btn-upload-doc-multa"
+                                        class="flex-1 px-6 py-3 bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 text-white rounded-xl font-bold transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    📤 Enviar Documento
+                                </button>
+                                <button type="button" onclick="fecharModalUploadDocMulta()" 
+                                        class="flex-1 px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl font-bold transition-all">
+                                    ❌ Cancelar
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Modal Visualizar Documento Multa -->
+                <div id="modal-visualizar-doc-multa" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                    <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+                        <div class="bg-gradient-to-r from-red-600 to-pink-600 text-white p-6 rounded-t-2xl flex justify-between items-center">
+                            <h2 class="text-2xl font-bold">📄 Visualizar Documento da Multa</h2>
+                            <button onclick="fecharModalVisualizarDocMulta()" class="text-white hover:text-gray-200 transition-colors">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="p-6 flex-1 overflow-auto">
+                            <div id="doc-multa-viewer-content" class="flex items-center justify-center min-h-[500px]">
+                                <div class="text-center">
+                                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto"></div>
+                                    <p class="mt-4 text-gray-600">Carregando documento...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Relatórios Content -->
+                <div id="relatorios-content" class="main-content hidden animate-fade-in">
+                    <div class="glass p-8 rounded-2xl shadow-lg">
+                        <h1 class="text-3xl font-bold mb-6 text-gray-800 flex items-center gap-3">
+                            <span class="bg-gradient-to-r from-red-500 to-pink-500 text-white p-3 rounded-xl">📄</span>
+                            Relatórios em PDF
+                        </h1>
+                        <p class="text-gray-600 mb-6">Gere relatórios personalizados com filtros</p>
+
+                        <!-- Grid de Relatórios -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            
+                            <!-- 1. Motoristas -->
+                            <div class="bg-white rounded-2xl shadow-xl p-6">
+                                <div class="flex items-center gap-3 mb-4">
+                                    <span class="text-4xl">👥</span>
+                                    <div>
+                                        <h2 class="text-2xl font-bold text-gray-800">Motoristas</h2>
+                                        <p class="text-gray-600 text-sm">Lista completa de motoristas</p>
+                                    </div>
+                                </div>
+                                <div class="space-y-2">
+                                    <a href="/pdf/motoristas?status=todos" target="_blank" class="block w-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-center py-3 rounded-xl font-semibold shadow-lg hover:scale-105 transition-all">
+                                        📥 Todos os Motoristas
+                                    </a>
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <a href="/pdf/motoristas?status=ativos" target="_blank" class="block w-full bg-gradient-to-r from-green-500 to-emerald-500 text-white text-center py-2 rounded-lg text-sm font-semibold shadow hover:scale-105 transition-all">
+                                            ✅ Apenas Ativos
+                                        </a>
+                                        <a href="/pdf/motoristas?status=inativos" target="_blank" class="block w-full bg-gradient-to-r from-gray-500 to-slate-500 text-white text-center py-2 rounded-lg text-sm font-semibold shadow hover:scale-105 transition-all">
+                                            ⭕ Apenas Inativos
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 2. Veículos -->
+                            <div class="bg-white rounded-2xl shadow-xl p-6">
+                                <div class="flex items-center gap-3 mb-4">
+                                    <span class="text-4xl">🚗</span>
+                                    <div>
+                                        <h2 class="text-2xl font-bold text-gray-800">Veículos</h2>
+                                        <p class="text-gray-600 text-sm">Lista de veículos por status</p>
+                                    </div>
+                                </div>
+                                <form id="form-pdf-veiculos" class="space-y-2">
+                                    <select id="select-pdf-veiculos-status" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-green-500 transition-all">
+                                        <option value="todos">Todos os Veículos</option>
+                                        <option value="ativos">Apenas Ativos</option>
+                                        <option value="inativos">Apenas Inativos</option>
+                                    </select>
+                                    <button type="submit" class="w-full bg-gradient-to-r from-green-500 to-emerald-500 text-white text-center py-3 rounded-xl font-semibold shadow-lg hover:scale-105 transition-all">
+                                        📥 Gerar PDF
+                                    </button>
+                                </form>
+                            </div>
+
+                            <!-- 3. Abastecimentos com Filtros -->
+                            <div class="bg-white rounded-2xl shadow-xl p-6">
+                                <div class="flex items-center gap-3 mb-4">
+                                    <span class="text-4xl">⛽</span>
+                                    <div>
+                                        <h2 class="text-2xl font-bold text-gray-800">Abastecimentos</h2>
+                                        <p class="text-gray-600 text-sm">Com filtros personalizados</p>
+                                    </div>
+                                </div>
+                                <form id="form-abastecimentos" class="space-y-3">
+                                    <input type="text" id="abast-veiculo" placeholder="Veículo (ex: ABC1234)" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-orange-500 transition-all">
+                                    <input type="date" id="abast-data-inicio" placeholder="Data Início" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-orange-500 transition-all">
+                                    <input type="date" id="abast-data-fim" placeholder="Data Fim" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-orange-500 transition-all">
+                                    <button type="submit" class="w-full bg-gradient-to-r from-orange-500 to-amber-500 text-white py-3 rounded-xl font-semibold shadow-lg hover:scale-105 transition-all">
+                                        📥 Gerar PDF Filtrado
+                                    </button>
+                                </form>
+                            </div>
+
+                            <!-- 4. Saídas com Filtros -->
+                            <div class="bg-white rounded-2xl shadow-xl p-6">
+                                <div class="flex items-center gap-3 mb-4">
+                                    <span class="text-4xl">🚙</span>
+                                    <div>
+                                        <h2 class="text-2xl font-bold text-gray-800">Saídas/Viagens</h2>
+                                        <p class="text-gray-600 text-sm">Com filtros personalizados</p>
+                                    </div>
+                                </div>
+                                <form id="form-saidas" class="space-y-3">
+                                    <input type="text" id="saidas-veiculo" placeholder="Veículo (ex: ABC1234)" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 transition-all">
+                                    <input type="text" id="saidas-motorista" placeholder="Motorista" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 transition-all">
+                                    <select id="saidas-status" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 transition-all">
+                                        <option value="">Todos os Status</option>
+                                        <option value="em_curso">Em Curso</option>
+                                        <option value="finalizada">Finalizada</option>
+                                    </select>
+                                    <input type="date" id="saidas-data-inicio" placeholder="Data Início" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 transition-all">
+                                    <input type="date" id="saidas-data-fim" placeholder="Data Fim" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 transition-all">
+                                    <button type="submit" class="w-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white py-3 rounded-xl font-semibold shadow-lg hover:scale-105 transition-all">
+                                        📥 Gerar PDF Filtrado
+                                    </button>
+                                </form>
+                            </div>
+
+                            <!-- 5. Multas com Filtros -->
+                            <div class="bg-white rounded-2xl shadow-xl p-6">
+                                <div class="flex items-center gap-3 mb-4">
+                                    <span class="text-4xl">⚠️</span>
+                                    <div>
+                                        <h2 class="text-2xl font-bold text-gray-800">Multas</h2>
+                                        <p class="text-gray-600 text-sm">Com filtros personalizados</p>
+                                    </div>
+                                </div>
+                                <form id="form-multas" class="space-y-3">
+                                    <input type="text" id="multas-veiculo" placeholder="Veículo (ex: ABC1234)" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-red-500 transition-all">
+                                    <select id="multas-status" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-red-500 transition-all">
+                                        <option value="">Todos os Status</option>
+                                        <option value="pendente">Pendentes</option>
+                                        <option value="paga">Pagas</option>
+                                        <option value="contestada">Contestadas</option>
+                                    </select>
+                                    <input type="date" id="multas-data-inicio" placeholder="Data Início" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-red-500 transition-all">
+                                    <input type="date" id="multas-data-fim" placeholder="Data Fim" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-red-500 transition-all">
+                                    <button type="submit" class="w-full bg-gradient-to-r from-red-500 to-pink-500 text-white py-3 rounded-xl font-semibold shadow-lg hover:scale-105 transition-all">
+                                        📥 Gerar PDF Filtrado
+                                    </button>
+                                </form>
+                            </div>
+
+                            <!-- Card Revisões -->
+                            <div class="glass p-6 rounded-2xl shadow-lg">
+                                <div class="flex items-center gap-3 mb-4">
+                                    <span class="bg-gradient-to-r from-purple-500 to-indigo-500 text-white p-3 rounded-xl text-2xl">🔧</span>
+                                    <div>
+                                        <h3 class="font-bold text-xl text-gray-800">Revisões</h3>
+                                        <p class="text-sm text-gray-600">Manutenções periódicas</p>
+                                    </div>
+                                </div>
+                                <form id="form-revisoes" class="space-y-3">
+                                    <input type="text" id="revisoes-veiculo" placeholder="Veículo (ex: ABC1234)" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-purple-500 transition-all">
+                                    <select id="revisoes-status" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-purple-500 transition-all">
+                                        <option value="">Todos os Status</option>
+                                        <option value="em_dia">Em Dia</option>
+                                        <option value="proxima">Próximas</option>
+                                        <option value="atrasada">Atrasadas</option>
+                                    </select>
+                                    <button type="submit" class="w-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white py-3 rounded-xl font-semibold shadow-lg hover:scale-105 transition-all">
+                                        📥 Gerar PDF Filtrado
+                                    </button>
+                                </form>
+                            </div>
+
+                        </div>
                     </div>
                 </div>
             </main>
         </div>
     </div>
 
-    <script src="/static/toast.js" defer></script>
-    <script src="/static/dashboard.js?v=1.2" defer></script>
+    <!-- Firebase SDK -->
+    <script type="module">
+        // Configuração do Firebase
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getFirestore, collection, onSnapshot, query, orderBy, limit, where } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBEpQOh7tMVK9UO7X4Z3F6DpMhJXKZJx0k",
+            authDomain: "frota-sanemar.firebaseapp.com",
+            projectId: "frota-sanemar",
+            storageBucket: "frota-sanemar.firebasestorage.app",
+            messagingSenderId: "461076697287",
+            appId: "1:461076697287:web:8a9e0f1d2c3b4e5f6g7h8i"
+        };
+
+        // Inicializa Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // Armazena no window para acesso global
+        window.firebaseApp = app;
+        window.firestoreDb = db;
+        window.firestoreModules = { collection, onSnapshot, query, orderBy, limit, where };
+
+        console.log('Firebase inicializado com sucesso');
+    </script>
+
+    <!-- IMPORTANTE: Cache global ANTES de carregar dashboard.js -->
     <script>
+        // Cache global para histórico - DEVE estar antes de dashboard.js carregar
+        window.historicoCache = [];
+        console.log('✅ Cache global iniciado:', window.historicoCache);
+    </script>
+
+    <script src="/static/toast.js?v=1.1" defer></script>
+    <script src="/static/dashboard.js?v=2.0" defer></script>
+    <script src="/static/dashboard-realtime.js?v=1.0" defer></script>
+    <script src="/static/km-multas.js?v=1.0" defer></script>
+    <script src="/static/revisoes-tab.js?v=1.0" defer></script>
+    <script src="/static/veiculos-tab.js?v=1.6" defer></script>
+    <script src="/static/relatorios-tab.js?v=1.0" defer></script>
+    <script>
+        // Display current date in header
+        function updateCurrentDate() {
+            const dateEl = document.getElementById('current-date');
+            if (dateEl) {
+                const now = new Date();
+                const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+                dateEl.textContent = now.toLocaleDateString('pt-BR', options);
+            }
+        }
+        updateCurrentDate();
+
+        // Função para atualizar dashboard manualmente (botão 🔄 no card HOJE)
+        async function refreshDashboardManually() {
+            const btn = document.getElementById('refresh-dashboard-btn');
+            if (!btn) return;
+            
+            try {
+                // Mostra loading
+                btn.innerHTML = '⏳';
+                btn.disabled = true;
+                
+                // Limpa o cache no backend
+                await fetch('/api/dashboard_cache/clear', { method: 'POST' });
+                
+                // Recarrega os dados do dashboard
+                if (window.viagensChartsInitialized) {
+                    await loadDashboardData(
+                        window.viagensPorVeiculoChartInstance,
+                        window.viagensPorMotoristaChartInstance,
+                        window.viagensPorVeiculoChartTotalInstance,
+                        window.viagensPorMotoristaChartTotalInstance
+                    );
+                    await loadHistoricoData();
+                }
+                
+                // Mostra sucesso
+                if (window.showToast) {
+                    showToast('success', '✅ Dashboard atualizado!', 2000);
+                }
+                
+                // Restaura botão após 2s
+                setTimeout(() => {
+                    btn.innerHTML = '🔄';
+                    btn.disabled = false;
+                }, 2000);
+            } catch (error) {
+                console.error('Erro ao atualizar dashboard:', error);
+                btn.innerHTML = '❌';
+                setTimeout(() => {
+                    btn.innerHTML = '🔄';
+                    btn.disabled = false;
+                }, 2000);
+            }
+        }
+        
+        // Expõe função globalmente
+        window.refreshDashboardManually = refreshDashboardManually;
+
+        // Botão de atualizar cache (antigo)
+        document.addEventListener('DOMContentLoaded', () => {
+            const refreshBtn = document.getElementById('refresh-cache-btn');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', async () => {
+                    try {
+                        refreshBtn.disabled = true;
+                        refreshBtn.innerHTML = '⏳ Atualizando...';
+                        
+                        // Limpa o cache no backend
+                        await fetch('/api/dashboard_cache/clear', { method: 'POST' });
+                        
+                        // Recarrega os dados do dashboard
+                        if (window.viagensChartsInitialized) {
+                            await loadDashboardData(
+                                window.viagensPorVeiculoChartInstance,
+                                window.viagensPorMotoristaChartInstance,
+                                window.viagensPorVeiculoChartTotalInstance,
+                                window.viagensPorMotoristaChartTotalInstance
+                            );
+                            await loadHistoricoData();
+                        }
+                        
+                        if (window.showToast) showToast('success', '✅ Dados atualizados!');
+                        refreshBtn.innerHTML = '🔄 Atualizar';
+                        refreshBtn.disabled = false;
+                    } catch (error) {
+                        console.error('Erro ao atualizar cache:', error);
+                        if (window.showToast) showToast('error', '❌ Erro ao atualizar');
+                        refreshBtn.innerHTML = '🔄 Atualizar';
+                        refreshBtn.disabled = false;
+                    }
+                });
+            }
+        });
+
+        // Motoristas form handling
+        document.addEventListener('DOMContentLoaded', () => {
+            const formMotorista = document.getElementById('form-motorista');
+            if (formMotorista) {
+                formMotorista.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const nome = document.getElementById('motorista-nome').value.trim();
+                    const empresa = document.getElementById('motorista-empresa').value.trim();
+                    const funcao = document.getElementById('motorista-funcao').value.trim();
+                    const hiddenId = document.getElementById('motorista-id-edit');
+                    const editandoId = hiddenId ? hiddenId.value : '';
+
+                    if (!nome) {
+                        if (window.showToast) showToast('error', 'Nome é obrigatório');
+                        return;
+                    }
+
+                    try {
+                        let res;
+                        if (editandoId) {
+                            // Atualizar
+                            res = await fetch(`/api/motoristas/${editandoId}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ nome, empresa, funcao })
+                            });
+                        } else {
+                            // Criar
+                            res = await fetch('/api/motoristas', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ nome, empresa, funcao })
+                            });
+                        }
+                        
+                        const result = await res.json();
+                        if (res.ok) {
+                            if (window.showToast) showToast('success', editandoId ? 'Motorista atualizado com sucesso' : 'Motorista cadastrado com sucesso');
+                            
+                            // Limpa formulário
+                            formMotorista.reset();
+                            if (hiddenId) hiddenId.value = '';
+                            
+                            // Restaura botão
+                            const submitBtn = formMotorista.querySelector('button[type="submit"]');
+                            if (submitBtn) submitBtn.innerHTML = '➕ Adicionar Motorista';
+                            
+                            // Esconde botão cancelar
+                            const btnCancelar = document.getElementById('motorista-btn-cancelar');
+                            if (btnCancelar) btnCancelar.classList.add('hidden');
+                            
+                            // Reload motoristas table
+                            if (window.loadMotoristasData) loadMotoristasData();
+                        } else {
+                            if (window.showToast) showToast('error', result.error || 'Erro ao salvar');
+                        }
+                    } catch (err) {
+                        console.error(err);
+                        if (window.showToast) showToast('error', 'Erro de conexão');
+                    }
+                });
+            }
+
+            // Update sidebar active states
+            const tabLinks = document.querySelectorAll('.tab-link');
+            tabLinks.forEach(link => {
+                link.addEventListener('click', function() {
+                    tabLinks.forEach(l => l.classList.remove('active'));
+                    this.classList.add('active');
+                });
+            });
+            
+            // Controle de filtros de PDF KM Mensal
+            const filtroPdfTipo = document.getElementById('filtro-pdf-tipo');
+            const filtroPdfMes = document.getElementById('filtro-pdf-mes');
+            const filtroPdfAno = document.getElementById('filtro-pdf-ano');
+            const btnGerarPdfKm = document.getElementById('btn-gerar-pdf-km');
+            
+            if (filtroPdfTipo && filtroPdfMes && filtroPdfAno && btnGerarPdfKm) {
+                // Atualizar visibilidade dos campos de filtro
+                filtroPdfTipo.addEventListener('change', () => {
+                    filtroPdfMes.classList.add('hidden');
+                    filtroPdfAno.classList.add('hidden');
+                    
+                    if (filtroPdfTipo.value === 'mes') {
+                        filtroPdfMes.classList.remove('hidden');
+                    } else if (filtroPdfTipo.value === 'ano') {
+                        filtroPdfAno.classList.remove('hidden');
+                    }
+                });
+                
+                // Gerar PDF com filtros
+                btnGerarPdfKm.addEventListener('click', () => {
+                    let url = '/pdf/km-mensal?';
+                    const params = [];
+                    
+                    if (filtroPdfTipo.value === 'mes' && filtroPdfMes.value) {
+                        params.push(`mes=${filtroPdfMes.value}`);
+                    } else if (filtroPdfTipo.value === 'ano' && filtroPdfAno.value) {
+                        params.push(`ano=${filtroPdfAno.value}`);
+                    }
+                    
+                    url += params.join('&');
+                    window.open(url, '_blank');
+                });
+            }
+        });
+
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js').then(registration => {
@@ -234,5 +1564,727 @@
             });
         }
     </script>
+
+    <!-- Modal de Edição de Saída (Dashboard) -->
+    <div id="modal-editar-dashboard" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 rounded-t-2xl">
+                <h2 class="text-2xl font-bold">✏️ Editar Saída</h2>
+            </div>
+            <form id="form-editar-dashboard" class="p-6">
+                <input type="hidden" id="edit-dashboard-saida-id">
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">🚗 Veículo (Placa)</label>
+                        <input type="text" id="edit-dashboard-veiculo" required
+                               class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all uppercase">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">👤 Motorista</label>
+                        <input type="text" id="edit-dashboard-motorista" required
+                               class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all">
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">👔 Solicitante</label>
+                    <input type="text" id="edit-dashboard-solicitante" required
+                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all">
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">📍 Trajeto</label>
+                    <input type="text" id="edit-dashboard-trajeto" required
+                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all">
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">🕐 Saída</label>
+                        <input type="datetime-local" id="edit-dashboard-timestamp-saida" required
+                               class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">🕐 Chegada</label>
+                        <input type="datetime-local" id="edit-dashboard-timestamp-chegada"
+                               class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all">
+                    </div>
+                </div>
+
+                <div class="mb-6">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">📊 Status</label>
+                    <select id="edit-dashboard-status" required
+                            class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all">
+                        <option value="em_curso">Em Curso</option>
+                        <option value="finalizada">Finalizada</option>
+                    </select>
+                </div>
+
+                <div class="flex gap-3">
+                    <button type="submit" 
+                            class="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-bold transition-all transform hover:scale-105">
+                        💾 Salvar
+                    </button>
+                    <button type="button" onclick="fecharModalEditarDashboard()" 
+                            class="flex-1 px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl font-bold transition-all">
+                        ❌ Cancelar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Upload CNH -->
+    <div id="modal-upload-cnh" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full">
+            <div class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-6 rounded-t-2xl">
+                <h2 class="text-2xl font-bold">📄 Upload CNH</h2>
+            </div>
+            <form id="form-upload-cnh" class="p-6">
+                <input type="hidden" id="upload-cnh-motorista-id">
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Motorista</label>
+                    <input type="text" id="upload-cnh-motorista-nome" readonly
+                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-gray-50">
+                </div>
+
+                <div class="mb-6">
+                    <label class="block text-sm font-semibold text-gray-700 mb-4">Arquivo CNH (PDF, JPG ou PNG)</label>
+                    <div id="drop-zone" class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-indigo-500 transition-all cursor-pointer bg-gray-50 hover:bg-indigo-50">
+                        <div id="drop-zone-content">
+                            <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                                <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                            <p class="mt-2 text-sm text-gray-600">
+                                Arraste o arquivo aqui ou <span class="text-indigo-600 font-semibold">clique para selecionar</span>
+                            </p>
+                            <p class="text-xs text-gray-500 mt-1">PDF, JPG ou PNG (máx. 10MB)</p>
+                        </div>
+                        <div id="file-info" class="hidden">
+                            <svg class="mx-auto h-12 w-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <p id="file-name" class="mt-2 text-sm font-semibold text-gray-700"></p>
+                            <p id="file-size" class="text-xs text-gray-500"></p>
+                        </div>
+                    </div>
+                    <input type="file" id="cnh-file-input" accept=".pdf,.jpg,.jpeg,.png" class="hidden">
+                </div>
+
+                <div class="flex gap-3">
+                    <button type="submit" id="btn-upload-cnh"
+                            class="flex-1 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl font-bold transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
+                        📤 Enviar CNH
+                    </button>
+                    <button type="button" onclick="fecharModalUploadCNH()" 
+                            class="flex-1 px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl font-bold transition-all">
+                        ❌ Cancelar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Visualizar CNH -->
+    <div id="modal-visualizar-cnh" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+            <div class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-6 rounded-t-2xl flex justify-between items-center">
+                <h2 class="text-2xl font-bold">📄 Visualizar CNH</h2>
+                <button onclick="fecharModalVisualizarCNH()" class="text-white hover:text-gray-200 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="p-6 flex-1 overflow-auto">
+                <div id="cnh-viewer-content" class="flex items-center justify-center min-h-[500px]">
+                    <div class="text-center">
+                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+                        <p class="mt-4 text-gray-600">Carregando CNH...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // Funções globais para editar/excluir saídas no dashboard
+    // NOTA: historicoCache já foi declarado globalmente antes de dashboard.js carregar
+
+    async function editarSaidaDashboard(saidaId) {
+        try {
+            console.log('🔍 Tentando editar saída:', saidaId);
+            console.log('📦 Cache atual:', window.historicoCache.length, 'registros');
+            
+            // Busca dados do histórico se não estiverem no cache
+            if (window.historicoCache.length === 0) {
+                console.log('📥 Cache vazio, buscando da API...');
+                const response = await fetch('/api/historico');
+                window.historicoCache = await response.json();
+                console.log('✅ Cache atualizado:', window.historicoCache.length, 'registros');
+            }
+
+            const saida = window.historicoCache.find(s => s.id === saidaId);
+            console.log('🎯 Saída encontrada:', saida);
+            
+            if (!saida) {
+                console.error('❌ Saída não encontrada no cache. IDs disponíveis:', window.historicoCache.map(s => s.id));
+                alert(`Erro: Registro ${saidaId} não encontrado.\n\nTente recarregar a página.`);
+                if (window.showToast) showToast('error', 'Registro não encontrado');
+                return;
+            }
+
+            // Preenche o formulário
+            document.getElementById('edit-dashboard-saida-id').value = saidaId;
+            document.getElementById('edit-dashboard-veiculo').value = saida.veiculo || '';
+            document.getElementById('edit-dashboard-motorista').value = saida.motorista || '';
+            document.getElementById('edit-dashboard-solicitante').value = saida.solicitante || '';
+            document.getElementById('edit-dashboard-trajeto').value = saida.trajeto || '';
+            document.getElementById('edit-dashboard-status').value = saida.status || 'em_curso';
+
+            // Converte timestamps para datetime-local
+            const saida_date = parseDateValue(saida.timestampSaida);
+            if (saida_date) {
+                document.getElementById('edit-dashboard-timestamp-saida').value = formatDatetimeLocal(saida_date);
+            }
+
+            const chegada_date = parseDateValue(saida.timestampChegada);
+            if (chegada_date) {
+                document.getElementById('edit-dashboard-timestamp-chegada').value = formatDatetimeLocal(chegada_date);
+            }
+
+            // Mostra modal
+            document.getElementById('modal-editar-dashboard').classList.remove('hidden');
+        } catch (error) {
+            console.error('❌ Erro ao carregar saída:', error);
+            if (window.showToast) showToast('error', 'Erro ao carregar registro');
+        }
+    }
+
+    async function excluirSaidaDashboard(saidaId, veiculo, motorista) {
+        if (!confirm(`⚠️ Confirma exclusão da saída?\n\nVeículo: ${veiculo}\nMotorista: ${motorista}\n\nEsta ação não pode ser desfeita!`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/saidas/${saidaId}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                if (window.showToast) showToast('success', '✅ Registro excluído com sucesso!');
+                window.historicoCache = []; // Limpa cache
+                loadHistoricoData(); // Recarrega tabela
+            } else {
+                if (window.showToast) showToast('error', `❌ Erro: ${result.error || 'Falha ao excluir'}`);
+            }
+        } catch (error) {
+            console.error('Erro ao excluir:', error);
+            if (window.showToast) showToast('error', '❌ Erro ao excluir registro');
+        }
+    }
+
+    function fecharModalEditarDashboard() {
+        document.getElementById('modal-editar-dashboard').classList.add('hidden');
+        document.getElementById('form-editar-dashboard').reset();
+    }
+
+    // Helper para converter Date para datetime-local format
+    function formatDatetimeLocal(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+
+    // Submit do formulário de edição do dashboard
+    document.getElementById('form-editar-dashboard').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const saidaId = document.getElementById('edit-dashboard-saida-id').value;
+        const dados = {
+            veiculo: document.getElementById('edit-dashboard-veiculo').value.toUpperCase(),
+            motorista: document.getElementById('edit-dashboard-motorista').value,
+            solicitante: document.getElementById('edit-dashboard-solicitante').value,
+            trajeto: document.getElementById('edit-dashboard-trajeto').value,
+            status: document.getElementById('edit-dashboard-status').value,
+            timestampSaida: new Date(document.getElementById('edit-dashboard-timestamp-saida').value).toISOString(),
+            timestampChegada: document.getElementById('edit-dashboard-timestamp-chegada').value ? new Date(document.getElementById('edit-dashboard-timestamp-chegada').value).toISOString() : null
+        };
+
+        try {
+            const response = await fetch(`/api/saidas/${saidaId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(dados)
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                if (window.showToast) showToast('success', '✅ Registro atualizado com sucesso!');
+                fecharModalEditarDashboard();
+                window.historicoCache = []; // Limpa cache
+                loadHistoricoData(); // Recarrega tabela
+            } else {
+                if (window.showToast) showToast('error', `❌ Erro: ${result.error || 'Falha ao atualizar'}`);
+            }
+        } catch (error) {
+            console.error('Erro ao atualizar:', error);
+            if (window.showToast) showToast('error', '❌ Erro ao atualizar registro');
+        }
+    });
+
+    // Force uppercase no campo veículo do modal
+    document.getElementById('edit-dashboard-veiculo').addEventListener('input', (e) => {
+        const pos = e.target.selectionStart;
+        e.target.value = e.target.value.toUpperCase();
+        e.target.setSelectionRange(pos, pos);
+    });
+
+    // Expor funções globalmente
+    window.editarSaidaDashboard = editarSaidaDashboard;
+    window.excluirSaidaDashboard = excluirSaidaDashboard;
+    window.fecharModalEditarDashboard = fecharModalEditarDashboard;
+
+    // ============================================================================
+    // CNH UPLOAD DRAG & DROP + FORM HANDLER
+    // ============================================================================
+
+    // Drag and drop functionality
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('cnh-file-input');
+    let selectedFile = null;
+
+    // Prevent default drag behaviors
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
+        document.body.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    // Highlight drop zone when item is dragged over it
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => {
+            dropZone.classList.add('border-indigo-500', 'bg-indigo-50');
+        }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => {
+            dropZone.classList.remove('border-indigo-500', 'bg-indigo-50');
+        }, false);
+    });
+
+    // Handle dropped files
+    dropZone.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        if (files.length > 0) {
+            handleFile(files[0]);
+        }
+    }, false);
+
+    // Click to select file
+    dropZone.addEventListener('click', () => {
+        fileInput.click();
+    });
+
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            handleFile(e.target.files[0]);
+        }
+    });
+
+    function handleFile(file) {
+        // Validate file type
+        const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+        if (!allowedTypes.includes(file.type)) {
+            if (window.showToast) {
+                showToast('error', 'Tipo de arquivo não permitido. Use PDF, JPG ou PNG.');
+            }
+            return;
+        }
+
+        // Validate file size (max 10MB)
+        const maxSize = 10 * 1024 * 1024; // 10MB
+        if (file.size > maxSize) {
+            if (window.showToast) {
+                showToast('error', 'Arquivo muito grande. Máximo 10MB.');
+            }
+            return;
+        }
+
+        selectedFile = file;
+
+        // Update UI
+        document.getElementById('drop-zone-content').classList.add('hidden');
+        document.getElementById('file-info').classList.remove('hidden');
+        document.getElementById('file-name').textContent = file.name;
+        document.getElementById('file-size').textContent = formatFileSize(file.size);
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    }
+
+    // Handle CNH upload form submission
+    document.getElementById('form-upload-cnh').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        if (!selectedFile) {
+            if (window.showToast) {
+                showToast('error', 'Selecione um arquivo para enviar.');
+            }
+            return;
+        }
+
+        const motoristaId = document.getElementById('upload-cnh-motorista-id').value;
+        const btnUpload = document.getElementById('btn-upload-cnh');
+
+        try {
+            // Disable button
+            btnUpload.disabled = true;
+            btnUpload.innerHTML = '⏳ Enviando...';
+
+            // Create FormData
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            // Upload
+            const response = await fetch(`/api/motoristas/${motoristaId}/upload-cnh`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (window.showToast) {
+                    showToast('success', 'CNH enviada com sucesso!');
+                }
+                
+                // Close modal
+                fecharModalUploadCNH();
+                
+                // Reload motoristas table
+                if (window.loadMotoristasData) {
+                    loadMotoristasData();
+                }
+            } else {
+                const data = await response.json();
+                if (window.showToast) {
+                    showToast('error', data.error || 'Erro ao enviar CNH');
+                }
+            }
+        } catch (error) {
+            console.error('Erro ao enviar CNH:', error);
+            if (window.showToast) {
+                showToast('error', 'Erro ao enviar CNH');
+            }
+        } finally {
+            // Re-enable button
+            btnUpload.disabled = false;
+            btnUpload.innerHTML = '📤 Enviar CNH';
+            selectedFile = null;
+        }
+    });
+
+    // ============================================================================
+    // DOCUMENTO VEÍCULO UPLOAD DRAG & DROP + FORM HANDLER
+    // ============================================================================
+
+    // Drag and drop functionality for documento veiculo
+    const dropZoneVeiculo = document.getElementById('doc-veiculo-drop-zone');
+    const fileInputVeiculo = document.getElementById('doc-veiculo-file-input');
+    let selectedFileVeiculo = null;
+
+    // Prevent default drag behaviors
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZoneVeiculo.addEventListener(eventName, preventDefaults, false);
+    });
+
+    // Highlight drop zone when item is dragged over it
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZoneVeiculo.addEventListener(eventName, () => {
+            dropZoneVeiculo.classList.add('border-indigo-500', 'bg-indigo-50');
+        }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZoneVeiculo.addEventListener(eventName, () => {
+            dropZoneVeiculo.classList.remove('border-indigo-500', 'bg-indigo-50');
+        }, false);
+    });
+
+    // Handle dropped files for veiculo
+    dropZoneVeiculo.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        if (files.length > 0) {
+            handleFileVeiculo(files[0]);
+        }
+    }, false);
+
+    // Click to select file for veiculo
+    dropZoneVeiculo.addEventListener('click', () => {
+        fileInputVeiculo.click();
+    });
+
+    fileInputVeiculo.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            handleFileVeiculo(e.target.files[0]);
+        }
+    });
+
+    function handleFileVeiculo(file) {
+        // Validate file type
+        const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+        if (!allowedTypes.includes(file.type)) {
+            if (window.showToast) {
+                showToast('error', 'Tipo de arquivo não permitido. Use PDF, JPG ou PNG.');
+            }
+            return;
+        }
+
+        // Validate file size (max 10MB)
+        const maxSize = 10 * 1024 * 1024; // 10MB
+        if (file.size > maxSize) {
+            if (window.showToast) {
+                showToast('error', 'Arquivo muito grande. Máximo 10MB.');
+            }
+            return;
+        }
+
+        selectedFileVeiculo = file;
+
+        // Update UI
+        document.getElementById('doc-veiculo-drop-zone-content').classList.add('hidden');
+        document.getElementById('doc-veiculo-file-info').classList.remove('hidden');
+        document.getElementById('doc-veiculo-file-name').textContent = file.name;
+        document.getElementById('doc-veiculo-file-size').textContent = formatFileSize(file.size);
+    }
+
+    // Handle documento veiculo upload form submission
+    document.getElementById('form-upload-doc-veiculo').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        if (!selectedFileVeiculo) {
+            if (window.showToast) {
+                showToast('error', 'Selecione um arquivo para enviar.');
+            }
+            return;
+        }
+
+        const veiculoId = document.getElementById('upload-doc-veiculo-id').value;
+        const btnUpload = document.getElementById('btn-upload-doc-veiculo');
+
+        try {
+            // Disable button
+            btnUpload.disabled = true;
+            btnUpload.innerHTML = '⏳ Enviando...';
+
+            // Create FormData
+            const formData = new FormData();
+            formData.append('file', selectedFileVeiculo);
+
+            // Upload
+            const response = await fetch(`/api/veiculos/${veiculoId}/upload-documento`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (window.showToast) {
+                    showToast('success', 'Documento enviado com sucesso!');
+                }
+                
+                // Close modal
+                fecharModalUploadDocVeiculo();
+                
+                // Reload veiculos tab
+                if (window.loadVeiculosTab) {
+                    loadVeiculosTab();
+                }
+            } else {
+                const data = await response.json();
+                if (window.showToast) {
+                    showToast('error', data.error || 'Erro ao enviar documento');
+                }
+            }
+        } catch (error) {
+            console.error('Erro ao enviar documento:', error);
+            if (window.showToast) {
+                showToast('error', 'Erro ao enviar documento');
+            }
+        } finally {
+            // Re-enable button
+            btnUpload.disabled = false;
+            btnUpload.innerHTML = '📤 Enviar Documento';
+            selectedFileVeiculo = null;
+        }
+    });
+
+    // ============================================================================
+    // DOCUMENTO MULTA UPLOAD DRAG & DROP + FORM HANDLER
+    // ============================================================================
+
+    // Drag and drop functionality for documento multa
+    const dropZoneMulta = document.getElementById('doc-multa-drop-zone');
+    const fileInputMulta = document.getElementById('doc-multa-file-input');
+    let selectedFileMulta = null;
+
+    // Prevent default drag behaviors
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZoneMulta.addEventListener(eventName, preventDefaults, false);
+    });
+
+    // Highlight drop zone when item is dragged over it
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZoneMulta.addEventListener(eventName, () => {
+            dropZoneMulta.classList.add('border-red-500', 'bg-red-50');
+        }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZoneMulta.addEventListener(eventName, () => {
+            dropZoneMulta.classList.remove('border-red-500', 'bg-red-50');
+        }, false);
+    });
+
+    // Handle dropped files for multa
+    dropZoneMulta.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        if (files.length > 0) {
+            handleFileMulta(files[0]);
+        }
+    }, false);
+
+    // Click to select file for multa
+    dropZoneMulta.addEventListener('click', () => {
+        fileInputMulta.click();
+    });
+
+    fileInputMulta.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            handleFileMulta(e.target.files[0]);
+        }
+    });
+
+    function handleFileMulta(file) {
+        // Validate file type
+        const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+        if (!allowedTypes.includes(file.type)) {
+            if (window.showToast) {
+                showToast('error', 'Tipo de arquivo não permitido. Use PDF, JPG ou PNG.');
+            }
+            return;
+        }
+
+        // Validate file size (max 10MB)
+        const maxSize = 10 * 1024 * 1024; // 10MB
+        if (file.size > maxSize) {
+            if (window.showToast) {
+                showToast('error', 'Arquivo muito grande. Máximo 10MB.');
+            }
+            return;
+        }
+
+        selectedFileMulta = file;
+
+        // Update UI
+        document.getElementById('doc-multa-drop-zone-content').classList.add('hidden');
+        document.getElementById('doc-multa-file-info').classList.remove('hidden');
+        document.getElementById('doc-multa-file-name').textContent = file.name;
+        document.getElementById('doc-multa-file-size').textContent = formatFileSize(file.size);
+    }
+
+    // Handle documento multa upload form submission
+    document.getElementById('form-upload-doc-multa').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        if (!selectedFileMulta) {
+            if (window.showToast) {
+                showToast('error', 'Selecione um arquivo para enviar.');
+            }
+            return;
+        }
+
+        const multaId = document.getElementById('upload-doc-multa-id').value;
+        const btnUpload = document.getElementById('btn-upload-doc-multa');
+
+        try {
+            // Disable button
+            btnUpload.disabled = true;
+            btnUpload.innerHTML = '⏳ Enviando...';
+
+            // Create FormData
+            const formData = new FormData();
+            formData.append('file', selectedFileMulta);
+
+            // Upload
+            const response = await fetch(`/api/multas/${multaId}/upload-documento`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (window.showToast) {
+                    showToast('success', 'Documento enviado com sucesso!');
+                }
+                
+                // Close modal
+                fecharModalUploadDocMulta();
+                
+                // Reload multas tab
+                if (window.loadMultasData) {
+                    const filtroPlaca = document.getElementById('multa-filtro-placa');
+                    const filtroStatus = document.getElementById('multa-filtro-status');
+                    loadMultasData(
+                        filtroPlaca ? filtroPlaca.value : '',
+                        filtroStatus ? filtroStatus.value : ''
+                    );
+                }
+            } else {
+                const data = await response.json();
+                if (window.showToast) {
+                    showToast('error', data.error || 'Erro ao enviar documento');
+                }
+            }
+        } catch (error) {
+            console.error('Erro ao enviar documento:', error);
+            if (window.showToast) {
+                showToast('error', 'Erro ao enviar documento');
+            }
+        } finally {
+            // Re-enable button
+            btnUpload.disabled = false;
+            btnUpload.innerHTML = '📤 Enviar Documento';
+            selectedFileMulta = null;
+        }
+    });
+
+    </script>
+    
+    <!-- 🌐 Monitor de Conexão -->
+    <script src="/static/connection-monitor.js"></script>
+
 </body>
 </html>

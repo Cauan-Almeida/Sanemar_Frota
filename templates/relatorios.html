@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatórios PDF - Gestão de Frota</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <!-- Sidebar -->
+    <div class="fixed left-0 top-0 h-full w-64 bg-white shadow-2xl p-6 z-50 hidden lg:block">
+        <div class="mb-8">
+            <h2 class="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                Gestão de Frota
+            </h2>
+            <p class="text-gray-500 text-sm">Sanemar Frota</p>
+        </div>
+        <nav class="space-y-2">
+            <a href="/dashboard" class="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-100 transition-all">
+                <span>📊</span>
+                <span class="font-semibold text-gray-700">Dashboard</span>
+            </a>
+            <a href="/motoristas" class="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-100 transition-all">
+                <span>👤</span>
+                <span class="font-semibold text-gray-700">Motoristas</span>
+            </a>
+            <a href="/veiculos" class="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-100 transition-all">
+                <span>🚗</span>
+                <span class="font-semibold text-gray-700">Veículos</span>
+            </a>
+            <a href="/relatorios" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-r from-red-500 to-pink-500 text-white">
+                <span>📄</span>
+                <span class="font-semibold">Relatórios PDF</span>
+            </a>
+            <a href="/" class="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-100 transition-all">
+                <span>📝</span>
+                <span class="font-semibold text-gray-700">Lançamentos</span>
+            </a>
+        </nav>
+    </div>
+
+    <!-- Main Content -->
+    <div class="lg:ml-64 max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="bg-white rounded-2xl shadow-2xl p-6 mb-6">
+            <h1 class="text-3xl font-bold text-gray-800">📄 Relatórios em PDF</h1>
+            <p class="text-gray-600 mt-1">Gere relatórios personalizados com filtros</p>
+        </div>
+
+        <!-- Grid de Relatórios -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <!-- 1. Motoristas -->
+            <div class="bg-white rounded-2xl shadow-xl p-6">
+                <div class="flex items-center gap-3 mb-4">
+                    <span class="text-4xl">👥</span>
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800">Motoristas</h2>
+                        <p class="text-gray-600 text-sm">Lista de motoristas com filtros</p>
+                    </div>
+                </div>
+                <form id="form-motoristas" class="space-y-3">
+                    <select id="motorista-status" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-indigo-500 transition-all">
+                        <option value="todos">📋 Todos os Motoristas</option>
+                        <option value="ativos">✅ Apenas Ativos</option>
+                        <option value="inativos">⭕ Apenas Inativos</option>
+                    </select>
+                    <button type="submit" class="w-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white py-3 rounded-xl font-semibold shadow-lg hover:scale-105 transition-all">
+                        📥 Gerar PDF
+                    </button>
+                </form>
+            </div>
+
+            <!-- 2. Veículos -->
+            <div class="bg-white rounded-2xl shadow-xl p-6">
+                <div class="flex items-center gap-3 mb-4">
+                    <span class="text-4xl">🚗</span>
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800">Veículos</h2>
+                        <p class="text-gray-600 text-sm">Lista de veículos com filtros</p>
+                    </div>
+                </div>
+                <form id="form-veiculos" class="space-y-3">
+                    <select id="veiculo-status" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-green-500 transition-all">
+                        <option value="todos">📋 Todos os Veículos</option>
+                        <option value="ativos">✅ Apenas Ativos</option>
+                        <option value="inativos">⭕ Apenas Inativos</option>
+                    </select>
+                    <button type="submit" class="w-full bg-gradient-to-r from-green-500 to-emerald-500 text-white py-3 rounded-xl font-semibold shadow-lg hover:scale-105 transition-all">
+                        📥 Gerar PDF
+                    </button>
+                </form>
+            </div>
+
+            <!-- 3. Abastecimentos com Filtros -->
+            <div class="bg-white rounded-2xl shadow-xl p-6">
+                <div class="flex items-center gap-3 mb-4">
+                    <span class="text-4xl">⛽</span>
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800">Abastecimentos</h2>
+                        <p class="text-gray-600 text-sm">Com filtros personalizados</p>
+                    </div>
+                </div>
+                <form id="form-abastecimentos" class="space-y-3">
+                    <input type="text" id="abast-veiculo" placeholder="Veículo (ex: ABC1234)" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-orange-500 transition-all">
+                    <input type="date" id="abast-data-inicio" placeholder="Data Início" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-orange-500 transition-all">
+                    <input type="date" id="abast-data-fim" placeholder="Data Fim" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-orange-500 transition-all">
+                    <button type="submit" class="w-full bg-gradient-to-r from-orange-500 to-amber-500 text-white py-3 rounded-xl font-semibold shadow-lg hover:scale-105 transition-all">
+                        📥 Gerar PDF Filtrado
+                    </button>
+                </form>
+            </div>
+
+            <!-- 4. Saídas com Filtros -->
+            <div class="bg-white rounded-2xl shadow-xl p-6">
+                <div class="flex items-center gap-3 mb-4">
+                    <span class="text-4xl">🚙</span>
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800">Saídas/Viagens</h2>
+                        <p class="text-gray-600 text-sm">Com filtros personalizados</p>
+                    </div>
+                </div>
+                <form id="form-saidas" class="space-y-3">
+                    <input type="text" id="saidas-veiculo" placeholder="Veículo (ex: ABC1234)" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 transition-all">
+                    <input type="text" id="saidas-motorista" placeholder="Motorista" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 transition-all">
+                    <select id="saidas-status" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 transition-all">
+                        <option value="">Todos os Status</option>
+                        <option value="em_curso">Em Curso</option>
+                        <option value="finalizada">Finalizada</option>
+                    </select>
+                    <input type="date" id="saidas-data-inicio" placeholder="Data Início" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 transition-all">
+                    <input type="date" id="saidas-data-fim" placeholder="Data Fim" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 transition-all">
+                    <button type="submit" class="w-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white py-3 rounded-xl font-semibold shadow-lg hover:scale-105 transition-all">
+                        📥 Gerar PDF Filtrado
+                    </button>
+                </form>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // Form Motoristas
+        document.getElementById('form-motoristas').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const status = document.getElementById('motorista-status').value;
+            
+            let url = '/pdf/motoristas';
+            if (status !== 'todos') {
+                url += `?status=${status}`;
+            }
+            
+            window.open(url, '_blank');
+        });
+
+        // Form Veículos
+        document.getElementById('form-veiculos').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const status = document.getElementById('veiculo-status').value;
+            
+            let url = '/pdf/veiculos';
+            if (status !== 'todos') {
+                url += `?status=${status}`;
+            }
+            
+            window.open(url, '_blank');
+        });
+
+        // Form Abastecimentos
+        document.getElementById('form-abastecimentos').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const veiculo = document.getElementById('abast-veiculo').value.trim();
+            const dataInicio = document.getElementById('abast-data-inicio').value;
+            const dataFim = document.getElementById('abast-data-fim').value;
+            
+            let url = '/pdf/abastecimentos?';
+            const params = [];
+            
+            if (veiculo) params.push(`veiculo=${encodeURIComponent(veiculo)}`);
+            if (dataInicio) params.push(`data_inicio=${dataInicio}T00:00:00`);
+            if (dataFim) params.push(`data_fim=${dataFim}T23:59:59`);
+            
+            url += params.join('&');
+            window.open(url, '_blank');
+        });
+
+        // Form Saídas
+        document.getElementById('form-saidas').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const veiculo = document.getElementById('saidas-veiculo').value.trim();
+            const motorista = document.getElementById('saidas-motorista').value.trim();
+            const status = document.getElementById('saidas-status').value;
+            const dataInicio = document.getElementById('saidas-data-inicio').value;
+            const dataFim = document.getElementById('saidas-data-fim').value;
+            
+            let url = '/pdf/saidas?';
+            const params = [];
+            
+            if (veiculo) params.push(`veiculo=${encodeURIComponent(veiculo)}`);
+            if (motorista) params.push(`motorista=${encodeURIComponent(motorista)}`);
+            if (status) params.push(`status=${status}`);
+            if (dataInicio) params.push(`data_inicio=${dataInicio}T00:00:00`);
+            if (dataFim) params.push(`data_fim=${dataFim}T23:59:59`);
+            
+            url += params.join('&');
+            window.open(url, '_blank');
+        });
+    </script>
+</body>
+</html>

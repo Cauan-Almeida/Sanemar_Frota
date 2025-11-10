@@ -1,514 +1,189 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Detalhes do Veículo - {{ veiculo.placa }}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        body {
-            font-family: 'Inter', sans-serif;
-        }
-    </style>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <link rel="stylesheet" href="/static/style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ placa }} - Detalhes</title>
+<link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body { font-family: 'Inter', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+</style>
 </head>
-<body class="bg-gray-100 text-gray-800">
-    <div class="flex h-screen">
-        <!-- Sidebar -->
-        <aside class="w-64 bg-gray-800 text-white flex-col fixed inset-y-0 left-0 transform md:relative md:translate-x-0 transition-transform duration-300 ease-in-out z-30">
-            <div class="p-4 text-2xl font-bold border-b border-gray-700">
-                <a href="/">Gestão de Frota</a>
-            </div>
-            <nav class="flex-1 p-4 space-y-2">
-                <a href="/dashboard" class="flex items-center p-3 rounded-lg hover:bg-gray-600">
-                    <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
-                    Dashboard
-                </a>
-                <a href="/motoristas" class="flex items-center p-3 rounded-lg hover:bg-gray-600">
-                    <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.124-1.28-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.653.124-1.28.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
-                    Motoristas
-                </a>
-                <a href="/dashboard" class="flex items-center p-3 rounded-lg hover:bg-gray-600">
-                    <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16l-4-4m0 0l4-4m-4 4h18"></path></svg>
-                    Veículos
-                </a>
-                 <a href="/" class="flex items-center p-3 rounded-lg hover:bg-gray-600">
-                    <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
-                    Lançamentos
-                </a>
-            </nav>
-        </aside>
-
-        <!-- Main Content -->
-        <div class="flex-1 flex flex-col">
-            <header class="bg-white shadow-md p-4 flex items-center justify-between">
-                <div class="site-header">
-                    <img src="/static/Logo_frota_sanemar.png" alt="Sanemar Frota" class="site-logo">
-                    <h1>Detalhes do Veículo</h1>
-                </div>
-            </header>
-
-            <main class="flex-1 p-6 md:p-8 overflow-y-auto">
-                <div class="bg-white p-6 rounded-xl shadow-md mb-6">
-                    <h2 class="text-2xl font-bold mb-4">{{ veiculo.placa }}</h2>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                            <h3 class="text-gray-500">Data de Cadastro</h3>
-                            <p class="text-lg font-semibold">{{ veiculo.dataCadastro | formatar_data }}</p>
-                        </div>
-                        <div>
-                            <h3 class="text-gray-500">Total de Viagens</h3>
-                            <p class="text-lg font-semibold">{{ stats.total_viagens }}</p>
-                        </div>
-                        <div>
-                            <h3 class="text-gray-500">Total de Horas em Viagem</h3>
-                            <p class="text-lg font-semibold">{{ stats.total_horas }} horas</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="bg-white p-6 rounded-xl shadow-md">
-                    <h2 class="text-xl font-semibold mb-4">Histórico de Viagens</h2>
-                    <div id="veiculo-metrics" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                        <div class="p-4 bg-gray-50 rounded">
-                            <h4 class="text-sm text-gray-500">Média km/L</h4>
-                            <div class="flex items-center gap-2">
-                                <p id="metric-kmpl" class="text-lg font-semibold">-</p>
-                                <input id="input-media-kmpl" type="number" step="0.01" class="p-1 border rounded w-28" placeholder="manual">
-                                <button id="save-media-kmpl" class="px-2 py-1 bg-green-600 text-white rounded">Salvar</button>
-                            </div>
-                        </div>
-                        <div class="p-4 bg-gray-50 rounded">
-                            <h4 class="text-sm text-gray-500">Km no Mês</h4>
-                            <p id="metric-km-mes" class="text-lg font-semibold">-</p>
-                        </div>
-                        <div class="p-4 bg-gray-50 rounded">
-                            <h4 class="text-sm text-gray-500">Último Odômetro</h4>
-                            <p id="metric-ultimo-odometro" class="text-lg font-semibold">-</p>
-                        </div>
-                    </div>
-                    <div class="flex justify-end mb-4">
-                        <button id="btn-abastecer" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">⛽ Abastecer</button>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                        <div class="p-4 bg-gray-50 rounded">
-                            <h4 class="text-sm text-gray-500">Litros - Total</h4>
-                            <p id="veiculo-refuel-total-val" class="text-lg font-semibold">-</p>
-                        </div>
-                        <div class="p-4 bg-gray-50 rounded">
-                            <h4 class="text-sm text-gray-500">Litros - Mês</h4>
-                            <p id="veiculo-refuel-month-val" class="text-lg font-semibold">-</p>
-                        </div>
-                    </div>
-                    <div class="table-responsive">
-                        <table class="w-full text-left">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="p-3">Status</th>
-                                    <th class="p-3">Motorista</th>
-                                    <th class="p-3">Saída</th>
-                                    <th class="p-3">Chegada</th>
-                                    <th class="p-3">Trajeto</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tabela-historico">
-                                {% for viagem in viagens %}
-                                <tr class="hover:bg-gray-50">
-                                    <td class="p-3">
-                                        <span class="px-2 py-1 rounded-full text-xs font-medium {{ 'bg-green-100 text-green-800' if viagem.status == 'finalizada' else 'bg-yellow-100 text-yellow-800' }}">
-                                            {{ 'Finalizada' if viagem.status == 'finalizada' else 'Em Curso' }}
-                                        </span>
-                                    </td>
-                                    <td class="p-3">{{ viagem.motorista }}</td>
-                                    <td class="p-3">{{ viagem.timestampSaida | formatar_data }}</td>
-                                    <td class="p-3">{{ viagem.timestampChegada | formatar_data if viagem.timestampChegada else '-' }}</td>
-                                    <td class="p-3">{{ viagem.trajeto }}</td>
-                                </tr>
-                                {% else %}
-                                <tr>
-                                    <td colspan="5" class="text-center p-4">Nenhuma viagem encontrada para este veículo.</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                    <!-- Histórico de Abastecimentos (paginado) -->
-                    <div class="bg-white p-6 rounded-xl shadow-md mt-6">
-                        <h3 class="text-lg font-semibold mb-3">Histórico de Abastecimentos</h3>
-                        <div id="refuels-table-container">
-                            <table class="w-full text-left" id="refuels-table">
-                                <thead class="bg-gray-50">
-                                    <tr>
-                                        <th class="p-2">Data</th>
-                                        <th class="p-2">Motorista</th>
-                                        <th class="p-2">Litros</th>
-                                        <th class="p-2">Odômetro</th>
-                                        <th class="p-2">Observação</th>
-                                        <th class="p-2">Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="refuels-tbody"></tbody>
-                            </table>
-                            <div class="flex justify-between items-center mt-3">
-                                <div id="refuels-pagination" class="flex gap-2 items-center"></div>
-                                <div>
-                                    <label>Linhas por página:</label>
-                                    <select id="refuels-page-size">
-                                        <option>5</option>
-                                        <option selected>10</option>
-                                        try {
-                                            const summaryRes = await fetch('/api/refuels/summary');
-                                            const summary = await summaryRes.json();
-                                            if (summaryRes.ok) {
-                                                const totalLabels = summary.per_vehicle_total.labels || [];
-                                                const totalData = summary.per_vehicle_total.data || [];
-                                                const monthLabels = summary.per_vehicle_month.labels || [];
-                                                const monthData = summary.per_vehicle_month.data || [];
-                                                const idxTotal = totalLabels.indexOf(placa);
-                                                const idxMonth = monthLabels.indexOf(placa);
-                                                const totalVal = idxTotal >= 0 ? totalData[idxTotal] : 0;
-                                                const monthVal = idxMonth >= 0 ? monthData[idxMonth] : 0;
-                                                document.getElementById('veiculo-refuel-total-val').textContent = totalVal || 0;
-                                                document.getElementById('veiculo-refuel-month-val').textContent = monthVal || 0;
-                                            }
-                                        } catch (err) {
-                                            console.error('Erro ao buscar resumo para charts do veículo', err);
-                                        }
-            if (!isoString) return '-';
-            const d = new Date(isoString);
-            const dia = String(d.getDate()).padStart(2, '0');
-            const mes = String(d.getMonth() + 1).padStart(2, '0');
-            const ano = d.getFullYear();
-            const horas = String(d.getHours()).padStart(2, '0');
-            const minutos = String(d.getMinutes()).padStart(2, '0');
-            return `${dia}/${mes}/${ano} ${horas}:${minutos}`;
-        }
-    </script>
-    <script>
-        // Abastecimento modal logic
-        (function(){
-            const placa = '{{ veiculo.placa }}';
-            const btn = document.getElementById('btn-abastecer');
-            const modal = document.getElementById('modal-abastecer');
-            const cancelBtn = document.getElementById('cancel-refuel');
-            const saveBtn = document.getElementById('save-refuel');
-
-            function openModal() { modal.classList.remove('hidden'); modal.classList.add('flex'); }
-            function closeModal() { modal.classList.remove('flex'); modal.classList.add('hidden'); }
-
-            btn.addEventListener('click', openModal);
-            cancelBtn.addEventListener('click', (e)=>{ e.preventDefault(); closeModal(); });
-
-            async function reloadRefuels() {
-                try {
-                    // Carrega a primeira página rápido para mostrar alguns abastecimentos recentes
-                    const res = await fetch(`/api/veiculos/${encodeURIComponent(placa)}/refuels?page=1&page_size=10`);
-                    const payload = await res.json();
-                    const items = payload.items || [];
-                    // Insere os abastecimentos no topo da tabela de histórico de viagens
-                    const tbody = document.getElementById('tabela-historico');
-                    const frag = document.createDocumentFragment();
-                    // Remove previously inserted refuel rows (prevent duplicates on repeated reloads)
-                    Array.from(tbody.querySelectorAll('tr[data-refuel-id]')).forEach(n => n.remove());
-                    items.forEach(r => {
-                        const tr = document.createElement('tr');
-                        tr.className = 'hover:bg-gray-50';
-                        tr.setAttribute('data-refuel-id', r._id || '');
-                        tr.innerHTML = `<td class="p-3">Abastecimento</td><td class="p-3">${r.motorista || '-'}</td><td class="p-3">${r.litros ?? '-'}</td><td class="p-3">${r.odometro ?? '-'}</td><td class="p-3">${formatarData(r.timestamp)}</td>`;
-                        frag.appendChild(tr);
-                    });
-                    if (frag.children && frag.children.length) tbody.insertBefore(frag, tbody.firstChild);
-                    // also fetch metrics
-                    try {
-                        // try to read month filter from dashboard if present
-                        const monthEl = document.querySelector('#filtro-mes');
-                        let metricsUrl = `/api/veiculos/${encodeURIComponent(placa)}/metrics`;
-                        if (monthEl && monthEl.value) {
-                            metricsUrl += `?month=${encodeURIComponent(monthEl.value)}`;
-                        }
-                        const mres = await fetch(metricsUrl);
-                        const metrics = await mres.json();
-                        if (mres.ok) {
-                            document.getElementById('metric-kmpl').textContent = metrics.km_por_litro_medio ?? '-';
-                            document.getElementById('metric-km-mes').textContent = metrics.km_no_mes ?? '-';
-                            document.getElementById('metric-ultimo-odometro').textContent = metrics.ultimo_odometro ?? '-';
-                        }
-                    } catch (e) {
-                        console.error('Erro ao buscar metrics', e);
-                    }
-                    // update vehicle-specific refuel charts (we can use the /api/refuels/summary for totals and month)
-                    try {
-                        const summaryRes = await fetch('/api/refuels/summary');
-                        const summary = await summaryRes.json();
-                        if (summaryRes.ok) {
-                            // For vehicle-specific charts, use only this vehicle's values (avoid charts growing with all vehicles)
-                            try {
-                                const totalLabels = summary.per_vehicle_total.labels || [];
-                                const totalData = summary.per_vehicle_total.data || [];
-                                const monthLabels = summary.per_vehicle_month.labels || [];
-                                const monthData = summary.per_vehicle_month.data || [];
-                                const idxTotal = totalLabels.indexOf(placa);
-                                const idxMonth = monthLabels.indexOf(placa);
-
-                                const ctxTotal = document.getElementById('veiculo-chart-refuel-total')?.getContext('2d');
-                                const ctxMonth = document.getElementById('veiculo-chart-refuel-month')?.getContext('2d');
-
-                                const vehicleTotalLabels = idxTotal >= 0 ? [placa] : [];
-                                const vehicleTotalData = idxTotal >= 0 ? [totalData[idxTotal]] : [];
-                                const vehicleMonthLabels = idxMonth >= 0 ? [placa] : [];
-                                const vehicleMonthData = idxMonth >= 0 ? [monthData[idxMonth]] : [];
-
-                                if (ctxTotal) {
-                                    if (!window.veiculoRefuelTotalChart) {
-                                        window.veiculoRefuelTotalChart = new Chart(ctxTotal, { type: 'bar', data: { labels: vehicleTotalLabels, datasets: [{ label: 'Litros (Total)', data: vehicleTotalData, backgroundColor: 'rgba(54,162,235,0.6)' }] }, options: { responsive: true, maintainAspectRatio: false } });
-                                    } else {
-                                        window.veiculoRefuelTotalChart.data.labels = vehicleTotalLabels;
-                                        window.veiculoRefuelTotalChart.data.datasets[0].data = vehicleTotalData;
-                                        window.veiculoRefuelTotalChart.update();
-                                    }
-                                }
-
-                                if (ctxMonth) {
-                                    if (!window.veiculoRefuelMonthChart) {
-                                        window.veiculoRefuelMonthChart = new Chart(ctxMonth, { type: 'bar', data: { labels: vehicleMonthLabels, datasets: [{ label: 'Litros (Mês)', data: vehicleMonthData, backgroundColor: 'rgba(75,192,192,0.6)' }] }, options: { responsive: true, maintainAspectRatio: false } });
-                                    } else {
-                                        window.veiculoRefuelMonthChart.data.labels = vehicleMonthLabels;
-                                        window.veiculoRefuelMonthChart.data.datasets[0].data = vehicleMonthData;
-                                        window.veiculoRefuelMonthChart.update();
-                                    }
-                                }
-                            } catch (err) {
-                                console.error('Erro ao atualizar charts do veículo', err);
-                            }
-                        }
-                    } catch (err) {
-                        console.error('Erro ao buscar resumo para charts do veículo', err);
-                    }
-                } catch (e) {
-                    console.error('Erro ao recarregar refuels', e);
-                }
-            }
-
-            // Carrega dados do veículo (incluindo media_kmpl) ao abrir a página
-            async function loadVehicleData() {
-                try {
-                    const res = await fetch(`/api/veiculos/${encodeURIComponent(placa)}`);
-                    if (res.ok) {
-                        const v = await res.json();
-                        if (v.media_kmpl !== undefined && v.media_kmpl !== null) {
-                            document.getElementById('input-media-kmpl').value = v.media_kmpl;
-                            document.getElementById('metric-kmpl').textContent = v.media_kmpl;
-                        }
-                        if (v.ultimo_odometro !== undefined && v.ultimo_odometro !== null) {
-                            document.getElementById('metric-ultimo-odometro').textContent = v.ultimo_odometro;
-                        }
-                    }
-                } catch (e) {
-                    console.error('Erro ao carregar dados do veículo', e);
-                }
-            }
-
-            // Salvar media_kmpl via PATCH
-            document.getElementById('save-media-kmpl').addEventListener('click', async (e) => {
-                e.preventDefault();
-                const val = document.getElementById('input-media-kmpl').value;
-                if (val === '' || val === null) {
-                    alert('Informe o valor da média.');
-                    return;
-                }
-                try {
-                    const payload = { media_kmpl: Number(val) };
-                    const res = await fetch(`/api/veiculos/${encodeURIComponent(placa)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                    const j = await res.json();
-                    if (res.ok) {
-                        alert('Média atualizada.');
-                        document.getElementById('metric-kmpl').textContent = Number(val).toFixed(2);
-                        // recarrega metrics
-                        reloadRefuels();
-                    } else {
-                        alert(j.error || 'Erro ao atualizar média.');
-                    }
-                } catch (err) {
-                    console.error(err);
-                    alert('Erro ao atualizar média.');
-                }
-            });
-
-            // Carrega inicialmente dados do veículo e refuels/metrics
-            loadVehicleData();
-            reloadRefuels();
-
-            saveBtn.addEventListener('click', async (e)=>{
-                e.preventDefault();
-                const motorista = document.getElementById('veiculo-refuel-motorista').value.trim();
-                const litros = document.getElementById('refuel-litros').value;
-                const odometro = document.getElementById('refuel-odometro').value;
-                const observacao = document.getElementById('refuel-observacao').value;
-
-                if (!litros && !odometro) {
-                    alert('Informe ao menos litros ou odômetro.');
-                    return;
-                }
-
-                try {
-                    const payload = { veiculo: placa, motorista, litros: litros ? Number(litros) : null, odometro: odometro ? Number(odometro) : null, observacao };
-                    const res = await fetch('/api/veiculos/refuels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                    const json = await res.json();
-                    if (res.ok) {
-                        alert('Abastecimento registrado.');
-                        closeModal();
-                        // limpar inputs do modal do veículo
-                        document.getElementById('veiculo-refuel-motorista').value = '';
-                        document.getElementById('refuel-litros').value = '';
-                        document.getElementById('refuel-odometro').value = '';
-                        document.getElementById('refuel-observacao').value = '';
-                        // recarrega refuels e tabela paginada
-                        reloadRefuels();
-                        // também atualiza a tabela paginada caso esteja visível
-                        if (typeof loadRefuelsPage === 'function') loadRefuelsPage(1, Number(document.getElementById('refuels-page-size').value || 10));
-                    } else {
-                        alert(json.error || 'Erro ao registrar abastecimento.');
-                    }
-                } catch (err) {
-                    console.error(err);
-                    alert('Erro ao enviar dados.');
-                }
-            });
-
-            // Preencher datalist de motoristas para autosuggest
-            async function loadMotoristasList() {
-                try {
-                    const res = await fetch('/api/motoristas');
-                    if (!res.ok) return;
-                    const list = await res.json();
-                    const datalist = document.getElementById('motoristas-list');
-                    if (!datalist) return;
-                    datalist.innerHTML = '';
-                    list.forEach(m => {
-                        const nome = m.nome || m;
-                        const opt = document.createElement('option'); opt.value = nome;
-                        datalist.appendChild(opt);
-                    });
-                } catch (err) {
-                    console.error('Erro ao carregar motoristas', err);
-                }
-            }
-
-            // Carrega motoristas e dados iniciais
-            loadMotoristasList();
-            loadVehicleData();
-            // Paginação defaults
-            let refuelsPage = 1;
-            let refuelsPageSize = Number(document.getElementById('refuels-page-size').value || 10);
-
-            async function loadRefuelsPage(page=1, pageSize=10) {
-                try {
-                    refuelsPage = page;
-                    refuelsPageSize = pageSize;
-                    const res = await fetch(`/api/veiculos/${encodeURIComponent(placa)}/refuels?page=${page}&page_size=${pageSize}`);
-                    if (!res.ok) throw new Error('Erro ao buscar abastecimentos');
-                    const payload = await res.json();
-                    const items = payload.items || [];
-                    const tbody = document.getElementById('refuels-tbody');
-                    tbody.innerHTML = '';
-                    items.forEach(it => {
-                        const tr = document.createElement('tr');
-                        tr.className = 'hover:bg-gray-50';
-                        tr.innerHTML = `<td class="p-2">${formatarData(it.timestamp)}</td><td class="p-2">${it.motorista || '-'}</td><td class="p-2">${it.litros ?? '-'}</td><td class="p-2">${it.odometro ?? '-'}</td><td class="p-2">${it.observacao || ''}</td><td class="p-2"><button data-id="${it._id}" class="btn-edit text-sm px-2 py-1 bg-yellow-400 rounded mr-2">Editar</button><button data-id="${it._id}" class="btn-delete text-sm px-2 py-1 bg-red-500 text-white rounded">Excluir</button></td>`;
-                        tbody.appendChild(tr);
-                    });
-
-                    // Pagination controls
-                    const pagination = document.getElementById('refuels-pagination');
-                    pagination.innerHTML = '';
-                    const total = payload.total || 0;
-                    const totalPages = Math.max(1, Math.ceil(total / pageSize));
-                    const prev = document.createElement('button'); prev.textContent = 'Anterior'; prev.disabled = page <= 1; prev.className = 'px-2 py-1 bg-gray-200 rounded';
-                    prev.addEventListener('click', ()=> loadRefuelsPage(page-1, pageSize));
-                    const next = document.createElement('button'); next.textContent = 'Próxima'; next.disabled = page >= totalPages; next.className = 'px-2 py-1 bg-gray-200 rounded';
-                    next.addEventListener('click', ()=> loadRefuelsPage(page+1, pageSize));
-                    const info = document.createElement('span'); info.textContent = ` Página ${page} de ${totalPages} (${total} registros)`; info.className = 'px-2';
-                    pagination.appendChild(prev); pagination.appendChild(info); pagination.appendChild(next);
-
-                    // attach event listeners for edit/delete
-                    document.querySelectorAll('.btn-edit').forEach(b => b.addEventListener('click', openEditRefuel));
-                    document.querySelectorAll('.btn-delete').forEach(b => b.addEventListener('click', confirmDeleteRefuel));
-                } catch (err) {
-                    console.error('Erro ao carregar página de refuels', err);
-                }
-            }
-
-            document.getElementById('refuels-page-size').addEventListener('change', (e)=> {
-                const newSize = Number(e.target.value);
-                loadRefuelsPage(1, newSize);
-            });
-
-            // abrir modal de edição
-            let currentEditId = null;
-            function openEditRefuel(e) {
-                const id = e.currentTarget.dataset.id;
-                currentEditId = id;
-                // buscar dados do refuel (poderia ser buscado da lista atual)
-                fetch(`/api/veiculos/${encodeURIComponent(placa)}/refuels?page=${refuelsPage}&page_size=${refuelsPageSize}`).then(r=>r.json()).then(p=>{
-                    const found = (p.items || []).find(x => x._id === id);
-                    if (found) {
-                        document.getElementById('edit-refuel-motorista').value = found.motorista || '';
-                        document.getElementById('edit-refuel-litros').value = found.litros ?? '';
-                        document.getElementById('edit-refuel-odometro').value = found.odometro ?? '';
-                        document.getElementById('edit-refuel-observacao').value = found.observacao || '';
-                        document.getElementById('modal-edit-refuel').classList.remove('hidden'); document.getElementById('modal-edit-refuel').classList.add('flex');
-                    }
-                }).catch(err=>console.error(err));
-            }
-
-            document.getElementById('cancel-edit-refuel').addEventListener('click', ()=>{ document.getElementById('modal-edit-refuel').classList.remove('flex'); document.getElementById('modal-edit-refuel').classList.add('hidden'); });
-
-            document.getElementById('save-edit-refuel').addEventListener('click', async (e) => {
-                e.preventDefault();
-                if (!currentEditId) return;
-                const motorista = document.getElementById('edit-refuel-motorista').value.trim();
-                const litros = document.getElementById('edit-refuel-litros').value;
-                const odometro = document.getElementById('edit-refuel-odometro').value;
-                const observacao = document.getElementById('edit-refuel-observacao').value;
-                try {
-                    const payload = { motorista, litros: litros ? Number(litros) : null, odometro: odometro ? Number(odometro) : null, observacao };
-                    const res = await fetch(`/api/refuels/${currentEditId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                    const j = await res.json();
-                    if (res.ok) {
-                        alert('Abastecimento atualizado.');
-                        document.getElementById('modal-edit-refuel').classList.remove('flex'); document.getElementById('modal-edit-refuel').classList.add('hidden');
-                        loadRefuelsPage(refuelsPage, refuelsPageSize);
-                        // recarregar charts e métricas
-                        reloadRefuels();
-                    } else {
-                        alert(j.error || 'Erro ao atualizar');
-                    }
-                } catch (err) {
-                    console.error(err); alert('Erro ao atualizar');
-                }
-            });
-
-            // excluir
-            function confirmDeleteRefuel(e) {
-                const id = e.currentTarget.dataset.id;
-                if (!confirm('Confirma exclusão deste abastecimento?')) return;
-                fetch(`/api/refuels/${id}`, { method: 'DELETE' }).then(async r => {
-                    const j = await r.json();
-                    if (r.ok) {
-                        alert('Abastecimento removido.');
-                        loadRefuelsPage(refuelsPage, refuelsPageSize);
-                        reloadRefuels();
-                    } else {
-                        alert(j.error || 'Erro ao excluir');
-                    }
-                }).catch(err => { console.error(err); alert('Erro ao excluir'); });
-            }
-
-            // Carregar primeira página
-            loadRefuelsPage(1, refuelsPageSize);
-        })();
-    </script>
+<body class="min-h-screen">
+<div class="flex flex-col md:flex-row min-h-screen">
+<aside class="w-full md:w-64 bg-gray-800 text-white">
+<div class="p-4 text-xl md:text-2xl font-bold border-b border-gray-700"><a href="/">Gestão de Frota</a></div>
+<nav class="p-4 space-y-2">
+<a href="/dashboard" class="block p-3 rounded-lg hover:bg-gray-600 text-sm md:text-base">📊 Dashboard</a>
+<a href="/motoristas" class="block p-3 rounded-lg hover:bg-gray-600 text-sm md:text-base">👤 Motoristas</a>
+<a href="/veiculos" class="block p-3 rounded-lg bg-gray-700 text-sm md:text-base">🚗 Veículos</a>
+<a href="/" class="block p-3 rounded-lg hover:bg-gray-600 text-sm md:text-base">📝 Lançamentos</a>
+</nav>
+</aside>
+<div class="flex-1">
+<header class="bg-white shadow p-3 md:p-4 flex items-center justify-between flex-wrap gap-3">
+<h1 class="text-lg md:text-2xl font-bold">{{ placa }}</h1>
+<div class="flex gap-2">
+<a href="/pdf/abastecimentos?veiculo={{ placa }}" target="_blank" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 md:px-4 md:py-2 rounded-lg font-semibold text-xs md:text-sm">
+📄 PDF
+</a>
+<button id="btn-abastecer" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 md:px-6 md:py-3 rounded-lg font-semibold text-xs md:text-base">⛽ Abastecer</button>
+</div>
+</header>
+<main class="p-3 md:p-6 overflow-y-auto">
+<div class="bg-white p-4 md:p-6 rounded-xl shadow mb-4">
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+<div><h3 class="text-gray-500 text-xs md:text-sm">Data Cadastro</h3><p class="text-sm md:text-lg font-semibold">{{ timestamp | formatar_data if timestamp else '-' }}</p></div>
+<div><h3 class="text-gray-500 text-xs md:text-sm">Viagens</h3><p class="text-sm md:text-lg font-semibold">{{ total_viagens }}</p></div>
+<div><h3 class="text-gray-500 text-xs md:text-sm">Horas</h3><p class="text-sm md:text-lg font-semibold">{{ horas_viagens }}h</p></div>
+<div><h3 class="text-gray-500 text-xs md:text-sm">Odômetro</h3><p id="metric-ultimo-odometro" class="text-sm md:text-lg font-semibold">-</p></div>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+<div class="p-4 md:p-6 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl text-white shadow-xl">
+<div class="flex items-center justify-between mb-2"><div class="text-xs md:text-sm opacity-90">Consumo (km/L)</div><span class="text-xl">📊</span></div>
+<div id="metric-kmpl" class="text-2xl md:text-3xl font-bold mb-2">0.00</div>
+<div class="border-t border-white border-opacity-30 pt-2">
+<label class="block text-xs opacity-90 mb-2">Manual:</label>
+<div class="flex gap-2">
+<input type="number" step="0.01" id="input-media-kmpl" placeholder="0.00" class="flex-1 px-2 py-1 rounded text-gray-800 text-xs">
+<button id="save-media-kmpl" class="px-3 py-1 bg-white text-blue-600 rounded font-semibold hover:bg-blue-50 text-xs">OK</button>
+</div>
+</div>
+</div>
+<div class="p-4 md:p-6 bg-gradient-to-br from-green-500 to-green-600 rounded-2xl text-white shadow-xl">
+<div class="flex items-center justify-between mb-2"><div class="text-xs md:text-sm opacity-90">Total Litros</div><span class="text-xl">⛽</span></div>
+<div id="metric-total-litros" class="text-2xl md:text-3xl font-bold">-</div>
+</div>
+<div class="p-4 md:p-6 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl text-white shadow-xl">
+<div class="flex items-center justify-between mb-2"><div class="text-xs md:text-sm opacity-90">Km Rodados</div><span class="text-xl">🛣️</span></div>
+<div id="metric-km-rodados" class="text-2xl md:text-3xl font-bold">-</div>
+</div>
+</div>
+<div class="bg-white p-4 md:p-6 rounded-xl shadow mb-4">
+<h2 class="text-lg md:text-xl font-semibold mb-4">Histórico de Abastecimentos</h2>
+<div class="overflow-x-auto">
+<table class="w-full text-left min-w-[600px]">
+<thead class="bg-gray-50">
+<tr>
+<th class="p-2 text-xs md:text-sm">Data/Hora</th>
+<th class="p-2 text-xs md:text-sm">Motorista</th>
+<th class="p-2 text-xs md:text-sm">Litros</th>
+<th class="p-2 text-xs md:text-sm">Odômetro</th>
+<th class="p-2 text-xs md:text-sm hidden md:table-cell">Observação</th>
+<th class="p-2 text-xs md:text-sm">Ações</th>
+</tr>
+</thead>
+<tbody id="refuels-tbody">
+<tr><td colspan="6" class="text-center p-4 text-gray-500 text-sm">Carregando...</td></tr>
+</tbody>
+</table>
+</div>
+<div class="flex flex-col md:flex-row items-center justify-between mt-4 gap-3">
+<div class="flex items-center gap-2">
+<label class="text-xs md:text-sm font-semibold">Linhas:</label>
+<select id="refuels-page-size" class="px-2 py-1 rounded border-2 border-gray-200 text-xs">
+<option value="5">5</option>
+<option value="10" selected>10</option>
+<option value="20">20</option>
+</select>
+</div>
+<div id="refuels-pagination" class="flex items-center gap-2"></div>
+</div>
+</div>
+<div class="bg-white p-4 md:p-6 rounded-xl shadow">
+<h2 class="text-lg md:text-xl font-semibold mb-4">Histórico de Viagens</h2>
+<div class="overflow-x-auto">
+<table class="w-full text-left min-w-[600px]">
+<thead class="bg-gray-50">
+<tr>
+<th class="p-2 text-xs">Status</th>
+<th class="p-2 text-xs">Motorista</th>
+<th class="p-2 text-xs">Saída</th>
+<th class="p-2 text-xs">Chegada</th>
+<th class="p-2 text-xs">Trajeto</th>
+</tr>
+</thead>
+<tbody>
+{% if saidas and saidas|length > 0 %}
+{% for s in saidas %}
+<tr class="hover:bg-gray-50 border-b">
+<td class="p-2"><span class="px-2 py-1 rounded-full text-xs font-medium {% if s.status == 'finalizada' %}bg-green-100 text-green-800{% else %}bg-yellow-100 text-yellow-800{% endif %}">{{ s.status | replace('_', ' ') | title if s.status else '-' }}</span></td>
+<td class="p-2 text-xs">{{ s.motorista }}</td>
+<td class="p-2 text-xs">{{ s.saida | formatar_data }}</td>
+<td class="p-2 text-xs">{{ s.chegada | formatar_data if s.chegada else '-' }}</td>
+<td class="p-2 text-xs">{{ s.trajeto }}</td>
+</tr>
+{% endfor %}
+{% else %}
+<tr><td colspan="5" class="text-center p-4 text-gray-500 text-sm">Nenhuma viagem.</td></tr>
+{% endif %}
+</tbody>
+</table>
+</div>
+</div>
+</main>
+</div>
+</div>
+<div id="modal-abastecer" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+<div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+<h2 class="text-xl font-bold mb-4">Registrar Abastecimento</h2>
+<form id="form-abastecimento" class="space-y-3">
+<div><label class="block text-xs font-semibold mb-2">Motorista</label><input list="motoristas-list" id="veiculo-refuel-motorista" class="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm" placeholder="Nome"><datalist id="motoristas-list"></datalist></div>
+<div><label class="block text-xs font-semibold mb-2">Litros</label><input type="number" step="0.1" id="refuel-litros" class="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm" placeholder="0.00"></div>
+<div><label class="block text-xs font-semibold mb-2">Odômetro</label><input type="number" id="refuel-odometro" class="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm" placeholder="0"></div>
+<div><label class="block text-xs font-semibold mb-2">Observação</label><textarea id="refuel-observacao" rows="2" class="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm"></textarea></div>
+<div class="flex gap-2 pt-2">
+<button type="button" id="cancel-abastecer" class="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-xl font-semibold text-sm">Cancelar</button>
+<button type="submit" id="save-abastecer" class="flex-1 px-4 py-2 bg-blue-500 text-white rounded-xl font-semibold text-sm">Salvar</button>
+</div>
+</form>
+</div>
+</div>
+<div id="modal-edit-refuel" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+<div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+<h2 class="text-xl font-bold mb-4">Editar Abastecimento</h2>
+<form id="form-edit-refuel" class="space-y-3">
+<div><label class="block text-xs font-semibold mb-2">Motorista</label><input type="text" id="edit-refuel-motorista" class="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm"></div>
+<div><label class="block text-xs font-semibold mb-2">Litros</label><input type="number" step="0.1" id="edit-refuel-litros" class="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm"></div>
+<div><label class="block text-xs font-semibold mb-2">Odômetro</label><input type="number" id="edit-refuel-odometro" class="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm"></div>
+<div><label class="block text-xs font-semibold mb-2">Observação</label><textarea id="edit-refuel-observacao" rows="2" class="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm"></textarea></div>
+<div class="flex gap-2 pt-2">
+<button type="button" id="cancel-edit-refuel" class="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-xl font-semibold text-sm">Cancelar</button>
+<button type="button" id="save-edit-refuel" class="flex-1 px-4 py-2 bg-blue-500 text-white rounded-xl font-semibold text-sm">Atualizar</button>
+</div>
+</form>
+</div>
+</div>
+<script>
+const placa = "{{ placa }}";
+let refuelsPage = 1, refuelsPageSize = 10, currentEditId = null;
+function formatarData(isoString) { if (!isoString) return '-'; const d = new Date(isoString); return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+const modalAbastecer = document.getElementById('modal-abastecer');
+const btnAbastecer = document.getElementById('btn-abastecer');
+const btnCancelAbastecer = document.getElementById('cancel-abastecer');
+btnAbastecer.addEventListener('click', () => modalAbastecer.classList.remove('hidden'));
+btnCancelAbastecer.addEventListener('click', () => modalAbastecer.classList.add('hidden'));
+const modalEditRefuel = document.getElementById('modal-edit-refuel');
+const btnCancelEditRefuel = document.getElementById('cancel-edit-refuel');
+const btnSaveEditRefuel = document.getElementById('save-edit-refuel');
+btnCancelEditRefuel.addEventListener('click', () => modalEditRefuel.classList.add('hidden'));
+async function loadMotoristasList() { try { const res = await fetch('/api/motoristas'); if (!res.ok) return; const list = await res.json(); const datalist = document.getElementById('motoristas-list'); if (!datalist) return; datalist.innerHTML = ''; list.forEach(m => { const nome = m.nome || m; const opt = document.createElement('option'); opt.value = nome; datalist.appendChild(opt); }); } catch (err) { console.error('Erro motoristas', err); } }
+async function loadVehicleData() { try { const res = await fetch(`/api/veiculos/${encodeURIComponent(placa)}`); if (res.ok) { const v = await res.json(); if (v.media_kmpl) { document.getElementById('input-media-kmpl').value = v.media_kmpl; document.getElementById('metric-kmpl').textContent = v.media_kmpl; } } } catch (e) { console.error('Erro veículo', e); } }
+document.getElementById('save-media-kmpl').addEventListener('click', async () => { const val = document.getElementById('input-media-kmpl').value; if (!val) { alert('Informe km/L'); return; } try { const res = await fetch(`/api/veiculos/${encodeURIComponent(placa)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_kmpl: Number(val) }) }); const j = await res.json(); if (res.ok) { alert('Atualizado!'); document.getElementById('metric-kmpl').textContent = Number(val).toFixed(2); loadMetrics(); } else { alert(j.error || 'Erro'); } } catch (err) { alert('Erro'); } });
+async function loadMetrics() { try { const res = await fetch(`/api/veiculos/${encodeURIComponent(placa)}/metrics`); if (res.ok) { const m = await res.json(); document.getElementById('metric-ultimo-odometro').textContent = m.ultimo_odometro || '-'; document.getElementById('metric-total-litros').textContent = (m.total_litros || 0).toFixed(2); document.getElementById('metric-km-rodados').textContent = m.km_rodados ? m.km_rodados.toFixed(2) : '-'; } } catch (e) { console.error('Erro métricas', e); } }
+async function loadRefuelsPage(page = 1, pageSize = 10) { try { refuelsPage = page; refuelsPageSize = pageSize; const res = await fetch(`/api/veiculos/${encodeURIComponent(placa)}/refuels?page=${page}&page_size=${pageSize}`); if (!res.ok) { document.getElementById('refuels-tbody').innerHTML = '<tr><td colspan="6" class="text-center p-4 text-red-500 text-sm">Erro. Crie o índice do Firestore.</td></tr>'; return; } const payload = await res.json(); const items = payload.items || []; const tbody = document.getElementById('refuels-tbody'); tbody.innerHTML = ''; if (items.length === 0) { tbody.innerHTML = '<tr><td colspan="6" class="text-center p-4 text-gray-500 text-sm">Nenhum registro.</td></tr>'; } else { items.forEach(it => { const tr = document.createElement('tr'); tr.className = 'hover:bg-gray-50 border-b'; tr.innerHTML = `<td class="p-2 text-xs">${formatarData(it.timestamp)}</td><td class="p-2 text-xs">${it.motorista || '-'}</td><td class="p-2 text-xs">${it.litros ? Number(it.litros).toFixed(2) : '-'}</td><td class="p-2 text-xs">${it.odometro ? Number(it.odometro) : '-'}</td><td class="p-2 text-xs hidden md:table-cell">${it.observacao || ''}</td><td class="p-2"><button class="btn-edit text-blue-600 mr-2 text-xs" data-id="${it._id}">✏️</button><button class="btn-delete text-red-600 text-xs" data-id="${it._id}">🗑️</button></td>`; tbody.appendChild(tr); }); } const pagination = document.getElementById('refuels-pagination'); pagination.innerHTML = ''; const total = payload.total || 0; const totalPages = Math.max(1, Math.ceil(total / pageSize)); const prev = document.createElement('button'); prev.textContent = '←'; prev.disabled = page <= 1; prev.className = `px-3 py-1 rounded text-xs ${page <= 1 ? 'bg-gray-200 text-gray-400' : 'bg-gray-300 text-gray-700 hover:bg-gray-400'}`; prev.addEventListener('click', () => loadRefuelsPage(page - 1, pageSize)); const next = document.createElement('button'); next.textContent = '→'; next.disabled = page >= totalPages; next.className = `px-3 py-1 rounded text-xs ${page >= totalPages ? 'bg-gray-200 text-gray-400' : 'bg-gray-300 text-gray-700 hover:bg-gray-400'}`; next.addEventListener('click', () => loadRefuelsPage(page + 1, pageSize)); const info = document.createElement('span'); info.textContent = `${page}/${totalPages}`; info.className = 'px-2 text-gray-600 text-xs'; pagination.appendChild(prev); pagination.appendChild(info); pagination.appendChild(next); document.querySelectorAll('.btn-edit').forEach(b => b.addEventListener('click', openEditRefuel)); document.querySelectorAll('.btn-delete').forEach(b => b.addEventListener('click', confirmDeleteRefuel)); } catch (err) { console.error('Erro refuels', err); } }
+document.getElementById('refuels-page-size').addEventListener('change', (e) => loadRefuelsPage(1, Number(e.target.value)));
+document.getElementById('form-abastecimento').addEventListener('submit', async (e) => { e.preventDefault(); const motorista = document.getElementById('veiculo-refuel-motorista').value.trim(); const litros = document.getElementById('refuel-litros').value; const odometro = document.getElementById('refuel-odometro').value; const observacao = document.getElementById('refuel-observacao').value; if (!litros && !odometro) { alert('Informe litros ou odômetro'); return; } try { const res = await fetch('/api/veiculos/refuels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ veiculo: placa, motorista, litros: litros ? Number(litros) : null, odometro: odometro ? Number(odometro) : null, observacao }) }); const json = await res.json(); if (res.ok) { alert('Registrado!'); modalAbastecer.classList.add('hidden'); document.getElementById('veiculo-refuel-motorista').value = ''; document.getElementById('refuel-litros').value = ''; document.getElementById('refuel-odometro').value = ''; document.getElementById('refuel-observacao').value = ''; loadRefuelsPage(refuelsPage, refuelsPageSize); loadMetrics(); } else { alert(json.error || 'Erro'); } } catch (err) { alert('Erro'); } });
+async function openEditRefuel(e) { const id = e.currentTarget.dataset.id; currentEditId = id; try { const res = await fetch(`/api/veiculos/${encodeURIComponent(placa)}/refuels?page=${refuelsPage}&page_size=${refuelsPageSize}`); const p = await res.json(); const found = (p.items || []).find(x => x._id === id); if (found) { document.getElementById('edit-refuel-motorista').value = found.motorista || ''; document.getElementById('edit-refuel-litros').value = found.litros ?? ''; document.getElementById('edit-refuel-odometro').value = found.odometro ?? ''; document.getElementById('edit-refuel-observacao').value = found.observacao || ''; modalEditRefuel.classList.remove('hidden'); } } catch (err) { console.error(err); } }
+btnSaveEditRefuel.addEventListener('click', async () => { if (!currentEditId) return; const motorista = document.getElementById('edit-refuel-motorista').value.trim(); const litros = document.getElementById('edit-refuel-litros').value; const odometro = document.getElementById('edit-refuel-odometro').value; const observacao = document.getElementById('edit-refuel-observacao').value; try { const res = await fetch(`/api/refuels/${currentEditId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ motorista, litros: litros ? Number(litros) : null, odometro: odometro ? Number(odometro) : null, observacao }) }); const j = await res.json(); if (res.ok) { alert('Atualizado!'); modalEditRefuel.classList.add('hidden'); loadRefuelsPage(refuelsPage, refuelsPageSize); loadMetrics(); } else { alert(j.error || 'Erro'); } } catch (err) { alert('Erro'); } });
+function confirmDeleteRefuel(e) { const id = e.currentTarget.dataset.id; if (!confirm('Confirma exclusão?')) return; fetch(`/api/refuels/${id}`, { method: 'DELETE' }).then(async r => { const j = await r.json(); if (r.ok) { alert('Removido!'); loadRefuelsPage(refuelsPage, refuelsPageSize); loadMetrics(); } else { alert(j.error || 'Erro'); } }).catch(err => alert('Erro')); }
+loadMotoristasList();
+loadVehicleData();
+loadMetrics();
+loadRefuelsPage(1, 10);
+</script>
 </body>
 </html>

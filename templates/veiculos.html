@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Veículos - Gestão de Frota</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+        .card-hover { transition: all 0.3s ease; }
+        .card-hover:hover { transform: translateY(-4px); box-shadow: 0 20px 30px -5px rgba(0, 0, 0, 0.2); }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <!-- Sidebar -->
+    <div class="fixed left-0 top-0 h-full w-64 bg-white shadow-2xl p-6 z-50 hidden lg:block">
+        <div class="mb-8">
+            <h2 class="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                Gestão de Frota
+            </h2>
+            <p class="text-gray-500 text-sm">Sanemar Frota</p>
+        </div>
+        <nav class="space-y-2">
+            <a href="/dashboard" class="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-100 transition-all">
+                <span>📊</span>
+                <span class="font-semibold text-gray-700">Dashboard</span>
+            </a>
+            <a href="/motoristas" class="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-100 transition-all">
+                <span>👤</span>
+                <span class="font-semibold text-gray-700">Motoristas</span>
+            </a>
+            <a href="/veiculos" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 text-white">
+                <span>🚗</span>
+                <span class="font-semibold">Veículos</span>
+            </a>
+            <a href="/" class="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-100 transition-all">
+                <span>📝</span>
+                <span class="font-semibold text-gray-700">Lançamentos</span>
+            </a>
+        </nav>
+    </div>
+
+    <!-- Main Content -->
+    <div class="lg:ml-64 max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="bg-white rounded-2xl shadow-2xl p-6 mb-6">
+            <div class="flex items-center justify-between flex-wrap gap-4">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-800">Veículos</h1>
+                    <p class="text-gray-600 mt-1">Gestão e acompanhamento da frota</p>
+                </div>
+                <div class="flex gap-3">
+                    <a href="/pdf/veiculos" target="_blank" class="bg-red-600 text-white px-6 py-3 rounded-xl font-semibold shadow-lg hover:bg-red-700 transition-all">
+                        📄 Gerar PDF
+                    </a>
+                    <button id="btn-add-veiculo" class="bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-6 py-3 rounded-xl font-semibold shadow-lg hover:scale-105 transition-all">
+                        ➕ Cadastrar Veículo
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Grid de Veículos -->
+        <div id="veiculos-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Cards serão inseridos aqui -->
+        </div>
+    </div>
+
+    <!-- Modal Cadastrar/Editar Veículo -->
+    <div id="modal-veiculo" class="hidden fixed inset-0 bg-black bg-opacity-50 items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8">
+            <h2 id="modal-title" class="text-2xl font-bold mb-6 text-gray-800">Cadastrar Veículo</h2>
+            <form id="form-veiculo" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Placa</label>
+                    <input type="text" id="input-placa" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all uppercase" placeholder="ABC1234" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Modelo</label>
+                    <input type="text" id="input-modelo" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all" placeholder="Ex: Fiat Uno">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Consumo Médio (km/L)</label>
+                    <input type="number" step="0.01" id="input-media-kmpl" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all" placeholder="0.00">
+                </div>
+                <div class="flex gap-3 pt-4">
+                    <button type="button" id="btn-cancel" class="flex-1 px-6 py-3 bg-gray-200 hover:bg-gray-300 rounded-xl font-semibold transition-all">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="flex-1 px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl font-semibold shadow-lg hover:scale-105 transition-all">
+                        Salvar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Upload Documento Veículo -->
+    <div id="modal-upload-doc-veiculo" class="hidden fixed inset-0 bg-black bg-opacity-50 items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-8">
+            <h2 class="text-2xl font-bold mb-6 text-gray-800">📄 Upload Documento</h2>
+            
+            <form id="form-upload-doc-veiculo" class="space-y-6">
+                <input type="hidden" id="upload-doc-veiculo-id" />
+                <input type="hidden" id="upload-doc-veiculo-placa" />
+                
+                <!-- Área de Drop -->
+                <div id="doc-veiculo-drop-zone" class="border-4 border-dashed border-indigo-300 rounded-xl p-8 text-center hover:border-indigo-500 hover:bg-indigo-50 transition-all cursor-pointer">
+                    <div id="doc-veiculo-drop-zone-content">
+                        <svg class="mx-auto h-16 w-16 text-indigo-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                        </svg>
+                        <p class="text-lg font-semibold text-gray-700 mb-2">Arraste o documento ou clique para selecionar</p>
+                        <p class="text-sm text-gray-500">Formatos: PDF, PNG, JPG (máx 10MB)</p>
+                    </div>
+                    <div id="doc-veiculo-file-info" class="hidden">
+                        <svg class="mx-auto h-16 w-16 text-green-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <p id="doc-veiculo-file-name" class="text-lg font-semibold text-gray-700"></p>
+                        <p id="doc-veiculo-file-size" class="text-sm text-gray-500"></p>
+                    </div>
+                </div>
+                
+                <input type="file" id="doc-veiculo-file-input" accept=".pdf,.png,.jpg,.jpeg" class="hidden" />
+                
+                <div class="flex gap-3">
+                    <button type="button" onclick="fecharModalUploadDocVeiculo()" class="flex-1 px-6 py-3 bg-gray-200 hover:bg-gray-300 rounded-xl font-semibold transition-all">
+                        ❌ Cancelar
+                    </button>
+                    <button type="submit" id="btn-upload-doc-veiculo" class="flex-1 px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl font-semibold shadow-lg hover:scale-105 transition-all">
+                        📤 Enviar Documento
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Visualizar Documento Veículo -->
+    <div id="modal-visualizar-doc-veiculo" class="hidden fixed inset-0 bg-black bg-opacity-50 items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-6xl w-full p-8 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800">📄 Visualizar Documento</h2>
+                <button onclick="fecharModalVisualizarDocVeiculo()" class="text-gray-500 hover:text-gray-700 text-3xl font-bold transition-all">
+                    ×
+                </button>
+            </div>
+            
+            <div id="doc-veiculo-viewer-content" class="mb-6">
+                <!-- Content will be injected here -->
+            </div>
+            
+            <div class="flex justify-center">
+                <button onclick="fecharModalVisualizarDocVeiculo()" class="px-8 py-3 bg-gray-200 hover:bg-gray-300 rounded-xl font-semibold transition-all">
+                    Fechar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let editingPlaca = null;
+
+        // Formatar data
+        function formatarData(isoString) {
+            if (!isoString) return '-';
+            const d = new Date(isoString);
+            return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        }
+
+        // Carregar veículos
+        async function loadVeiculos() {
+            try {
+                const res = await fetch('/api/veiculos');
+                if (!res.ok) throw new Error('Erro ao carregar veículos');
+                const veiculos = await res.json();
+
+                const grid = document.getElementById('veiculos-grid');
+                grid.innerHTML = '';
+
+                if (veiculos.length === 0) {
+                    grid.innerHTML = '<p class="text-white text-center col-span-full text-lg">Nenhum veículo cadastrado.</p>';
+                    return;
+                }
+
+                // Para cada veículo, buscar métricas
+                for (const v of veiculos) {
+                    const placa = v.placa;
+                    
+                    // Buscar métricas
+                    let metrics = {};
+                    try {
+                        const metricsRes = await fetch(`/api/veiculos/${encodeURIComponent(placa)}/metrics`);
+                        if (metricsRes.ok) {
+                            metrics = await metricsRes.json();
+                        }
+                    } catch (e) {
+                        console.error('Erro ao buscar métricas:', e);
+                    }
+
+                    // Buscar últimos abastecimentos
+                    let refuels = [];
+                    try {
+                        const refuelsRes = await fetch(`/api/veiculos/${encodeURIComponent(placa)}/refuels?page=1&page_size=3`);
+                        if (refuelsRes.ok) {
+                            const refuelsData = await refuelsRes.json();
+                            refuels = refuelsData.items || [];
+                        }
+                    } catch (e) {
+                        console.error('Erro ao buscar abastecimentos:', e);
+                    }
+
+                    const card = document.createElement('div');
+                    card.className = 'bg-white rounded-2xl shadow-xl p-6 card-hover cursor-pointer';
+                    card.onclick = () => window.location.href = `/veiculos/${encodeURIComponent(placa)}`;
+                    
+                    // Debug log
+                    console.log('🚗 Veículo:', placa, '| ID:', v.id, '| Documento:', v.documento_url);
+                    
+                    // Botões de documento
+                    const documentoButtons = v.documento_url
+                        ? `<div class="flex gap-1">
+                             <button class="text-lg hover:scale-110 transition-all" onclick="event.stopPropagation(); visualizarDocumentoVeiculo('${v.id}')" title="Ver Documento">
+                               👁️
+                             </button>
+                             <button class="text-lg hover:scale-110 transition-all" onclick="event.stopPropagation(); uploadDocumentoVeiculo('${v.id}', '${placa}')" title="Atualizar Documento">
+                               🔄
+                             </button>
+                           </div>`
+                        : `<button class="text-lg hover:scale-110 transition-all" onclick="event.stopPropagation(); uploadDocumentoVeiculo('${v.id}', '${placa}')" title="Upload Documento">
+                             📄
+                           </button>`;
+                    
+                    // Status badge e botão
+                    const statusAtivo = v.status_ativo !== false;
+                    const statusBadge = statusAtivo
+                        ? '<span class="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">✅ Ativo</span>'
+                        : '<span class="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-bold">⭕ Inativo</span>';
+                    
+                    const statusButton = `<button class="text-lg hover:scale-110 transition-all" onclick="event.stopPropagation(); toggleVeiculoStatus('${v.id}', ${!statusAtivo})" title="${statusAtivo ? 'Desativar' : 'Ativar'}">
+                        ${statusAtivo ? '⏸️' : '▶️'}
+                    </button>`;
+                    
+                    card.innerHTML = `
+                        <div class="flex items-start justify-between mb-4">
+                            <div>
+                                <h3 class="text-2xl font-bold text-gray-800">${placa}</h3>
+                                <p class="text-gray-600">${v.modelo || 'Modelo não informado'}</p>
+                                <div class="mt-1">${statusBadge}</div>
+                            </div>
+                            <div class="flex gap-2">
+                                ${statusButton}
+                                ${documentoButtons}
+                                <button class="btn-edit-veiculo text-2xl hover:scale-110 transition-all" data-placa="${placa}" onclick="event.stopPropagation(); openEditVeiculo('${placa}')">
+                                    ⚙️
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Métricas Resumidas -->
+                        <div class="grid grid-cols-2 gap-3 mb-4">
+                            <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-3 text-white">
+                                <div class="text-xs opacity-90">Consumo</div>
+                                <div class="text-xl font-bold">${metrics.km_por_litro_medio ? metrics.km_por_litro_medio.toFixed(2) : '0.00'} km/L</div>
+                            </div>
+                            <div class="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-3 text-white">
+                                <div class="text-xs opacity-90">Total Litros</div>
+                                <div class="text-xl font-bold">${metrics.total_litros ? metrics.total_litros.toFixed(0) : '0'} L</div>
+                            </div>
+                            <div class="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-3 text-white">
+                                <div class="text-xs opacity-90">Km Rodados</div>
+                                <div class="text-xl font-bold">${metrics.km_rodados ? metrics.km_rodados.toFixed(0) : '0'} km</div>
+                            </div>
+                            <div class="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-3 text-white">
+                                <div class="text-xs opacity-90">Odômetro</div>
+                                <div class="text-xl font-bold">${metrics.ultimo_odometro || '-'}</div>
+                            </div>
+                        </div>
+
+                        <!-- Últimos Abastecimentos -->
+                        <div class="border-t pt-4">
+                            <h4 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                                <span>⛽</span>
+                                Últimos Abastecimentos
+                            </h4>
+                            ${refuels.length === 0 ? '<p class="text-gray-500 text-sm">Nenhum registro</p>' : `
+                                <div class="space-y-2">
+                                    ${refuels.map(r => `
+                                        <div class="bg-gray-50 rounded-lg p-3 text-sm">
+                                            <div class="flex justify-between items-start mb-1">
+                                                <span class="font-semibold text-gray-700">${r.motorista || '-'}</span>
+                                                <span class="text-gray-500 text-xs">${formatarData(r.timestamp)}</span>
+                                            </div>
+                                            <div class="flex gap-4 text-gray-600">
+                                                <span>💧 ${r.litros !== null && r.litros !== undefined ? r.litros.toFixed(1) + 'L' : '-'}</span>
+                                                <span>📊 ${r.odometro !== null && r.odometro !== undefined ? r.odometro + 'km' : '-'}</span>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            `}
+                        </div>
+                    `;
+                    
+                    grid.appendChild(card);
+                }
+
+            } catch (err) {
+                console.error('Erro ao carregar veículos:', err);
+                alert('Erro ao carregar veículos.');
+            }
+        }
+
+        // Modal functions
+        const modal = document.getElementById('modal-veiculo');
+        const modalTitle = document.getElementById('modal-title');
+        const formVeiculo = document.getElementById('form-veiculo');
+        const btnAdd = document.getElementById('btn-add-veiculo');
+        const btnCancel = document.getElementById('btn-cancel');
+
+        btnAdd.addEventListener('click', () => {
+            editingPlaca = null;
+            modalTitle.textContent = 'Cadastrar Veículo';
+            formVeiculo.reset();
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        });
+
+        btnCancel.addEventListener('click', () => {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        });
+
+        async function openEditVeiculo(placa) {
+            editingPlaca = placa;
+            modalTitle.textContent = 'Editar Veículo';
+            
+            // Buscar dados do veículo
+            try {
+                const res = await fetch(`/api/veiculos/${encodeURIComponent(placa)}`);
+                if (res.ok) {
+                    const v = await res.json();
+                    document.getElementById('input-placa').value = v.placa || '';
+                    document.getElementById('input-placa').disabled = true; // Não pode editar placa
+                    document.getElementById('input-modelo').value = v.modelo || '';
+                    document.getElementById('input-media-kmpl').value = v.media_kmpl || '';
+                    modal.classList.remove('hidden');
+                    modal.classList.add('flex');
+                }
+            } catch (e) {
+                console.error('Erro ao carregar veículo:', e);
+                alert('Erro ao carregar dados do veículo.');
+            }
+        }
+
+        // Salvar veículo
+        formVeiculo.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const placa = document.getElementById('input-placa').value.trim().toUpperCase();
+            const modelo = document.getElementById('input-modelo').value.trim();
+            const media_kmpl = document.getElementById('input-media-kmpl').value;
+
+            if (!placa) {
+                alert('Informe a placa.');
+                return;
+            }
+
+            try {
+                let payload = { placa, modelo };
+                if (media_kmpl) payload.media_kmpl = Number(media_kmpl);
+
+                let res;
+                if (editingPlaca) {
+                    // Atualizar
+                    res = await fetch(`/api/veiculos/${encodeURIComponent(editingPlaca)}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                } else {
+                    // Criar novo
+                    res = await fetch('/api/veiculos', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                }
+
+                const json = await res.json();
+                if (res.ok) {
+                    alert(editingPlaca ? 'Veículo atualizado!' : 'Veículo cadastrado!');
+                    modal.classList.add('hidden');
+                    modal.classList.remove('flex');
+                    document.getElementById('input-placa').disabled = false;
+                    loadVeiculos();
+                } else {
+                    alert(json.error || 'Erro ao salvar veículo.');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Erro ao salvar veículo.');
+            }
+        });
+
+        // ============================================================================
+        // DRAG & DROP DOCUMENTO VEÍCULO
+        // ============================================================================
+        
+        const docVeiculoDropZone = document.getElementById('doc-veiculo-drop-zone');
+        const docVeiculoFileInput = document.getElementById('doc-veiculo-file-input');
+        const docVeiculoDropZoneContent = document.getElementById('doc-veiculo-drop-zone-content');
+        const docVeiculoFileInfo = document.getElementById('doc-veiculo-file-info');
+        const docVeiculoFileName = document.getElementById('doc-veiculo-file-name');
+        const docVeiculoFileSize = document.getElementById('doc-veiculo-file-size');
+
+        // Prevent default drag behaviors
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            docVeiculoDropZone.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        // Highlight drop zone when item is dragged over it
+        ['dragenter', 'dragover'].forEach(eventName => {
+            docVeiculoDropZone.addEventListener(eventName, () => {
+                docVeiculoDropZone.classList.add('border-indigo-600', 'bg-indigo-100');
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            docVeiculoDropZone.addEventListener(eventName, () => {
+                docVeiculoDropZone.classList.remove('border-indigo-600', 'bg-indigo-100');
+            }, false);
+        });
+
+        // Handle dropped files
+        docVeiculoDropZone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleDocVeiculoFiles(files);
+        }, false);
+
+        // Handle click to upload
+        docVeiculoDropZone.addEventListener('click', () => {
+            docVeiculoFileInput.click();
+        });
+
+        docVeiculoFileInput.addEventListener('change', (e) => {
+            const files = e.target.files;
+            handleDocVeiculoFiles(files);
+        });
+
+        function handleDocVeiculoFiles(files) {
+            if (files.length === 0) return;
+            
+            const file = files[0];
+            
+            // Validate file type
+            const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg'];
+            if (!allowedTypes.includes(file.type)) {
+                alert('Formato inválido! Use PDF, PNG ou JPG.');
+                return;
+            }
+            
+            // Validate file size (10MB)
+            if (file.size > 10 * 1024 * 1024) {
+                alert('Arquivo muito grande! Tamanho máximo: 10MB.');
+                return;
+            }
+            
+            // Update UI
+            docVeiculoDropZoneContent.classList.add('hidden');
+            docVeiculoFileInfo.classList.remove('hidden');
+            docVeiculoFileName.textContent = file.name;
+            docVeiculoFileSize.textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
+        }
+
+        // Handle form submission
+        document.getElementById('form-upload-doc-veiculo').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const veiculoId = document.getElementById('upload-doc-veiculo-id').value;
+            const files = docVeiculoFileInput.files;
+            
+            if (files.length === 0) {
+                alert('Selecione um arquivo!');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('documento', files[0]);
+            
+            const submitBtn = document.getElementById('btn-upload-doc-veiculo');
+            const originalText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.textContent = '⏳ Enviando...';
+            
+            try {
+                const response = await fetch(`/api/veiculos/${veiculoId}/upload-documento`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Erro ao enviar documento');
+                }
+                
+                alert('✅ ' + data.message);
+                fecharModalUploadDocVeiculo();
+                loadVeiculos();
+                
+            } catch (error) {
+                console.error('Erro ao fazer upload:', error);
+                alert('❌ ' + error.message);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            }
+        });
+
+        // ============================================================================
+        // MODAL FUNCTIONS - DOCUMENTO VEICULO
+        // ============================================================================
+
+        // Open upload documento modal
+        async function uploadDocumentoVeiculo(veiculoId, placa) {
+            console.log('📤 uploadDocumentoVeiculo chamado | ID:', veiculoId, '| Placa:', placa);
+            
+            document.getElementById('upload-doc-veiculo-id').value = veiculoId;
+            document.getElementById('upload-doc-veiculo-placa').value = placa;
+            
+            // Reset file input
+            const fileInput = document.getElementById('doc-veiculo-file-input');
+            fileInput.value = '';
+            
+            // Reset drop zone
+            document.getElementById('doc-veiculo-drop-zone-content').classList.remove('hidden');
+            document.getElementById('doc-veiculo-file-info').classList.add('hidden');
+            
+            // Check if veiculo already has documento to change modal title
+            try {
+                const response = await fetch('/api/veiculos');
+                const veiculos = await response.json();
+                const veiculo = veiculos.find(v => v.id === veiculoId);
+                
+                const modalTitle = document.querySelector('#modal-upload-doc-veiculo h2');
+                const submitBtn = document.getElementById('btn-upload-doc-veiculo');
+                
+                if (veiculo && veiculo.documento_url) {
+                    modalTitle.textContent = '🔄 Atualizar Documento';
+                    submitBtn.textContent = '🔄 Atualizar Documento';
+                } else {
+                    modalTitle.textContent = '📄 Upload Documento';
+                    submitBtn.textContent = '📤 Enviar Documento';
+                }
+            } catch (error) {
+                console.error('Erro ao verificar documento:', error);
+            }
+            
+            // Show modal
+            const modal = document.getElementById('modal-upload-doc-veiculo');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            console.log('✅ Modal de upload exibido');
+        }
+
+        // Close upload documento modal
+        function fecharModalUploadDocVeiculo() {
+            const modal = document.getElementById('modal-upload-doc-veiculo');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        // Open visualizar documento modal
+        async function visualizarDocumentoVeiculo(veiculoId) {
+            console.log('👁️ visualizarDocumentoVeiculo chamado | ID:', veiculoId);
+            
+            try {
+                const modal = document.getElementById('modal-visualizar-doc-veiculo');
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+                console.log('✅ Modal de visualização exibido');
+                
+                // Show loading
+                document.getElementById('doc-veiculo-viewer-content').innerHTML = `
+                    <div class="text-center">
+                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+                        <p class="mt-4 text-gray-600">Carregando documento...</p>
+                    </div>
+                `;
+                
+                // Fetch documento URL
+                const response = await fetch(`/api/veiculos/${veiculoId}/documento`);
+                
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.error || 'Erro ao carregar documento');
+                }
+                
+                const data = await response.json();
+                const documentoUrl = data.documento_url;
+                
+                // Determine file type
+                const isPDF = documentoUrl.toLowerCase().includes('.pdf');
+                
+                if (isPDF) {
+                    // Display PDF in iframe
+                    document.getElementById('doc-veiculo-viewer-content').innerHTML = `
+                        <iframe src="${documentoUrl}" class="w-full h-[600px] rounded-lg border-2 border-gray-200"></iframe>
+                    `;
+                } else {
+                    // Display image
+                    document.getElementById('doc-veiculo-viewer-content').innerHTML = `
+                        <img src="${documentoUrl}" alt="Documento" class="max-w-full h-auto rounded-lg shadow-lg mx-auto">
+                    `;
+                }
+                
+            } catch (error) {
+                console.error('Erro ao visualizar documento:', error);
+                document.getElementById('doc-veiculo-viewer-content').innerHTML = `
+                    <div class="text-center text-red-500">
+                        <svg class="mx-auto h-12 w-12 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <p class="mt-4">${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Close visualizar documento modal
+        function fecharModalVisualizarDocVeiculo() {
+            const modal = document.getElementById('modal-visualizar-doc-veiculo');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        // Toggle veiculo status
+        async function toggleVeiculoStatus(veiculoId, newStatus) {
+            try {
+                const response = await fetch(`/api/veiculos/${veiculoId}/status`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ status_ativo: newStatus })
+                });
+
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Erro ao atualizar status');
+                }
+
+                alert('✅ ' + data.message);
+                loadVeiculos();
+
+            } catch (error) {
+                console.error('Erro ao atualizar status:', error);
+                alert('❌ ' + error.message);
+            }
+        }
+
+        // Expor funções globalmente
+        window.uploadDocumentoVeiculo = uploadDocumentoVeiculo;
+        window.fecharModalUploadDocVeiculo = fecharModalUploadDocVeiculo;
+        window.visualizarDocumentoVeiculo = visualizarDocumentoVeiculo;
+        window.fecharModalVisualizarDocVeiculo = fecharModalVisualizarDocVeiculo;
+        window.toggleVeiculoStatus = toggleVeiculoStatus;
+
+        // Carregar ao iniciar
+        loadVeiculos();
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Histórico de Saídas - Frota Sanemar</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="manifest" href="/static/manifest.json">
+    <style>
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.8); }
+        }
+        .pulse-dot {
+            animation: pulse-dot 2s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
+    
+    <!-- Header -->
+    <header class="bg-white shadow-lg border-b-4 border-indigo-500">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-900">📋 Histórico de Viagens</h1>
+                    <p class="text-sm text-gray-600 mt-1">Acompanhamento em tempo real</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <!-- Indicador Tempo Real -->
+                    <div class="flex items-center gap-2 bg-green-100 text-green-800 px-4 py-2 rounded-full">
+                        <span class="w-3 h-3 bg-green-500 rounded-full pulse-dot"></span>
+                        <span class="text-sm font-semibold">Tempo Real</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <!-- Filtros -->
+        <div class="bg-white rounded-2xl shadow-lg p-6 mb-6">
+            <h2 class="text-xl font-bold text-gray-900 mb-4">🔍 Filtros</h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">📅 Data</label>
+                    <input type="date" id="filtro-data" 
+                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">🚗 Veículo</label>
+                    <input type="text" id="filtro-placa" placeholder="Placa..."
+                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all uppercase">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">👤 Motorista</label>
+                    <input type="text" id="filtro-motorista" placeholder="Nome..."
+                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all">
+                </div>
+                <div class="flex items-end">
+                    <button id="limpar-filtros" 
+                            class="w-full px-6 py-3 bg-gray-200 hover:bg-gray-300 rounded-xl font-bold transition-all transform hover:scale-105">
+                        🔄 Limpar
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Estatísticas Rápidas -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div class="bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl shadow-lg p-6 text-white">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-semibold opacity-90">Em Curso Agora</p>
+                        <p class="text-4xl font-bold mt-2" id="stat-em-curso">-</p>
+                    </div>
+                    <div class="text-5xl opacity-20">🚗</div>
+                </div>
+            </div>
+            <div class="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-lg p-6 text-white">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-semibold opacity-90">Viagens Hoje</p>
+                        <p class="text-4xl font-bold mt-2" id="stat-hoje">-</p>
+                    </div>
+                    <div class="text-5xl opacity-20">📊</div>
+                </div>
+            </div>
+            <div class="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl shadow-lg p-6 text-white">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-semibold opacity-90">Total Registros</p>
+                        <p class="text-4xl font-bold mt-2" id="stat-total">-</p>
+                    </div>
+                    <div class="text-5xl opacity-20">📋</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabela de Histórico -->
+        <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+            <div class="p-6 border-b border-gray-200">
+                <h2 class="text-2xl font-bold text-gray-900">📜 Registros</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gradient-to-r from-indigo-500 to-purple-600 text-white">
+                        <tr>
+                            <th class="px-6 py-4 text-left text-sm font-bold">Status</th>
+                            <th class="px-6 py-4 text-left text-sm font-bold">Veículo</th>
+                            <th class="px-6 py-4 text-left text-sm font-bold">Motorista</th>
+                            <th class="px-6 py-4 text-left text-sm font-bold">Solicitante</th>
+                            <th class="px-6 py-4 text-left text-sm font-bold">Saída</th>
+                            <th class="px-6 py-4 text-left text-sm font-bold">Chegada</th>
+                            <th class="px-6 py-4 text-left text-sm font-bold">Trajeto</th>
+                            <th class="px-6 py-4 text-center text-sm font-bold">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabela-historico" class="divide-y divide-gray-100">
+                        <tr>
+                            <td colspan="7" class="px-6 py-8 text-center text-gray-500">
+                                <div class="flex flex-col items-center gap-3">
+                                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
+                                    <p>Carregando histórico...</p>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2"></div>
+
+    <!-- Modal de Edição -->
+    <div id="modal-editar" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 rounded-t-2xl">
+                <h2 class="text-2xl font-bold">✏️ Editar Saída</h2>
+            </div>
+            <form id="form-editar" class="p-6">
+                <input type="hidden" id="edit-saida-id">
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">🚗 Veículo (Placa)</label>
+                        <input type="text" id="edit-veiculo" required
+                               class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all uppercase">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">👤 Motorista</label>
+                        <input type="text" id="edit-motorista" required
+                               class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all">
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">👔 Solicitante</label>
+                    <input type="text" id="edit-solicitante" required
+                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all">
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">📍 Trajeto</label>
+                    <input type="text" id="edit-trajeto" required
+                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all">
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">🕐 Saída</label>
+                        <input type="datetime-local" id="edit-timestamp-saida" required
+                               class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">🕐 Chegada</label>
+                        <input type="datetime-local" id="edit-timestamp-chegada"
+                               class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all">
+                    </div>
+                </div>
+
+                <div class="mb-6">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">📊 Status</label>
+                    <select id="edit-status" required
+                            class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all">
+                        <option value="em_curso">Em Curso</option>
+                        <option value="finalizada">Finalizada</option>
+                    </select>
+                </div>
+
+                <div class="flex gap-3">
+                    <button type="submit" 
+                            class="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-bold transition-all transform hover:scale-105">
+                        💾 Salvar
+                    </button>
+                    <button type="button" onclick="fecharModalEditar()" 
+                            class="flex-1 px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl font-bold transition-all">
+                        ❌ Cancelar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Firebase Config -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getFirestore, collection, query, orderBy, limit, onSnapshot, where } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        // Configuração do Firebase (pegue do seu firebase-credentials.json)
+        const firebaseConfig = {
+            apiKey: "AIzaSyABpZYGgQ_qp2uxkZPFXR_w2_Dz8wOoYkY",
+            authDomain: "frota-sanemar.firebaseapp.com",
+            projectId: "frota-sanemar",
+            storageBucket: "frota-sanemar.firebasestorage.app",
+            messagingSenderId: "452765831068",
+            appId: "1:452765831068:web:d3b1e9f35f8f3e0f8c8f3e"
+        };
+
+        // Inicializa Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // Variáveis globais
+        let unsubscribe = null;
+        let todosRegistros = [];
+
+        // Parser de data robusto
+        function parseDateValue(val) {
+            if (!val && val !== 0) return null;
+            if (typeof val === 'object' && val !== null) {
+                if (val.seconds) return new Date(val.seconds * 1000);
+                if (val._seconds) return new Date(val._seconds * 1000);
+            }
+            if (typeof val === 'number') {
+                const d = new Date(val);
+                if (!isNaN(d.getTime())) return d;
+            }
+            if (typeof val === 'string') {
+                let d = new Date(val);
+                if (!isNaN(d.getTime())) return d;
+            }
+            return null;
+        }
+
+        // Formatar data
+        function formatarData(val) {
+            const d = parseDateValue(val);
+            if (!d) return '-';
+            const dia = String(d.getDate()).padStart(2, '0');
+            const mes = String(d.getMonth() + 1).padStart(2, '0');
+            const ano = d.getFullYear();
+            const horas = String(d.getHours()).padStart(2, '0');
+            const minutos = String(d.getMinutes()).padStart(2, '0');
+            return `${dia}/${mes}/${ano} ${horas}:${minutos}`;
+        }
+
+        // Atualiza estatísticas
+        function atualizarStats(registros) {
+            const emCurso = registros.filter(r => r.status === 'em_curso').length;
+            const hoje = registros.filter(r => {
+                const ts = parseDateValue(r.timestampSaida);
+                if (!ts) return false;
+                const hoje = new Date();
+                return ts.getDate() === hoje.getDate() && 
+                       ts.getMonth() === hoje.getMonth() && 
+                       ts.getFullYear() === hoje.getFullYear();
+            }).length;
+
+            document.getElementById('stat-em-curso').textContent = emCurso;
+            document.getElementById('stat-hoje').textContent = hoje;
+            document.getElementById('stat-total').textContent = registros.length;
+        }
+
+        // Renderiza tabela
+        function renderizarTabela(registros) {
+            const tbody = document.getElementById('tabela-historico');
+            tbody.innerHTML = '';
+
+            if (!registros || registros.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8" class="px-6 py-8 text-center text-gray-500">
+                            Nenhum registro encontrado
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            registros.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-indigo-50 transition-colors';
+
+                // Status
+                const statusClass = item.status === 'em_curso' 
+                    ? 'bg-yellow-100 text-yellow-800' 
+                    : 'bg-green-100 text-green-800';
+                const statusText = item.status === 'em_curso' ? 'Em Curso' : 'Finalizada';
+
+                tr.innerHTML = `
+                    <td class="px-6 py-4">
+                        <span class="px-3 py-1 rounded-full text-xs font-bold ${statusClass}">
+                            ${statusText}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 font-bold text-gray-900">${item.veiculo || '-'}</td>
+                    <td class="px-6 py-4 text-gray-700">${item.motorista || '-'}</td>
+                    <td class="px-6 py-4 text-gray-700">${item.solicitante || '-'}</td>
+                    <td class="px-6 py-4 text-gray-600">${formatarData(item.timestampSaida)}</td>
+                    <td class="px-6 py-4 text-gray-600">${item.timestampChegada ? formatarData(item.timestampChegada) : '-'}</td>
+                    <td class="px-6 py-4 text-gray-600">${item.trajeto || '-'}</td>
+                    <td class="px-6 py-4">
+                        <div class="flex gap-2 justify-center">
+                            <button onclick="editarSaida('${item.id}')" class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-semibold transition-all" title="Editar">
+                                ✏️
+                            </button>
+                            <button onclick="excluirSaida('${item.id}', '${item.veiculo}', '${item.motorista}')" class="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-semibold transition-all" title="Excluir">
+                                🗑️
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            atualizarStats(registros);
+        }
+
+        // Aplica filtros
+        function aplicarFiltros() {
+            const data = document.getElementById('filtro-data').value;
+            const placa = document.getElementById('filtro-placa').value.toUpperCase().trim();
+            const motorista = document.getElementById('filtro-motorista').value.toUpperCase().trim();
+
+            let filtrados = [...todosRegistros];
+
+            // Filtro de data
+            if (data) {
+                const [ano, mes, dia] = data.split('-').map(Number);
+                filtrados = filtrados.filter(r => {
+                    const ts = parseDateValue(r.timestampSaida);
+                    if (!ts) return false;
+                    return ts.getFullYear() === ano && 
+                           ts.getMonth() === (mes - 1) && 
+                           ts.getDate() === dia;
+                });
+            }
+
+            // Filtro de placa
+            if (placa) {
+                filtrados = filtrados.filter(r => 
+                    (r.veiculo || '').toUpperCase().includes(placa)
+                );
+            }
+
+            // Filtro de motorista
+            if (motorista) {
+                filtrados = filtrados.filter(r => 
+                    (r.motorista || '').toUpperCase().includes(motorista)
+                );
+            }
+
+            renderizarTabela(filtrados);
+        }
+
+        // Carrega dados do backend (com cache de 5 minutos)
+        async function carregarHistorico() {
+            try {
+                const response = await fetch('/api/historico');
+                const data = await response.json();
+                
+                if (!data || data.error) {
+                    throw new Error(data.error || 'Erro ao carregar dados');
+                }
+
+                todosRegistros = data;
+
+                // Ordena: em_curso primeiro, depois por data
+                todosRegistros.sort((a, b) => {
+                    if (a.status === 'em_curso' && b.status !== 'em_curso') return -1;
+                    if (a.status !== 'em_curso' && b.status === 'em_curso') return 1;
+                    const tsA = parseDateValue(a.timestampSaida);
+                    const tsB = parseDateValue(b.timestampSaida);
+                    return tsB - tsA;
+                });
+
+                aplicarFiltros();
+                console.log('✅ Histórico carregado do backend (cache de 5min)');
+            } catch (error) {
+                console.error('❌ Erro ao carregar histórico:', error);
+                showToast('error', 'Erro ao carregar histórico');
+            }
+        }
+
+        // Listener LEVE: apenas notifica mudanças em veículos EM CURSO
+        function iniciarRealtimeListener() {
+            // ✅ OTIMIZADO: Query apenas para veículos EM CURSO (5-10 docs max)
+            const q = query(
+                collection(db, 'saidas'),
+                where('status', '==', 'em_curso')
+            );
+
+            let isFirstSnapshot = true;
+
+            unsubscribe = onSnapshot(q, (snapshot) => {
+                console.log('📊 Atualização em veículos EM CURSO:', snapshot.docChanges().length, 'mudanças');
+
+                // Atualiza contador de em curso em tempo real
+                const emCurso = snapshot.size;
+                document.getElementById('stat-em-curso').textContent = emCurso;
+
+                // Detecta mudanças importantes
+                let houveAlteracao = false;
+
+                snapshot.docChanges().forEach((change) => {
+                    const data = change.doc.data();
+                    
+                    if (change.type === 'added' && !isFirstSnapshot) {
+                        // Nova saída registrada
+                        houveAlteracao = true;
+                        showToast('info', `🚗 Nova saída: ${data.veiculo} - ${data.motorista}`);
+                    } else if (change.type === 'removed') {
+                        // Chegada registrada (removido de em_curso)
+                        houveAlteracao = true;
+                        showToast('success', `✅ Chegada: ${data.veiculo}`);
+                    }
+                });
+
+                // Se houve mudança, recarrega do backend (usa cache se ainda válido)
+                if (houveAlteracao) {
+                    console.log('🔄 Recarregando histórico...');
+                    carregarHistorico();
+                }
+
+                isFirstSnapshot = false;
+            }, (error) => {
+                console.error('❌ Erro no listener:', error);
+                showToast('error', 'Erro ao conectar com o banco de dados');
+            });
+        }
+
+        // Toast notifications
+        function showToast(type, message, duration = 3000) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const colors = {
+                success: 'bg-green-500',
+                error: 'bg-red-500',
+                info: 'bg-blue-500'
+            };
+
+            toast.className = `${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 translate-x-0`;
+            toast.textContent = message;
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.transform = 'translateX(400px)';
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+        }
+
+        // Event listeners
+        document.getElementById('filtro-data').addEventListener('change', aplicarFiltros);
+        document.getElementById('filtro-placa').addEventListener('input', aplicarFiltros);
+        document.getElementById('filtro-motorista').addEventListener('input', aplicarFiltros);
+        
+        document.getElementById('limpar-filtros').addEventListener('click', () => {
+            document.getElementById('filtro-data').value = '';
+            document.getElementById('filtro-placa').value = '';
+            document.getElementById('filtro-motorista').value = '';
+            aplicarFiltros();
+        });
+
+        // Força uppercase no input de placa
+        document.getElementById('filtro-placa').addEventListener('input', (e) => {
+            const pos = e.target.selectionStart;
+            e.target.value = e.target.value.toUpperCase();
+            e.target.setSelectionRange(pos, pos);
+        });
+
+        // Cleanup ao sair
+        window.addEventListener('beforeunload', () => {
+            if (unsubscribe) unsubscribe();
+        });
+
+        // Inicia: carrega dados primeiro, depois ativa listener
+        carregarHistorico();
+        iniciarRealtimeListener();
+        
+        // Funções globais para editar/excluir
+        window.editarSaida = async function(saidaId) {
+            const saida = todosRegistros.find(s => s.id === saidaId);
+            if (!saida) {
+                mostrarToast('Registro não encontrado', 'error');
+                return;
+            }
+
+            // Preenche o formulário
+            document.getElementById('edit-saida-id').value = saidaId;
+            document.getElementById('edit-veiculo').value = saida.veiculo || '';
+            document.getElementById('edit-motorista').value = saida.motorista || '';
+            document.getElementById('edit-solicitante').value = saida.solicitante || '';
+            document.getElementById('edit-trajeto').value = saida.trajeto || '';
+            document.getElementById('edit-status').value = saida.status || 'em_curso';
+
+            // Converte timestamps para datetime-local
+            const saida_date = parseDateValue(saida.timestampSaida);
+            if (saida_date) {
+                document.getElementById('edit-timestamp-saida').value = formatDatetimeLocal(saida_date);
+            }
+
+            const chegada_date = parseDateValue(saida.timestampChegada);
+            if (chegada_date) {
+                document.getElementById('edit-timestamp-chegada').value = formatDatetimeLocal(chegada_date);
+            }
+
+            // Mostra modal
+            document.getElementById('modal-editar').classList.remove('hidden');
+        };
+
+        window.excluirSaida = async function(saidaId, veiculo, motorista) {
+            if (!confirm(`⚠️ Confirma exclusão da saída?\n\nVeículo: ${veiculo}\nMotorista: ${motorista}\n\nEsta ação não pode ser desfeita!`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/saidas/${saidaId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    mostrarToast('✅ Registro excluído com sucesso!', 'success');
+                } else {
+                    mostrarToast(`❌ Erro: ${result.error || 'Falha ao excluir'}`, 'error');
+                }
+            } catch (error) {
+                console.error('Erro ao excluir:', error);
+                mostrarToast('❌ Erro ao excluir registro', 'error');
+            }
+        };
+
+        window.fecharModalEditar = function() {
+            document.getElementById('modal-editar').classList.add('hidden');
+            document.getElementById('form-editar').reset();
+        };
+
+        // Helper para converter Date para datetime-local format
+        function formatDatetimeLocal(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            return `${year}-${month}-${day}T${hours}:${minutes}`;
+        }
+
+        // Submit do formulário de edição
+        document.getElementById('form-editar').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const saidaId = document.getElementById('edit-saida-id').value;
+            const dados = {
+                veiculo: document.getElementById('edit-veiculo').value.toUpperCase(),
+                motorista: document.getElementById('edit-motorista').value,
+                solicitante: document.getElementById('edit-solicitante').value,
+                trajeto: document.getElementById('edit-trajeto').value,
+                status: document.getElementById('edit-status').value,
+                timestampSaida: new Date(document.getElementById('edit-timestamp-saida').value).toISOString(),
+                timestampChegada: document.getElementById('edit-timestamp-chegada').value ? new Date(document.getElementById('edit-timestamp-chegada').value).toISOString() : null
+            };
+
+            try {
+                const response = await fetch(`/api/saidas/${saidaId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(dados)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    mostrarToast('✅ Registro atualizado com sucesso!', 'success');
+                    fecharModalEditar();
+                } else {
+                    mostrarToast(`❌ Erro: ${result.error || 'Falha ao atualizar'}`, 'error');
+                }
+            } catch (error) {
+                console.error('Erro ao atualizar:', error);
+                mostrarToast('❌ Erro ao atualizar registro', 'error');
+            }
+        });
+
+        // Force uppercase no campo veículo do modal
+        document.getElementById('edit-veiculo').addEventListener('input', (e) => {
+            const pos = e.target.selectionStart;
+            e.target.value = e.target.value.toUpperCase();
+            e.target.setSelectionRange(pos, pos);
+        });
+        
+        // Exporta para debug
+        window.debugHistorico = { todosRegistros, aplicarFiltros };
+    </script>
+
+</body>
+</html>

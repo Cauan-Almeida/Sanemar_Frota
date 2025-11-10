@@ -2,11 +2,15 @@ import os
 import re
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
-from flask import Flask, request, jsonify, render_template, redirect, url_for
-from google.cloud import firestore
+from flask import Flask, request, jsonify, render_template, redirect, url_for, Response, session, send_file
+from functools import wraps
+from google.cloud import firestore, storage
 from google.cloud.firestore_v1.base_query import And
+import firebase_admin
+from firebase_admin import credentials, storage as firebase_storage
 from dotenv import load_dotenv
 from collections import Counter
+import io
 
 # --- Funções Auxiliares ---
 def serialize_doc(doc):
@@ -35,6 +39,31 @@ load_dotenv()
 
 # Inicializa o Flask App
 app = Flask(__name__)
+app.secret_key = os.getenv('SECRET_KEY', 'frota-sanemar-secret-key-2025-super-segura')
+
+# Credenciais de autenticação
+ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin')
+ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'sanemar2025')
+HISTORICO_USERNAME = os.getenv('HISTORICO_USERNAME', 'historico')
+HISTORICO_PASSWORD = os.getenv('HISTORICO_PASSWORD', 'historico123')
+
+def requires_auth(f):
+    """Decorator para exigir autenticação por sessão (ADMIN)."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('logged_in') or session.get('user_type') != 'admin':
+            return redirect(url_for('login_page', next=request.url))
+        return f(*args, **kwargs)
+    return decorated
+
+def requires_auth_historico(f):
+    """Decorator para exigir autenticação por sessão (HISTÓRICO)."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('logged_in') or session.get('user_type') not in ['admin', 'historico']:
+            return redirect(url_for('login_page', next=request.url))
+        return f(*args, **kwargs)
+    return decorated
 
 # Inicializa o cliente Firestore
 try:
@@ -43,6 +72,19 @@ try:
 except Exception as e:
     print(f"Erro ao conectar com o Firestore: {e}")
     db = None
+
+# Inicializa Firebase Admin SDK para Storage
+try:
+    if not firebase_admin._apps:
+        cred = credentials.Certificate('firebase-credentials.json')
+        firebase_admin.initialize_app(cred, {
+            'storageBucket': 'frota-sanemar.firebasestorage.app'
+        })
+    bucket = firebase_storage.bucket()
+    print("✅ Firebase Storage inicializado com sucesso.")
+except Exception as e:
+    print(f"❌ Erro ao inicializar Firebase Storage: {e}")
+    bucket = None
 
 # Flag global para indicar que o Firestore está indisponível (por ex. quota excedida)
 FIRESTORE_AVAILABLE = True
@@ -109,8 +151,56 @@ def index():
     return render_template('index.html', veiculos=veiculos, motoristas=motoristas)
 
 
+# --- Rota para Service Worker ---
+@app.route('/sw.js')
+def service_worker():
+    """Serve o service worker da raiz do projeto"""
+    return send_file('sw.js', mimetype='application/javascript')
+
+
+# --- Rotas de Autenticação ---
+@app.route('/login', methods=['GET', 'POST'])
+def login_page():
+    """Página de login bonita"""
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        # Verifica credenciais
+        if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
+            session['logged_in'] = True
+            session['user_type'] = 'admin'
+            session['username'] = username
+            next_page = request.args.get('next') or url_for('dashboard')
+            return redirect(next_page)
+        elif username == HISTORICO_USERNAME and password == HISTORICO_PASSWORD:
+            session['logged_in'] = True
+            session['user_type'] = 'historico'
+            session['username'] = username
+            next_page = request.args.get('next') or url_for('historico_page')
+            return redirect(next_page)
+        else:
+            return render_template('login.html', error='Usuário ou senha incorretos')
+    
+    return render_template('login.html')
+
+
+@app.route('/limpar-cache')
+def limpar_cache():
+    """Página para limpar cache do Service Worker"""
+    return render_template('limpar-cache.html')
+
+
+@app.route('/logout')
+def logout():
+    """Faz logout do usuário"""
+    session.clear()
+    return redirect(url_for('login_page'))
+
+
 # --- Rota para o Dashboard de Análise ---
 @app.route('/dashboard')
+@requires_auth
 def dashboard():
     if not FIRESTORE_AVAILABLE:
         return render_template('maintenance.html'), 503
@@ -194,6 +284,7 @@ def api_cancelar():
         return jsonify({"error": "Ocorreu um erro ao cancelar a viagem."}), 500
 
 @app.route('/veiculo/<placa>')
+@app.route('/veiculos/<placa>')
 def veiculo_detalhes(placa):
     if not FIRESTORE_AVAILABLE:
         return render_template('maintenance.html'), 503
@@ -201,36 +292,47 @@ def veiculo_detalhes(placa):
         return "Erro: Conexão com o banco de dados não estabelecida.", 500
 
     try:
-        # Busca os detalhes do veículo
-        veiculos_ref = db.collection('veiculos')
-        veiculo_query = veiculos_ref.where(filter=firestore.FieldFilter('placa', '==', placa)).limit(1).stream()
-        veiculo = next(veiculo_query, None)
-        if not veiculo:
-            return "Veículo não encontrado.", 404
-        
-        veiculo_data = serialize_doc(veiculo.to_dict())
-
         # Busca o histórico de viagens do veículo
         saidas_ref = db.collection('saidas')
         viagens_query = saidas_ref.where(filter=firestore.FieldFilter('veiculo', '==', placa)).order_by('timestampSaida', direction=firestore.Query.DESCENDING).stream()
         
-        viagens = [serialize_doc(doc.to_dict()) for doc in viagens_query]
+        viagens_list = [serialize_doc(doc.to_dict()) for doc in viagens_query]
+
+        # Preparar lista de saídas para o template
+        saidas = []
+        for v in viagens_list:
+            saidas.append({
+                'status': v.get('status'),
+                'motorista': v.get('motorista'),
+                'saida': v.get('timestampSaida'),
+                'chegada': v.get('timestampChegada'),
+                'trajeto': v.get('trajeto')
+            })
 
         # Calcula estatísticas
-        total_viagens = len(viagens)
+        total_viagens = len(viagens_list)
         total_horas = 0
-        for viagem in viagens:
+        for viagem in viagens_list:
             if viagem.get('status') == 'finalizada' and viagem.get('timestampSaida') and viagem.get('timestampChegada'):
                 saida = datetime.fromisoformat(viagem['timestampSaida'])
                 chegada = datetime.fromisoformat(viagem['timestampChegada'])
                 total_horas += (chegada - saida).total_seconds() / 3600
-        
-        stats = {
-            'total_viagens': total_viagens,
-            'total_horas': f"{total_horas:.2f}"
-        }
 
-        return render_template('veiculo_detalhes.html', veiculo=veiculo_data, viagens=viagens, stats=stats)
+        # Buscar timestamp do veículo
+        veiculos_ref = db.collection('veiculos')
+        veiculo_query = veiculos_ref.where(filter=firestore.FieldFilter('placa', '==', placa)).limit(1).stream()
+        veiculo = next(veiculo_query, None)
+        timestamp = None
+        if veiculo:
+            veiculo_data = veiculo.to_dict()
+            timestamp = veiculo_data.get('timestamp')
+
+        return render_template('veiculo_detalhes.html', 
+                             placa=placa,
+                             timestamp=timestamp,
+                             total_viagens=total_viagens,
+                             horas_viagens=f"{total_horas:.2f}",
+                             saidas=saidas)
 
     except Exception as e:
         print(f"Erro ao buscar detalhes do veículo: {e}")
@@ -307,6 +409,49 @@ def api_chegada():
             return jsonify({"error": response_message}), 404  # 404 Not Found
         return jsonify({"error": response_message}), 500
 
+@app.route('/api/abastecimento', methods=['POST'])
+def api_abastecimento():
+    """Rota para registrar abastecimento rápido"""
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Requisição inválida."}), 400
+
+    placa = (data.get('placa') or '').strip()
+    motorista = (data.get('motorista') or '').strip()
+    litros = data.get('litros')
+    odometro = data.get('odometro')
+
+    # Normaliza placa e nome
+    placa = normalize_plate(placa) if placa else placa
+    def title_case(s):
+        return ' '.join([w.capitalize() for w in s.split()]) if s else s
+    motorista = title_case(motorista)
+
+    if not all([placa, motorista, litros]):
+        return jsonify({"error": "Placa, motorista e litros são obrigatórios."}), 400
+
+    try:
+        # Registra no Firestore na coleção 'refuels' (mesma coleção dos gráficos)
+        refuels_ref = db.collection('refuels')
+        now_utc = datetime.now(timezone.utc)
+        
+        refuels_ref.add({
+            'veiculo': placa,  # Campo 'veiculo', não 'placa'
+            'motorista': motorista,
+            'litros': float(litros),
+            'odometro': int(odometro) if odometro else None,
+            'timestamp': now_utc
+        })
+        
+        print(f"✅ Abastecimento registrado: {placa} - {litros}L")
+        return jsonify({"message": f"Abastecimento de {litros}L registrado para {placa}"}), 200
+    except Exception as e:
+        print(f"❌ Erro ao registrar abastecimento: {e}")
+        return jsonify({"error": "Erro ao registrar abastecimento"}), 500
+
 @app.route('/api/veiculos_em_curso', methods=['GET'])
 def get_veiculos_em_curso():
     if not db:
@@ -323,6 +468,8 @@ def get_veiculos_em_curso():
             veiculos.append({
                 "veiculo": data.get("veiculo"),
                 "motorista": data.get("motorista"),
+                "solicitante": data.get("solicitante"),  # ✅ Adicionado
+                "trajeto": data.get("trajeto"),  # ✅ Adicionado
                 "horarioSaida": data.get("horarioSaida")
             })
         
@@ -332,38 +479,149 @@ def get_veiculos_em_curso():
         print(f"Erro ao buscar veículos em curso: {e}")
         return jsonify({"error": "Ocorreu um erro ao buscar os veículos em curso."}), 500
 
+# Cache para histórico (5 minutos)
+historico_cache = {'data': None, 'expires': 0}
+
 @app.route('/api/historico', methods=['GET'])
 def get_historico():
     if not db:
         return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
     
     try:
-        data_filtro = request.args.get('data')
-        placa_filtro = request.args.get('placa')
-        motorista_filtro = request.args.get('motorista')
+        data_filtro = request.args.get('data')       # ex: 17/10/2025
+        placa_filtro = request.args.get('placa', '').strip()
+        motorista_filtro = request.args.get('motorista', '').strip()
 
-        query = db.collection('saidas').order_by('timestampSaida', direction=firestore.Query.DESCENDING)
+        # ✅ CACHE: Se não tem filtros, usa cache de 5 minutos
+        now = time.time()
+        if not data_filtro and not placa_filtro and not motorista_filtro:
+            if historico_cache['expires'] > now and historico_cache['data']:
+                print(f'✅ Histórico do CACHE - economia ~100 leituras')
+                return jsonify(historico_cache['data']), 200
+            print(f'🔄 Recalculando histórico (cache expirado)')
+
+        # Começa a query básica
+        query = db.collection('saidas')
         
-        historico_docs = query.stream()
-
-        historico = [serialize_doc(doc.to_dict()) for doc in historico_docs]
-
+        # Flag para saber se aplicamos filtros complexos (que exigem filtro local)
+        needs_local_filter = False
+        
+        # 1. Aplica filtro de DATA (se houver)
         if data_filtro:
             try:
+                # Converte a data local para UTC para a consulta
                 data_obj = datetime.strptime(data_filtro, '%d/%m/%Y')
-                historico = [h for h in historico if h['timestampSaida'].startswith(data_obj.strftime('%Y-%m-%d'))]
+                start_local = data_obj.replace(hour=0, minute=0, second=0, tzinfo=LOCAL_TZ)
+                end_local = data_obj.replace(hour=23, minute=59, second=59, tzinfo=LOCAL_TZ)
+                
+                start_utc = start_local.astimezone(timezone.utc)
+                end_utc = end_local.astimezone(timezone.utc)
+                
+                query = query.where(filter=firestore.FieldFilter('timestampSaida', '>=', start_utc))
+                query = query.where(filter=firestore.FieldFilter('timestampSaida', '<=', end_utc))
             except ValueError:
-                # Ignore invalid date format
-                pass
-        
-        if placa_filtro:
-            historico = [h for h in historico if placa_filtro.lower() in h.get('veiculo', '').lower()]
+                pass # Ignora data mal formatada
 
+        # 2. Aplica filtro de PLACA (se houver e não houver data)
+        # Firestore limita queries compostas, então se houver data, filtramos placa localmente
+        if placa_filtro and not data_filtro:
+            # Garante que estamos comparando placas normalizadas
+            placa_normalizada = normalize_plate(placa_filtro)
+            query = query.where(filter=firestore.FieldFilter('veiculo', '==', placa_normalizada))
+        elif placa_filtro and data_filtro:
+            needs_local_filter = True
+
+        # 3. Motorista sempre filtrado localmente (mais flexível - case insensitive, partial match)
         if motorista_filtro:
-            historico = [h for h in historico if motorista_filtro.lower() in h.get('motorista', '').lower()]
+            needs_local_filter = True
 
-        # Ordena o resultado: 'em_curso' primeiro, mantendo a ordem de data para o resto
-        historico_final = sorted(historico, key=lambda x: x.get('status') == 'em_curso', reverse=True)
+        # 4. Executa a query
+        if not data_filtro and not placa_filtro:
+            # Sem filtros, ordena por timestamp
+            query = query.order_by('timestampSaida', direction=firestore.Query.DESCENDING)
+        
+        # ✅ OTIMIZAÇÃO: LIMIT AGRESSIVO - 100 docs (antes era 500!)
+        historico_docs = query.limit(100).stream()  # REDUZIDO 80%! 
+
+        historico = []
+        for doc in historico_docs:
+            data = serialize_doc(doc.to_dict())
+            data['id'] = doc.id  # Adiciona o ID do documento
+            historico.append(data)
+        
+        # Aplica filtros locais se necessário
+        if needs_local_filter:
+            historico_filtrado = []
+            for item in historico:
+                # Filtro de placa (case insensitive, partial match)
+                if placa_filtro:
+                    item_placa = (item.get('veiculo') or '').upper()
+                    filtro_placa_upper = placa_filtro.upper()
+                    if filtro_placa_upper not in item_placa:
+                        continue
+                
+                # Filtro de motorista (case insensitive, partial match)
+                if motorista_filtro:
+                    item_motorista = (item.get('motorista') or '').upper()
+                    filtro_motorista_upper = motorista_filtro.upper()
+                    if filtro_motorista_upper not in item_motorista:
+                        continue
+                
+                historico_filtrado.append(item)
+            
+            historico = historico_filtrado
+
+        # 4. Ordena e Executa a query
+        # Importante: O Firestore pode pedir índices compostos se você usar múltiplos 'where' com 'order_by'
+        # Se der erro, o próprio Firebase te dará o link para criar o índice.
+        
+        # Se não houver filtros de data, não precisa do order_by timestampSaida no query
+        # Isso evita problemas de índice composto
+        if data_filtro:
+            query = query.order_by('timestampSaida', direction=firestore.Query.DESCENDING)
+        
+        # OTIMIZAÇÃO: Limite reduzido de 500 para 100 (80% de economia)
+        # Histórico raramente precisa de mais de 100 registros na tela
+        historico_docs = query.limit(100).stream() 
+
+        historico = []
+        for doc in historico_docs:
+            data = serialize_doc(doc.to_dict())
+            data['id'] = doc.id  # ✅ ADICIONA O ID DO DOCUMENTO
+            historico.append(data)
+        
+        # DEBUG: Verifica se os IDs foram adicionados
+        if historico:
+            print(f"🔍 /api/historico retornando {len(historico)} registros")
+            print(f"🆔 Primeiro registro tem ID? {bool(historico[0].get('id'))}")
+            print(f"📝 ID do primeiro: {historico[0].get('id')}")
+            print(f"🔑 Chaves do primeiro: {list(historico[0].keys())}")
+
+        # Ordena localmente: primeiro por status (em_curso primeiro), depois por timestamp (mais recente primeiro)
+        def sort_key(item):
+            # Prioridade 1: em_curso = 0, finalizada = 1 (menor número vem primeiro)
+            status_priority = 0 if item.get('status') == 'em_curso' else 1
+            
+            # Prioridade 2: timestamp mais recente (negativo para ordem decrescente)
+            timestamp_str = item.get('timestampSaida', '')
+            try:
+                if timestamp_str:
+                    ts = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                    timestamp_val = -ts.timestamp()  # Negativo para mais recente primeiro
+                else:
+                    timestamp_val = 0
+            except:
+                timestamp_val = 0
+            
+            return (status_priority, timestamp_val)
+        
+        historico_final = sorted(historico, key=sort_key)
+
+        # ✅ Salva no cache (5 minutos) - APENAS se não tem filtros
+        if not data_filtro and not placa_filtro and not motorista_filtro:
+            historico_cache['data'] = historico_final
+            historico_cache['expires'] = time.time() + 300  # 5 minutos
+            print(f'💾 Histórico no cache por 5min')
 
         return jsonify(historico_final), 200
 
@@ -393,6 +651,7 @@ def get_motoristas():
 
 
 @app.route('/api/motoristas', methods=['POST'])
+@requires_auth
 def post_motorista():
     """Cria um motorista com campos opcionais: funcao, empresa."""
     if not db:
@@ -418,6 +677,8 @@ def post_motorista():
             'funcao': funcao,
             'empresa': empresa,
             'status': 'nao_credenciado',
+            'status_ativo': True,  # ✅ Novo campo: Ativo por padrão
+            'cnh_url': None,  # ✅ Novo campo: URL da CNH
             'dataCadastro': firestore.SERVER_TIMESTAMP
         })
 
@@ -428,11 +689,13 @@ def post_motorista():
 
 
 @app.route('/api/motoristas/<motorista_id>', methods=['PUT'])
+@requires_auth
 def update_motorista(motorista_id):
     if not db:
         return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
 
     data = request.get_json() or {}
+    nome = (data.get('nome') or '').strip()
     funcao = (data.get('funcao') or '').strip()
     empresa = (data.get('empresa') or '').strip()
 
@@ -444,6 +707,8 @@ def update_motorista(motorista_id):
             return jsonify({"error": "Motorista não encontrado."}), 404
 
         update_data = {}
+        if nome:
+            update_data['nome'] = nome
         if funcao:
             update_data['funcao'] = funcao
         if empresa:
@@ -461,6 +726,7 @@ def update_motorista(motorista_id):
 
 
 @app.route('/api/motoristas/<motorista_id>', methods=['DELETE'])
+@requires_auth
 def delete_motorista(motorista_id):
     if not db:
         return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
@@ -480,23 +746,309 @@ def delete_motorista(motorista_id):
         return jsonify({"error": "Ocorreu um erro ao excluir o motorista."}), 500
 
 
+@app.route('/api/motoristas/<motorista_id>/upload-cnh', methods=['POST'])
+@requires_auth
+def upload_cnh(motorista_id):
+    """Upload CNH document for a motorista"""
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+    
+    try:
+        # Verificar se motorista existe
+        motorista_ref = db.collection('motoristas').document(motorista_id)
+        motorista_doc = motorista_ref.get()
+        
+        if not motorista_doc.exists:
+            return jsonify({"error": "Motorista não encontrado."}), 404
+        
+        motorista_data = motorista_doc.to_dict()
+        
+        # Verificar se arquivo foi enviado
+        if 'file' not in request.files:
+            return jsonify({"error": "Nenhum arquivo foi enviado."}), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({"error": "Nome do arquivo está vazio."}), 400
+        
+        # Validar tipo de arquivo
+        allowed_extensions = {'pdf', 'jpg', 'jpeg', 'png'}
+        file_ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+        
+        if file_ext not in allowed_extensions:
+            return jsonify({"error": "Tipo de arquivo não permitido. Use PDF, JPG ou PNG."}), 400
+        
+        # DELETAR todos os arquivos antigos de CNH deste motorista
+        # Lista todos os blobs na pasta do motorista
+        prefix = f"motoristas/{motorista_id}/"
+        blobs_to_delete = bucket.list_blobs(prefix=prefix)
+        for old_blob in blobs_to_delete:
+            if 'cnh' in old_blob.name:
+                old_blob.delete()
+                print(f"🗑️ Arquivo antigo deletado: {old_blob.name}")
+        
+        # Criar nome do arquivo no Storage com timestamp para evitar cache
+        timestamp = int(datetime.now().timestamp())
+        blob_name = f"motoristas/{motorista_id}/cnh_{timestamp}.{file_ext}"
+        blob = bucket.blob(blob_name)
+        
+        # Upload para Firebase Storage
+        blob.upload_from_string(
+            file.read(),
+            content_type=file.content_type
+        )
+        
+        # Tornar o arquivo público (ou gerar signed URL se preferir)
+        blob.make_public()
+        
+        # Obter URL pública
+        cnh_url = blob.public_url
+        
+        print(f"✅ CNH salva em: {blob_name}")
+        print(f"🔗 URL gerada: {cnh_url}")
+        
+        # Atualizar documento do motorista com a URL
+        motorista_ref.update({
+            'cnh_url': cnh_url
+        })
+        
+        # Mensagem diferente se foi atualização ou novo upload
+        mensagem = "CNH atualizada com sucesso." if motorista_data.get('cnh_url') else "CNH enviada com sucesso."
+        
+        return jsonify({
+            "message": mensagem,
+            "cnh_url": cnh_url
+        }), 200
+        
+    except Exception as e:
+        print(f"Erro ao fazer upload da CNH: {e}")
+        return jsonify({"error": "Ocorreu um erro ao fazer upload da CNH."}), 500
+
+
+@app.route('/api/motoristas/<motorista_id>/cnh', methods=['GET'])
+@requires_auth_historico
+def get_cnh(motorista_id):
+    """Get CNH document URL for a motorista"""
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+    
+    try:
+        motorista_ref = db.collection('motoristas').document(motorista_id)
+        motorista_doc = motorista_ref.get()
+        
+        if not motorista_doc.exists:
+            return jsonify({"error": "Motorista não encontrado."}), 404
+        
+        motorista_data = motorista_doc.to_dict()
+        cnh_url = motorista_data.get('cnh_url')
+        
+        if not cnh_url:
+            return jsonify({"error": "CNH não foi enviada para este motorista."}), 404
+        
+        return jsonify({
+            "cnh_url": cnh_url
+        }), 200
+        
+    except Exception as e:
+        print(f"Erro ao buscar CNH: {e}")
+        return jsonify({"error": "Ocorreu um erro ao buscar a CNH."}), 500
+
+
+@app.route('/api/motoristas/<motorista_id>/status', methods=['PATCH'])
+@requires_auth
+def toggle_motorista_status(motorista_id):
+    """Toggle motorista active status"""
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+    
+    try:
+        motorista_ref = db.collection('motoristas').document(motorista_id)
+        motorista_doc = motorista_ref.get()
+        
+        if not motorista_doc.exists:
+            return jsonify({"error": "Motorista não encontrado."}), 404
+        
+        # Obter novo status do body
+        data = request.get_json()
+        
+        if 'status_ativo' not in data:
+            return jsonify({"error": "Campo 'status_ativo' é obrigatório."}), 400
+        
+        status_ativo = data['status_ativo']
+        
+        if not isinstance(status_ativo, bool):
+            return jsonify({"error": "Campo 'status_ativo' deve ser booleano."}), 400
+        
+        # Atualizar status
+        motorista_ref.update({
+            'status_ativo': status_ativo
+        })
+        
+        status_texto = "ativo" if status_ativo else "inativo"
+        
+        return jsonify({
+            "message": f"Motorista marcado como {status_texto}.",
+            "status_ativo": status_ativo
+        }), 200
+        
+    except Exception as e:
+        print(f"Erro ao atualizar status do motorista: {e}")
+        return jsonify({"error": "Ocorreu um erro ao atualizar o status."}), 500
+
+
+# ============================================================================
+# ENDPOINTS DE SAÍDAS (CRUD)
+# ============================================================================
+
+@app.route('/api/saidas/<saida_id>', methods=['PATCH'])
+@requires_auth_historico
+def update_saida(saida_id):
+    """Atualiza uma saída existente"""
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+
+    try:
+        dados = request.get_json()
+        
+        # Validação básica (sem KM)
+        campos_obrigatorios = ['veiculo', 'motorista', 'solicitante', 'trajeto', 'status', 'timestampSaida']
+        for campo in campos_obrigatorios:
+            if campo not in dados:
+                return jsonify({"error": f"Campo obrigatório ausente: {campo}"}), 400
+
+        # Busca o documento
+        saida_ref = db.collection('saidas').document(saida_id)
+        saida_doc = saida_ref.get()
+
+        if not saida_doc.exists:
+            return jsonify({"error": "Saída não encontrada."}), 404
+
+        # Converte timestamps de string ISO para datetime
+        try:
+            # timestampSaida vem como string ISO do frontend (ex: "2025-09-23T16:42:00")
+            ts_saida_str = dados['timestampSaida']
+            # Remove 'Z' se existir e converte para datetime
+            if ts_saida_str.endswith('Z'):
+                ts_saida_str = ts_saida_str[:-1]
+            ts_saida = datetime.fromisoformat(ts_saida_str)
+            # Se não tem timezone, assume LOCAL_TZ
+            if ts_saida.tzinfo is None:
+                ts_saida = ts_saida.replace(tzinfo=LOCAL_TZ)
+            # Converte para UTC para salvar no Firestore
+            ts_saida_utc = ts_saida.astimezone(timezone.utc)
+        except Exception as e:
+            print(f"❌ Erro ao converter timestampSaida: {e}")
+            return jsonify({"error": f"Formato de data inválido: {e}"}), 400
+
+        # Prepara dados para atualização
+        update_data = {
+            'veiculo': dados['veiculo'].upper(),
+            'motorista': dados['motorista'],
+            'solicitante': dados['solicitante'],
+            'trajeto': dados['trajeto'],
+            'status': dados['status'],
+            'timestampSaida': ts_saida_utc
+        }
+
+        # Campos opcionais
+        if dados.get('timestampChegada'):
+            try:
+                ts_chegada_str = dados['timestampChegada']
+                if ts_chegada_str.endswith('Z'):
+                    ts_chegada_str = ts_chegada_str[:-1]
+                ts_chegada = datetime.fromisoformat(ts_chegada_str)
+                if ts_chegada.tzinfo is None:
+                    ts_chegada = ts_chegada.replace(tzinfo=LOCAL_TZ)
+                ts_chegada_utc = ts_chegada.astimezone(timezone.utc)
+                update_data['timestampChegada'] = ts_chegada_utc
+            except:
+                pass  # Ignora se der erro na chegada
+        
+        # Atualiza no Firestore
+        saida_ref.update(update_data)
+        
+        print(f"✅ Saída {saida_id} atualizada com sucesso")
+        print(f"📅 Timestamp salvo (UTC): {update_data['timestampSaida']}")
+        return jsonify({"message": "Saída atualizada com sucesso.", "id": saida_id}), 200
+
+    except Exception as e:
+        print(f"❌ Erro ao atualizar saída: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/saidas/<saida_id>', methods=['DELETE'])
+@requires_auth_historico
+def delete_saida(saida_id):
+    """Exclui uma saída do histórico"""
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+
+    try:
+        saida_ref = db.collection('saidas').document(saida_id)
+        saida_doc = saida_ref.get()
+
+        if not saida_doc.exists:
+            return jsonify({"error": "Saída não encontrada."}), 404
+
+        # Deleta o documento
+        saida_ref.delete()
+        
+        print(f"🗑️ Saída {saida_id} excluída com sucesso")
+        return jsonify({"message": "Saída excluída com sucesso."}), 200
+
+    except Exception as e:
+        print(f"❌ Erro ao excluir saída: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ============================================================================
+# FIM DOS ENDPOINTS DE SAÍDAS
+# ============================================================================
+
+
 @app.route('/motoristas')
+@requires_auth
 def motoristas_page():
     if not FIRESTORE_AVAILABLE:
         return render_template('maintenance.html'), 503
     return render_template('motoristas.html')
 
 
+@app.route('/historico')
+@requires_auth_historico
+def historico_page():
+    """Página de histórico somente leitura (COM autenticação separada)"""
+    if not FIRESTORE_AVAILABLE:
+        return render_template('maintenance.html'), 503
+    return render_template('historico.html')
+
+# Removido: /relatorios e /veiculos agora são abas do dashboard
+# @app.route('/relatorios')
+# @app.route('/veiculos')
+
+
 @app.route('/motorista')
+@requires_auth
 def motorista_root_redirect():
     # Legacy or mistyped path: redirect to the motoristas list page
     return redirect(url_for('motoristas_page'))
 
 
 @app.route('/motorista.html')
+@requires_auth
 def motorista_html_redirect():
     # Some users might try to open the template path directly; redirect to the route
     return redirect(url_for('motoristas_page'))
+
+
+# Removido: /veiculos agora é aba do dashboard
+# Se alguém acessar /veiculos, redireciona para dashboard
+@app.route('/veiculos')
+@requires_auth
+def veiculos_page():
+    """Renderiza a página de veículos, que é parte do dashboard."""
+    return render_template('dashboard.html', active_tab='veiculos')
 
 
 @app.route('/api/veiculos/refuel', methods=['POST'])
@@ -545,14 +1097,32 @@ def post_refuel():
         doc_ref.set(doc)
         doc_id = doc_ref.id
 
-        # Atualiza veículo com último odômetro se fornecido
-        if odometro is not None:
-            veiculos_ref = db.collection('veiculos')
-            # procura doc do veículo
-            q = list(veiculos_ref.where(filter=firestore.FieldFilter('placa', '==', veiculo)).limit(1).stream())
-            if q:
-                vdoc = q[0]
-                vdoc.reference.update({'ultimo_odometro': int(odometro)})
+        # Verifica/Cria veículo e atualiza último odômetro E contador de refuels
+        veiculos_ref = db.collection('veiculos')
+        q = list(veiculos_ref.where(filter=firestore.FieldFilter('placa', '==', veiculo)).limit(1).stream())
+        
+        if not q:
+            # Veículo não existe, criar com campos completos
+            veiculos_ref.add({
+                'placa': veiculo,
+                'tipo': 'Não especificado',
+                'modelo': 'Não especificado',
+                'ano': None,
+                'km_atual': int(odometro) if odometro is not None else 0,
+                'ultimo_odometro': int(odometro) if odometro is not None else None,
+                'status_ativo': True,
+                'dataCadastro': firestore.SERVER_TIMESTAMP,
+                'viagens_totais': 0,
+                'total_refuels': 1
+            })
+            print(f"✅ Veículo {veiculo} criado automaticamente via abastecimento rápido")
+        else:
+            # Veículo existe, atualizar
+            vdoc = q[0]
+            update_fields = {'total_refuels': firestore.Increment(1)}
+            if odometro is not None:
+                update_fields['ultimo_odometro'] = int(odometro)
+            vdoc.reference.update(update_fields)
 
         return jsonify({"message": "Abastecimento registrado com sucesso.", "id": doc_id}), 201
     except Exception as e:
@@ -570,21 +1140,37 @@ def get_refuels_for_veiculo(placa):
     page_size = int(request.args.get('page_size', 20))
     try:
         refuels_ref = db.collection('refuels')
-        # firestore cursor-based pagination is preferred, but for simplicity we will fetch and slice
+        
+        # OTIMIZAÇÃO: Usa offset + limit ao invés de ler TUDO
         query = refuels_ref.where(filter=firestore.FieldFilter('veiculo', '==', placa_norm)).order_by('timestamp', direction=firestore.Query.DESCENDING)
-        docs = list(query.stream())
-        total = len(docs)
-        start = (page - 1) * page_size
-        end = start + page_size
-        page_docs = docs[start:end]
+        
+        # Lê apenas os docs da página atual
+        offset = (page - 1) * page_size
+        page_docs = query.limit(page_size).offset(offset).stream()
+        
         items = []
         for d in page_docs:
             item = d.to_dict()
             item['_id'] = d.id
             items.append(serialize_doc(item))
+        
+        # OTIMIZAÇÃO: Pega total do contador no veículo (se existir)
+        # Se não existir, faz count query (1 leitura agregada)
+        try:
+            veiculo_ref = db.collection('veiculos').where(filter=firestore.FieldFilter('placa', '==', placa_norm)).limit(1)
+            veiculo_docs = list(veiculo_ref.stream())
+            if veiculo_docs:
+                veiculo_data = veiculo_docs[0].to_dict()
+                total = veiculo_data.get('total_refuels', 0)
+            else:
+                # Fallback: estima baseado na página atual
+                total = offset + len(items) + (page_size if len(items) == page_size else 0)
+        except Exception:
+            total = offset + len(items)
+        
         return jsonify({ 'items': items, 'total': total, 'page': page, 'page_size': page_size }), 200
     except Exception as e:
-        print(f"Erro ao buscar refuels: {e}")
+        print(f"❌ Erro ao buscar refuels: {e}")
         return jsonify({"error": "Ocorreu um erro ao buscar abastecimentos."}), 500
 
 
@@ -627,9 +1213,29 @@ def delete_refuel(refuel_id):
         return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
     try:
         ref = db.collection('refuels').document(refuel_id)
-        if not ref.get().exists:
+        doc = ref.get()
+        if not doc.exists:
             return jsonify({"error": "Abastecimento não encontrado."}), 404
+        
+        # Pega a placa antes de deletar para decrementar contador
+        refuel_data = doc.to_dict()
+        veiculo = refuel_data.get('veiculo')
+        
         ref.delete()
+        
+        # Decrementa o contador no veículo
+        if veiculo:
+            try:
+                veiculos_ref = db.collection('veiculos')
+                q = list(veiculos_ref.where(filter=firestore.FieldFilter('placa', '==', veiculo)).limit(1).stream())
+                if q:
+                    vdoc = q[0]
+                    current_total = vdoc.to_dict().get('total_refuels', 0)
+                    if current_total > 0:
+                        vdoc.reference.update({'total_refuels': firestore.Increment(-1)})
+            except Exception as e:
+                print(f"Erro ao decrementar contador de refuels: {e}")
+        
         return jsonify({"message": "Abastecimento removido."}), 200
     except Exception as e:
         print(f"Erro em delete_refuel: {e}")
@@ -728,6 +1334,15 @@ def calculate_vehicle_metrics(placa, month_param=None):
             except Exception:
                 km_no_mes = None
 
+        # Calcular total de litros abastecidos
+        total_litros = sum(float(it.get('litros', 0) or 0) for it in items)
+        
+        # Calcular km rodados estimado (total_litros × km/l médio)
+        km_rodados = None
+        media_usar = media_val if media_flag else (kmpl_medio if kmpl_medio is not None else None)
+        if media_usar is not None and total_litros > 0:
+            km_rodados = total_litros * media_usar
+
         return {
             'km_por_litro_medio': (media_val if media_flag else (round(kmpl_medio, 2) if kmpl_medio is not None else None)),
             'km_por_litro_medio_computed': round(kmpl_medio, 2) if kmpl_medio is not None else None,
@@ -735,7 +1350,9 @@ def calculate_vehicle_metrics(placa, month_param=None):
             'km_no_mes': km_no_mes,
             'ultimo_odometro': ultimo_odometro,
             'media_informada': media_flag,
-            'media_informada_valor': media_val
+            'media_informada_valor': media_val,
+            'total_litros': round(total_litros, 2) if total_litros else 0,
+            'km_rodados': round(km_rodados, 2) if km_rodados is not None else None
         }
     except Exception as e:
         print(f"Erro ao calcular métricas: {e}")
@@ -786,14 +1403,17 @@ def get_refuels_summary():
 
     try:
         refuels_ref = db.collection('refuels')
-        docs = list(refuels_ref.stream())
+        
+        # OTIMIZAÇÃO CRÍTICA: Reduzido de 5000 para 500
+        # 5000 docs = consome toda a quota em poucos reloads
+        # 500 docs = suficiente para ver padrões recentes
+        docs_total = list(refuels_ref.limit(500).stream())  # 90% de economia!
+        
         totals = {}
-        totals_month = {}
-        for d in docs:
+        for d in docs_total:
             r = d.to_dict()
             placa = r.get('veiculo')
             litros = r.get('litros')
-            ts = r.get('timestamp')
             if not placa or litros is None:
                 continue
             try:
@@ -801,21 +1421,53 @@ def get_refuels_summary():
             except Exception:
                 continue
             totals[placa] = totals.get(placa, 0) + litros_val
-            if month_start and month_end and ts:
-                # ts can be datetime or string
-                try:
-                    if isinstance(ts, str):
-                        t = datetime.fromisoformat(ts)
-                        if t.tzinfo is None:
-                            t = t.replace(tzinfo=timezone.utc)
-                    elif isinstance(ts, datetime):
-                        t = ts
-                    else:
+
+        # Para o mês, usa query filtrada (muito mais eficiente)
+        totals_month = {}
+        if month_start and month_end:
+            try:
+                query_month = refuels_ref.where(filter=And([
+                    firestore.FieldFilter('timestamp', '>=', month_start),
+                    firestore.FieldFilter('timestamp', '<=', month_end)
+                ])).limit(1000)
+                
+                docs_month = list(query_month.stream())
+                
+                for d in docs_month:
+                    r = d.to_dict()
+                    placa = r.get('veiculo')
+                    litros = r.get('litros')
+                    if not placa or litros is None:
                         continue
-                    if t >= month_start and t <= month_end:
-                        totals_month[placa] = totals_month.get(placa, 0) + litros_val
-                except Exception:
-                    continue
+                    try:
+                        litros_val = float(litros)
+                    except Exception:
+                        continue
+                    totals_month[placa] = totals_month.get(placa, 0) + litros_val
+            except Exception as e:
+                print(f"Erro ao buscar refuels do mês: {e}")
+                # Fallback: filtra no Python se a query falhar
+                for d in docs_total:
+                    r = d.to_dict()
+                    placa = r.get('veiculo')
+                    litros = r.get('litros')
+                    ts = r.get('timestamp')
+                    if not placa or litros is None or not ts:
+                        continue
+                    try:
+                        litros_val = float(litros)
+                        if isinstance(ts, str):
+                            t = datetime.fromisoformat(ts)
+                            if t.tzinfo is None:
+                                t = t.replace(tzinfo=timezone.utc)
+                        elif isinstance(ts, datetime):
+                            t = ts
+                        else:
+                            continue
+                        if t >= month_start and t <= month_end:
+                            totals_month[placa] = totals_month.get(placa, 0) + litros_val
+                    except Exception:
+                        continue
 
         # Prepare response sorted by liters desc
         def to_sorted(labels_dict):
@@ -864,12 +1516,20 @@ def patch_veiculo(placa):
             return jsonify({"error": "Veículo não encontrado."}), 404
         vdoc = q[0]
         update_fields = {}
-        # Permitimos atualizar media_kmpl, ultimo_odometro e outros campos livres
+        
+        # Permite atualizar modelo
+        if 'modelo' in data:
+            modelo = data.get('modelo', '').strip()
+            update_fields['modelo'] = modelo if modelo else None
+            
+        # Permite atualizar media_kmpl
         if 'media_kmpl' in data:
             try:
                 update_fields['media_kmpl'] = float(data.get('media_kmpl')) if data.get('media_kmpl') not in (None, '') else None
             except Exception:
                 return jsonify({"error": "Valor inválido para media_kmpl."}), 400
+                
+        # Permite atualizar ultimo_odometro
         if 'ultimo_odometro' in data:
             try:
                 update_fields['ultimo_odometro'] = int(data.get('ultimo_odometro')) if data.get('ultimo_odometro') not in (None, '') else None
@@ -885,6 +1545,55 @@ def patch_veiculo(placa):
         print(f"Erro em patch_veiculo: {e}")
         return jsonify({"error": "Ocorreu um erro ao atualizar veículo."}), 500
 
+@app.route('/api/veiculos/<placa>', methods=['DELETE'])
+def delete_veiculo(placa):
+    """Excluir veículo"""
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+    
+    try:
+        placa_norm = normalize_plate(placa)
+        veiculos_ref = db.collection('veiculos')
+        q = list(veiculos_ref.where(filter=firestore.FieldFilter('placa', '==', placa_norm)).limit(1).stream())
+        
+        if not q:
+            return jsonify({"error": "Veículo não encontrado."}), 404
+        
+        vdoc = q[0]
+        veiculo_data = vdoc.to_dict()
+        
+        # Se tem documento no storage, deletar também
+        if veiculo_data.get('documento_url'):
+            try:
+                # Extrair o caminho do arquivo da URL
+                documento_url = veiculo_data['documento_url']
+                if 'firebasestorage.googleapis.com' in documento_url:
+                    # Parse o caminho do arquivo
+                    import urllib.parse
+                    path_start = documento_url.find('/o/') + 3
+                    path_end = documento_url.find('?')
+                    if path_start > 2 and path_end > path_start:
+                        file_path = urllib.parse.unquote(documento_url[path_start:path_end])
+                        bucket = firebase_storage.bucket()
+                        blob = bucket.blob(file_path)
+                        blob.delete()
+                        print(f"✅ Documento do veículo {placa_norm} deletado do storage: {file_path}")
+            except Exception as e:
+                print(f"⚠️ Erro ao deletar documento do storage: {e}")
+                # Continua mesmo se falhar a exclusão do arquivo
+        
+        # Deletar documento do Firestore
+        vdoc.reference.delete()
+        print(f"✅ Veículo {placa_norm} excluído com sucesso")
+        
+        return jsonify({"message": "Veículo excluído com sucesso."}), 200
+        
+    except Exception as e:
+        print(f"❌ Erro ao excluir veículo: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": "Ocorreu um erro ao excluir o veículo."}), 500
+
 @app.route('/api/veiculos', methods=['GET'])
 def get_veiculos():
     if not db:
@@ -892,12 +1601,231 @@ def get_veiculos():
     
     try:
         veiculos_ref = db.collection('veiculos').stream()
-        veiculos = [serialize_doc(doc.to_dict()) for doc in veiculos_ref]
+        veiculos = []
+        for doc in veiculos_ref:
+            veiculo_data = serialize_doc(doc.to_dict())
+            veiculo_data['id'] = doc.id  # Adiciona o ID do documento
+            veiculos.append(veiculo_data)
         return jsonify(veiculos), 200
 
     except Exception as e:
         print(f"Erro ao buscar veículos: {e}")
         return jsonify({"error": "Ocorreu um erro ao buscar os veículos."}), 500
+
+
+@app.route('/api/veiculos', methods=['POST'])
+def post_veiculo():
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Requisição inválida."}), 400
+    
+    placa = (data.get('placa') or '').strip().upper()
+    if not placa:
+        return jsonify({"error": "Placa é obrigatória."}), 400
+    
+    try:
+        # Verificar se já existe
+        veiculos_ref = db.collection('veiculos')
+        existing = veiculos_ref.where(filter=firestore.FieldFilter('placa', '==', placa)).limit(1).get()
+        if len(list(existing)) > 0:
+            return jsonify({"error": "Veículo com esta placa já existe."}), 400
+        
+        # Criar novo veículo
+        veiculo_data = {
+            'placa': placa,
+            'modelo': data.get('modelo', '').strip(),
+            'timestamp': datetime.now(timezone.utc),
+            'documento_url': None,  # Campo para documento do veículo
+            'status_ativo': True    # Status ativo/inativo do veículo
+        }
+        
+        if 'media_kmpl' in data and data.get('media_kmpl'):
+            try:
+                veiculo_data['media_kmpl'] = float(data.get('media_kmpl'))
+            except:
+                pass
+        
+        veiculos_ref.add(veiculo_data)
+        return jsonify({"message": "Veículo cadastrado com sucesso.", "placa": placa}), 201
+        
+    except Exception as e:
+        print(f"Erro ao cadastrar veículo: {e}")
+        return jsonify({"error": "Ocorreu um erro ao cadastrar o veículo."}), 500
+
+
+@app.route('/api/veiculos/<veiculo_id>/upload-documento', methods=['POST'])
+@requires_auth
+def upload_documento_veiculo(veiculo_id):
+    """Upload documento do veículo"""
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+    
+    try:
+        # Verificar se veículo existe
+        veiculo_ref = db.collection('veiculos').document(veiculo_id)
+        veiculo_doc = veiculo_ref.get()
+        
+        if not veiculo_doc.exists:
+            return jsonify({"error": "Veículo não encontrado."}), 404
+        
+        veiculo_data = veiculo_doc.to_dict()
+        
+        # Verificar se arquivo foi enviado
+        if 'file' not in request.files:
+            return jsonify({"error": "Nenhum arquivo foi enviado."}), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({"error": "Nome do arquivo está vazio."}), 400
+        
+        # Validar tipo de arquivo
+        allowed_extensions = {'pdf', 'jpg', 'jpeg', 'png'}
+        file_ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+        
+        if file_ext not in allowed_extensions:
+            return jsonify({"error": "Tipo de arquivo não permitido. Use PDF, JPG ou PNG."}), 400
+        
+        # DELETAR todos os arquivos antigos de documento deste veículo
+        prefix = f"veiculos/{veiculo_id}/"
+        blobs_to_delete = bucket.list_blobs(prefix=prefix)
+        for old_blob in blobs_to_delete:
+            if 'documento' in old_blob.name:
+                old_blob.delete()
+                print(f"🗑️ Arquivo antigo deletado: {old_blob.name}")
+        
+        # Criar nome do arquivo no Storage com timestamp para evitar cache
+        timestamp = int(datetime.now().timestamp())
+        blob_name = f"veiculos/{veiculo_id}/documento_{timestamp}.{file_ext}"
+        blob = bucket.blob(blob_name)
+        
+        # Upload para Firebase Storage
+        blob.upload_from_string(
+            file.read(),
+            content_type=file.content_type
+        )
+        
+        # Tornar o arquivo público
+        blob.make_public()
+        
+        # Obter URL pública
+        documento_url = blob.public_url
+        
+        print(f"✅ Documento salvo em: {blob_name}")
+        print(f"🔗 URL gerada: {documento_url}")
+        
+        # Atualizar documento do veículo com a URL
+        veiculo_ref.update({
+            'documento_url': documento_url
+        })
+        
+        # Mensagem diferente se foi atualização ou novo upload
+        mensagem = "Documento atualizado com sucesso." if veiculo_data.get('documento_url') else "Documento enviado com sucesso."
+        
+        return jsonify({
+            "message": mensagem,
+            "documento_url": documento_url
+        }), 200
+        
+    except Exception as e:
+        print(f"Erro ao fazer upload do documento: {e}")
+        return jsonify({"error": "Ocorreu um erro ao fazer upload do documento."}), 500
+
+
+@app.route('/api/veiculos/<veiculo_id>/documento', methods=['GET'])
+@requires_auth_historico
+def get_documento_veiculo(veiculo_id):
+    """Get documento URL for a veiculo"""
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+    
+    try:
+        veiculo_ref = db.collection('veiculos').document(veiculo_id)
+        veiculo_doc = veiculo_ref.get()
+        
+        if not veiculo_doc.exists:
+            return jsonify({"error": "Veículo não encontrado."}), 404
+        
+        veiculo_data = veiculo_doc.to_dict()
+        documento_url = veiculo_data.get('documento_url')
+        
+        if not documento_url:
+            return jsonify({"error": "Documento não foi enviado para este veículo."}), 404
+        
+        return jsonify({
+            "documento_url": documento_url
+        }), 200
+        
+    except Exception as e:
+        print(f"Erro ao buscar documento: {e}")
+        return jsonify({"error": "Ocorreu um erro ao buscar o documento."}), 500
+
+
+@app.route('/api/veiculos/<veiculo_id>/status', methods=['PATCH'])
+@requires_auth
+def toggle_veiculo_status(veiculo_id):
+    """Toggle veiculo active status - aceita ID do documento ou placa"""
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+    
+    try:
+        # Tentar buscar por ID do documento primeiro
+        veiculo_ref = db.collection('veiculos').document(veiculo_id)
+        veiculo_doc = veiculo_ref.get()
+        
+        # Se não encontrar por ID, tentar por placa
+        if not veiculo_doc.exists:
+            print(f"⚠️ Veículo não encontrado por ID: {veiculo_id}, tentando por placa...")
+            placas_query = db.collection('veiculos').where(
+                filter=firestore.FieldFilter('placa', '==', veiculo_id.upper())
+            ).limit(1).stream()
+            
+            placas_docs = list(placas_query)
+            
+            if not placas_docs:
+                return jsonify({"error": "Veículo não encontrado."}), 404
+            
+            # Usar o documento encontrado pela placa
+            veiculo_doc = placas_docs[0]
+            veiculo_ref = veiculo_doc.reference
+        
+        # Obter novo status do body
+        data = request.get_json()
+        
+        if 'status_ativo' not in data:
+            return jsonify({"error": "Campo 'status_ativo' é obrigatório."}), 400
+        
+        status_ativo = data['status_ativo']
+        
+        if not isinstance(status_ativo, bool):
+            return jsonify({"error": "Campo 'status_ativo' deve ser booleano."}), 400
+        
+        # Atualizar status
+        veiculo_ref.update({
+            'status_ativo': status_ativo
+        })
+        
+        status_texto = "ativo" if status_ativo else "inativo"
+        
+        return jsonify({
+            "message": f"Veículo marcado como {status_texto}.",
+            "status_ativo": status_ativo
+        }), 200
+        
+    except Exception as e:
+        print(f"Erro ao atualizar status do veículo: {e}")
+        return jsonify({"error": "Ocorreu um erro ao atualizar o status."}), 500
+
+
+import time
+
+# Cache simples para dashboard (1 hora = 3600 segundos)
+# Não é limpo automaticamente - use o botão "Atualizar" no dashboard
+dashboard_cache = {}
+CACHE_DURATION = 3600  # 1 hora
 
 @app.route('/api/dashboard_stats', methods=['GET'])
 def get_dashboard_stats():
@@ -905,17 +1833,38 @@ def get_dashboard_stats():
         return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
 
     try:
-        # Essas leituras agora são a fonte dos seus totais
-        saidas_docs = [] # NÃO VAMOS MAIS LER TUDO DE SAIDAS AQUI
+        now = time.time()
+        
+        # Se o frontend enviar ?month=YYYY-MM, usaremos esse intervalo apenas para os charts mensais
+        month_param = request.args.get('month')  # formato esperado: YYYY-MM
+        
+        # OTIMIZAÇÃO: Verifica cache (5 minutos) - MAS CONSIDERA O MÊS FILTRADO
+        # Cache deve ser diferente para cada mês
+        cache_key = month_param if month_param else 'default'
+        
+        # ✅ CACHE ATIVO: 5 minutos (300s) - Atualiza apenas quando necessário
+        # Invalidado automaticamente em novas saídas/chegadas
+        # Garante que a chave existe no cache
+        if cache_key not in dashboard_cache:
+            dashboard_cache[cache_key] = {'data': None, 'expires': 0}
+        
+        if dashboard_cache[cache_key].get('expires', 0) > now and dashboard_cache[cache_key].get('data'):
+            print(f'✅ Dashboard do CACHE (mês: {cache_key}) - economia ~160 leituras')
+            return jsonify(dashboard_cache[cache_key]['data']), 200
+        print(f'� Recalculando dashboard (cache expirado: {cache_key})')
+            
+        # OTIMIZAÇÃO: Lê apenas motoristas e veículos (poucos docs)
         motoristas_docs = list(db.collection('motoristas').stream())
         veiculos_docs = list(db.collection('veiculos').stream())
 
-        now = datetime.now(timezone.utc)
-        start_of_today = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        thirty_days_ago = now - timedelta(days=30)
-
-        # Se o frontend enviar ?month=YYYY-MM, usaremos esse intervalo apenas para os charts mensais
-        month_param = request.args.get('month')  # formato esperado: YYYY-MM
+        now_datetime = datetime.now(timezone.utc)  # Para comparações de data
+        
+        # ✅ CORREÇÃO: start_of_today deve ser 00:00 no fuso LOCAL, depois converter para UTC
+        now_local = datetime.now(LOCAL_TZ)
+        start_of_today_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+        start_of_today = start_of_today_local.astimezone(timezone.utc)  # Converte para UTC
+        print(f"🕐 Hoje LOCAL: {start_of_today_local} → UTC: {start_of_today}")
+        
         month_start = None
         month_end = None
         if month_param:
@@ -923,6 +1872,8 @@ def get_dashboard_stats():
                 year, month = month_param.split('-')
                 year = int(year)
                 month = int(month)
+                print(f"🔍 Filtrando dashboard por mês: {month_param} (ano={year}, mês={month})")
+                
                 # início do mês no fuso local (00:00 do primeiro dia)
                 month_start_local = datetime(year, month, 1, 0, 0, 0, tzinfo=LOCAL_TZ)
                 # fim do mês: primeiro dia do próximo mês menos 1 segundo
@@ -931,29 +1882,58 @@ def get_dashboard_stats():
                 else:
                     next_month_local = datetime(year, month + 1, 1, 0, 0, 0, tzinfo=LOCAL_TZ)
                 month_end_local = next_month_local - timedelta(seconds=1)
+                
+                print(f"📅 Período local: {month_start_local} até {month_end_local}")
+                
                 # converter para UTC para comparar com timestamps armazenados em UTC
                 month_start = month_start_local.astimezone(timezone.utc)
                 month_end = month_end_local.astimezone(timezone.utc)
-            except Exception:
+                
+                print(f"📅 Período UTC: {month_start} até {month_end}")
+            except Exception as e:
+                print(f"❌ Erro ao parsear mês: {e}")
                 month_start = None
                 month_end = None
         
-        # Você ainda precisa ler as saídas DO MÊS.
-        # Vamos fazer uma consulta eficiente SÓ PARA O MÊS.
-        
-        window_start = month_start if month_start else thirty_days_ago
-        window_end = month_end if month_end else now
+        # OTIMIZAÇÃO: Lê SOMENTE o período necessário (mês específico ou 30 dias)
+        window_start = month_start if month_start else (now_datetime - timedelta(days=30))
+        window_end = month_end if month_end else now_datetime
 
-        # Consulta eficiente para os dados do mês/período
+        # OTIMIZAÇÃO: Query com LIMIT AGRESSIVO (50 docs max)
+        print(f"🔎 Buscando saídas entre {window_start} e {window_end}")
         query_mes = db.collection('saidas').where(filter=And([
             firestore.FieldFilter('timestampSaida', '>=', window_start),
             firestore.FieldFilter('timestampSaida', '<=', window_end)
-        ]))
+        ])).limit(50)  # ✅ REDUZIDO PARA 50 (economia massiva)
         saidas_mes_docs = list(query_mes.stream())
         saidas_mes = [doc.to_dict() for doc in saidas_mes_docs]
+        print(f"✅ Encontrou {len(saidas_mes)} saídas no período (LIMIT 50)")
+        
+        # DEBUG: Mostra as primeiras 3 datas para verificar
+        if saidas_mes:
+            for i, s in enumerate(saidas_mes[:3]):
+                ts = s.get('timestampSaida')
+                print(f"  📅 Saída {i+1}: {ts} (tipo: {type(ts)})")
+        elif month_param:
+            # Se não encontrou nada no mês filtrado, mostra TODAS as datas disponíveis
+            print(f"⚠️ Não encontrou registros para {month_param}. Listando TODAS as datas disponíveis:")
+            all_saidas = list(db.collection('saidas').limit(50).stream())
+            for i, doc in enumerate(all_saidas[:10]):
+                data = doc.to_dict()
+                ts = data.get('timestampSaida')
+                print(f"  📅 Registro {i+1}: {ts}")
+        
+        # ✅ CORREÇÃO: Viagens HOJE deve ser uma query SEPARADA (não usar saidas_mes)
+        # porque "HOJE" sempre mostra o dia atual, independente do filtro de mês
+        end_of_today = start_of_today + timedelta(days=1) - timedelta(seconds=1)
+        query_hoje = db.collection('saidas').where(filter=And([
+            firestore.FieldFilter('timestampSaida', '>=', start_of_today),
+            firestore.FieldFilter('timestampSaida', '<=', end_of_today)
+        ])).stream()
+        viagens_hoje = len(list(query_hoje))
+        print(f"📊 Viagens HOJE: {viagens_hoje} (entre {start_of_today} e {end_of_today})")
         
         viagens_em_curso = 0
-        viagens_hoje = 0
         total_horas_em_rua_seconds = 0
 
         # Processa apenas as saídas do mês para estatísticas mensais
@@ -964,9 +1944,6 @@ def get_dashboard_stats():
 
             if saida.get('status') == 'em_curso':
                 viagens_em_curso += 1
-            
-            if timestamp_saida >= start_of_today:
-                viagens_hoje += 1
 
             if saida.get('status') == 'finalizada':
                 timestamp_chegada = saida.get('timestampChegada')
@@ -1014,10 +1991,21 @@ def get_dashboard_stats():
         viagens_por_veiculo_mes = dict(Counter(viagens_mes_veiculos))
         viagens_por_motorista_mes = dict(Counter(viagens_mes_motoristas))
 
-        # ... (lógica do histórico recente, use o .limit(50) que sugeri antes) ...
-        query_hist = db.collection('saidas').order_by('timestampSaida', direction=firestore.Query.DESCENDING).limit(50)
+        # OTIMIZAÇÃO: Histórico recente - limit reduzido de 50 para 20 (60% economia)
+        # Dashboard não precisa mostrar mais de 20 registros recentes
+        query_hist = db.collection('saidas').order_by('timestampSaida', direction=firestore.Query.DESCENDING).limit(20)
         historico_recente_docs = query_hist.stream()
-        historico_recente = [serialize_doc(doc.to_dict()) for doc in historico_recente_docs]
+        historico_recente = []
+        for doc in historico_recente_docs:
+            data = serialize_doc(doc.to_dict())
+            data['id'] = doc.id  # Adiciona o ID do documento
+            historico_recente.append(data)
+        
+        # Debug: verificar se os IDs estão sendo adicionados
+        if historico_recente:
+            print(f'📋 Histórico recente: {len(historico_recente)} registros')
+            print(f'🔍 Primeiro registro tem ID? {historico_recente[0].get("id") is not None}')
+        
         historico_final = sorted(historico_recente, key=lambda x: x.get('status') == 'em_curso', reverse=True)
 
 
@@ -1059,10 +2047,90 @@ def get_dashboard_stats():
             "historico_recente": historico_final
         }
 
+        # Salva no cache (5 minutos) - POR MÊS
+        cache_timestamp = time.time()
+        
+        # ✅ CACHE REATIVADO: 5 minutos (300 segundos)
+        # Garante que a chave existe antes de salvar
+        if cache_key not in dashboard_cache:
+            dashboard_cache[cache_key] = {}
+            
+        dashboard_cache[cache_key]['data'] = stats
+        dashboard_cache[cache_key]['expires'] = cache_timestamp + 300  # 5 minutos
+        print(f'� Dashboard no cache por 5min (mês: {cache_key})')
+
         return jsonify(stats)
 
     except Exception as e:
         print(f"Erro em get_dashboard_stats: {e}")
+        return jsonify({"error": "Ocorreu um erro ao calcular as estatísticas."}), 500
+
+
+@app.route('/api/dashboard_cache/clear', methods=['POST'])
+@requires_auth
+def clear_dashboard_cache():
+    """Limpa o cache do dashboard manualmente"""
+    try:
+        global dashboard_cache
+        dashboard_cache.clear()
+        print(f'🗑️ Cache do dashboard limpo manualmente')
+        return jsonify({"message": "Cache limpo com sucesso"}), 200
+    except Exception as e:
+        print(f"Erro ao limpar cache: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/dashboard_realtime', methods=['GET'])
+def get_dashboard_realtime():
+    """
+    Retorna estatísticas em TEMPO REAL (SEM CACHE)
+    Para atualização instantânea de veículos em curso e viagens de hoje
+    """
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+
+    try:
+        now_datetime = datetime.now(timezone.utc)
+        start_of_today = now_datetime.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        # Busca APENAS saídas de hoje
+        query_hoje = db.collection('saidas').where(
+            filter=firestore.FieldFilter('timestampSaida', '>=', start_of_today)
+        ).stream()
+        
+        saidas_hoje = [doc.to_dict() for doc in query_hoje]
+        
+        # Calcula estatísticas
+        viagens_em_curso = sum(1 for s in saidas_hoje if s.get('status') == 'em_curso')
+        viagens_hoje = len(saidas_hoje)
+        
+        # Calcula total de horas na rua (apenas viagens finalizadas hoje)
+        total_horas_em_rua_seconds = 0
+        for saida in saidas_hoje:
+            if saida.get('status') == 'finalizada':
+                ts_saida = saida.get('timestampSaida')
+                ts_chegada = saida.get('timestampChegada')
+                if ts_saida and ts_chegada and isinstance(ts_saida, datetime) and isinstance(ts_chegada, datetime):
+                    delta = (ts_chegada - ts_saida).total_seconds()
+                    if delta > 0:
+                        total_horas_em_rua_seconds += delta
+        
+        # Formata horas
+        total_horas = int(total_horas_em_rua_seconds // 3600)
+        total_minutos = int((total_horas_em_rua_seconds % 3600) // 60)
+        total_horas_na_rua = f'{total_horas:02d}:{total_minutos:02d}'
+        
+        result = {
+            'viagens_em_curso': viagens_em_curso,
+            'viagens_hoje': viagens_hoje,
+            'total_horas_na_rua': total_horas_na_rua,
+            'timestamp': now_datetime.isoformat()
+        }
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        print(f"Erro em get_dashboard_realtime: {e}")
         return jsonify({"error": "Ocorreu um erro ao calcular as estatísticas."}), 500
 
 
@@ -1108,11 +2176,16 @@ def handle_saida(veiculo_placa, motorista_nome, solicitante, trajeto, horario=No
         veiculo_docs = list(veiculo_query)
 
         if not veiculo_docs:
-            # Veículo é novo. Cria o documento já com o total 1.
+            # Veículo é novo. Cria o documento já com o total 1 e campos necessários.
             veiculos_ref.add({
                 'placa': veiculo_placa,
+                'tipo': 'Não especificado',  # Campo padrão
+                'modelo': 'Não especificado',  # Campo padrão
+                'ano': None,
+                'km_atual': 0,
+                'status_ativo': True,  # Ativo por padrão
                 'dataCadastro': firestore.SERVER_TIMESTAMP,
-                'viagens_totais': 1 # Inicia a contagem em 1
+                'viagens_totais': 1  # Inicia a contagem em 1
             })
         else:
             # Veículo já existe. Incrementa o total.
@@ -1126,22 +2199,21 @@ def handle_saida(veiculo_placa, motorista_nome, solicitante, trajeto, horario=No
         now_local = now_utc.astimezone(LOCAL_TZ)
 
         horario_saida_str = horario
-        timestamp_saida = now_utc
+        timestamp_saida = now_local  # Usa horário local, não UTC
 
         if horario:  # Se um horário foi fornecido
             try:
                 horario_obj = datetime.strptime(horario, "%H:%M").time()
-                # Cria o datetime no fuso horário local
+                # Cria o datetime no fuso horário local (dia de hoje + horário informado)
                 local_dt = now_local.replace(hour=horario_obj.hour, minute=horario_obj.minute, second=0, microsecond=0)
-                # Converte para UTC para armazenamento
-                timestamp_saida = local_dt.astimezone(timezone.utc)
+                timestamp_saida = local_dt  # Mantém em horário local
                 horario_saida_str = horario_obj.strftime("%H:%M")
             except ValueError:
                 # Se o formato do horário for inválido, usa a hora atual como fallback
-                timestamp_saida = now_utc
+                timestamp_saida = now_local
                 horario_saida_str = now_local.strftime("%H:%M")
         else:  # Se nenhum horário foi fornecido
-            timestamp_saida = now_utc
+            timestamp_saida = now_local
             horario_saida_str = now_local.strftime("%H:%M")
 
         saidas_ref.add({
@@ -1155,6 +2227,11 @@ def handle_saida(veiculo_placa, motorista_nome, solicitante, trajeto, horario=No
             'horarioChegada': "",
             'timestampChegada': None
         })
+
+        # ✅ INVALIDA O CACHE DO DASHBOARD e HISTÓRICO após nova saída
+        dashboard_cache.clear()
+        historico_cache['expires'] = 0  # Invalida cache do histórico também
+        print("🗑️ Cache do dashboard e histórico invalidados após nova saída")
 
         return f"Saída do veículo {veiculo_placa} registrada com sucesso."
 
@@ -1228,17 +2305,39 @@ def handle_chegada(veiculo_placa, horario=None, litros=None, odometro=None):
                     'observacao': '',
                     'timestamp': timestamp_chegada
                 })
-                # Atualiza o ultimo odometro no veiculo
-                if odometro_val is not None:
-                    veiculos_ref = db.collection('veiculos')
-                    q = list(veiculos_ref.where(filter=firestore.FieldFilter('placa', '==', veiculo_placa)).limit(1).stream())
-                    if q:
-                        vdoc = q[0]
-                        vdoc.reference.update({'ultimo_odometro': int(odometro_val)})
+                
+                # Verifica/Cria o veículo se não existir
+                veiculos_ref = db.collection('veiculos')
+                q = list(veiculos_ref.where(filter=firestore.FieldFilter('placa', '==', veiculo_placa)).limit(1).stream())
+                
+                if not q:
+                    # Veículo não existe, criar com campos completos
+                    veiculos_ref.add({
+                        'placa': veiculo_placa,
+                        'tipo': 'Não especificado',
+                        'modelo': 'Não especificado',
+                        'ano': None,
+                        'km_atual': int(odometro_val) if odometro_val is not None else 0,
+                        'ultimo_odometro': int(odometro_val) if odometro_val is not None else None,
+                        'status_ativo': True,
+                        'dataCadastro': firestore.SERVER_TIMESTAMP,
+                        'viagens_totais': 0
+                    })
+                    print(f"✅ Veículo {veiculo_placa} criado automaticamente via abastecimento")
+                elif odometro_val is not None:
+                    # Atualiza o ultimo odometro no veiculo existente
+                    vdoc = q[0]
+                    vdoc.reference.update({'ultimo_odometro': int(odometro_val)})
+                
                 return_msg += ' Abastecimento registrado (litros/odômetro).'
         except Exception as e:
             print(f"Erro ao registrar refuel na chegada: {e}")
             # não falha a chegada por causa do refuel
+
+        # ✅ INVALIDA O CACHE DO DASHBOARD e HISTÓRICO após chegada
+        dashboard_cache.clear()
+        historico_cache['expires'] = 0  # Invalida cache do histórico também
+        print("🗑️ Cache do dashboard e histórico invalidados após chegada")
 
         return return_msg
 
@@ -1246,8 +2345,1714 @@ def handle_chegada(veiculo_placa, horario=None, litros=None, odometro=None):
         print(f"Erro no handle_chegada: {e}")
         return "Ocorreu um erro interno ao registrar a chegada."
 
+
+# ========================================
+# ROTAS - KM MENSAL
+# ========================================
+
+@app.route('/api/km-mensal', methods=['GET'])
+@requires_auth
+def get_km_mensal():
+    """Lista todos os registros de KM mensal, opcionalmente filtrados por veículo, mês ou ano."""
+    print("🔍 [KM MENSAL] Iniciando requisição GET /api/km-mensal")
+    
+    if not db:
+        print("❌ [KM MENSAL] Erro: DB não conectado")
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+    
+    try:
+        placa = request.args.get('placa')
+        mes_ano = request.args.get('mes_ano')  # formato: YYYY-MM
+        ano = request.args.get('ano')  # formato: YYYY (novo filtro)
+        
+        print(f"📋 [KM MENSAL] Filtros: placa={placa}, mes_ano={mes_ano}, ano={ano}")
+        
+        km_ref = db.collection('km_mensal')
+        
+        # Aplica filtros se fornecidos
+        if placa:
+            km_ref = km_ref.where(filter=firestore.FieldFilter('placa', '==', placa.upper()))
+        if mes_ano:
+            km_ref = km_ref.where(filter=firestore.FieldFilter('mes_ano', '==', mes_ano))
+        elif ano:
+            # Filtrar por range de datas do ano
+            # mes_ano >= '2025-01' AND mes_ano <= '2025-12'
+            ano_inicio = f"{ano}-01"
+            ano_fim = f"{ano}-12"
+            km_ref = km_ref.where(filter=firestore.FieldFilter('mes_ano', '>=', ano_inicio))
+            km_ref = km_ref.where(filter=firestore.FieldFilter('mes_ano', '<=', ano_fim))
+        
+        # Ordena se possível (pode falhar se faltarem índices)
+        try:
+            if not placa and not mes_ano and not ano:
+                print("📊 [KM MENSAL] Ordenando no Firestore")
+                km_ref = km_ref.order_by('mes_ano', direction=firestore.Query.DESCENDING)
+        except:
+            print("⚠️ [KM MENSAL] Não foi possível ordenar no Firestore")
+        
+        print("🔄 [KM MENSAL] Buscando documentos...")
+        docs = km_ref.stream()
+        registros = []
+        for doc in docs:
+            data = doc.to_dict()
+            data['id'] = doc.id
+            # Serializa timestamp se existir
+            if 'data_registro' in data and isinstance(data['data_registro'], datetime):
+                data['data_registro'] = data['data_registro'].isoformat()
+            registros.append(data)
+        
+        print(f"✅ [KM MENSAL] Encontrados {len(registros)} registros")
+        
+        # Ordena em Python sempre
+        print("📊 [KM MENSAL] Ordenando em Python")
+        registros.sort(key=lambda x: x.get('mes_ano', ''), reverse=True)
+        
+        return jsonify(registros), 200
+    except Exception as e:
+        print(f"❌ [KM MENSAL] Erro: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/km-mensal', methods=['POST'])
+@requires_auth
+def post_km_mensal():
+    """Cria ou atualiza um registro de KM mensal (UPSERT)."""
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+    
+    data = request.get_json() or {}
+    placa = (data.get('placa') or '').strip().upper()
+    mes_ano = (data.get('mes_ano') or '').strip()  # formato: YYYY-MM
+    km_valor = data.get('km_valor')
+    observacao = (data.get('observacao') or '').strip()
+    
+    if not placa or not mes_ano or km_valor is None:
+        return jsonify({"error": "Campos 'placa', 'mes_ano' e 'km_valor' são obrigatórios."}), 400
+    
+    # Valida formato mes_ano (YYYY-MM)
+    if not re.match(r'^\d{4}-\d{2}$', mes_ano):
+        return jsonify({"error": "Formato de 'mes_ano' inválido. Use YYYY-MM."}), 400
+    
+    try:
+        km_ref = db.collection('km_mensal')
+        
+        # Verifica se já existe registro para este veículo neste mês
+        existing = list(km_ref.where(filter=And([
+            firestore.FieldFilter('placa', '==', placa),
+            firestore.FieldFilter('mes_ano', '==', mes_ano)
+        ])).limit(1).stream())
+        
+        doc_data = {
+            'placa': placa,
+            'mes_ano': mes_ano,
+            'km_valor': int(km_valor),
+            'observacao': observacao,
+            'ativo': True,
+            'data_registro': firestore.SERVER_TIMESTAMP
+        }
+        
+        if existing:
+            # Atualiza o registro existente
+            existing_doc = existing[0]
+            existing_doc.reference.update({
+                'km_valor': int(km_valor),
+                'observacao': observacao,
+                'data_registro': firestore.SERVER_TIMESTAMP
+            })
+            return jsonify({"message": "Registro de KM atualizado com sucesso."}), 200
+        else:
+            # Cria novo registro
+            km_ref.add(doc_data)
+            return jsonify({"message": "Registro de KM criado com sucesso."}), 201
+            
+    except Exception as e:
+        print(f"Erro ao salvar KM mensal: {e}")
+        return jsonify({"error": "Erro ao salvar registro de KM mensal."}), 500
+
+
+@app.route('/api/km-mensal/<registro_id>', methods=['PUT'])
+@requires_auth
+def update_km_mensal(registro_id):
+    """Atualiza um registro de KM mensal existente."""
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+    
+    data = request.get_json() or {}
+    
+    try:
+        km_ref = db.collection('km_mensal').document(registro_id)
+        km_doc = km_ref.get()
+        
+        if not km_doc.exists:
+            return jsonify({"error": "Registro não encontrado."}), 404
+        
+        # Campos atualizáveis
+        update_data = {}
+        
+        if 'ativo' in data:
+            update_data['ativo'] = bool(data['ativo'])
+        if 'km_valor' in data:
+            update_data['km_valor'] = int(data['km_valor']) if data['km_valor'] is not None else None
+        if 'observacao' in data:
+            update_data['observacao'] = data['observacao'].strip()
+        
+        update_data['data_registro'] = firestore.SERVER_TIMESTAMP
+        
+        if update_data:
+            km_ref.update(update_data)
+            return jsonify({"message": "Registro atualizado com sucesso."}), 200
+        else:
+            return jsonify({"message": "Nenhum campo para atualizar."}), 200
+            
+    except Exception as e:
+        print(f"Erro ao atualizar KM mensal: {e}")
+        return jsonify({"error": "Erro ao atualizar registro."}), 500
+
+
+@app.route('/api/km-mensal/<registro_id>', methods=['DELETE'])
+@requires_auth
+def delete_km_mensal(registro_id):
+    """Deleta um registro de KM mensal."""
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+    
+    try:
+        km_ref = db.collection('km_mensal').document(registro_id)
+        km_doc = km_ref.get()
+        
+        if not km_doc.exists:
+            return jsonify({"error": "Registro não encontrado."}), 404
+        
+        km_ref.delete()
+        return jsonify({"message": "Registro deletado com sucesso."}), 200
+        
+    except Exception as e:
+        print(f"Erro ao deletar KM mensal: {e}")
+        return jsonify({"error": "Erro ao deletar registro."}), 500
+
+
+# ========================================
+# ROTAS - MULTAS
+# ========================================
+
+@app.route('/api/multas', methods=['GET'])
+@requires_auth
+def get_multas():
+    """Lista todas as multas, opcionalmente filtradas por veículo ou status."""
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+    
+    try:
+        placa = request.args.get('placa')
+        status = request.args.get('status')  # pendente, paga, contestada
+        
+        multas_ref = db.collection('multas')
+        
+        # Aplica filtros se fornecidos
+        if placa:
+            multas_ref = multas_ref.where(filter=firestore.FieldFilter('placa', '==', placa.upper()))
+        if status:
+            multas_ref = multas_ref.where(filter=firestore.FieldFilter('status', '==', status))
+        
+        # Ordena por data de vencimento (mais próxima primeiro)
+        multas_ref = multas_ref.order_by('data_vencimento')
+        
+        docs = multas_ref.stream()
+        multas = []
+        for doc in docs:
+            data = doc.to_dict()
+            data['id'] = doc.id
+            # Serializa datas
+            for field in ['data_infracao', 'data_vencimento', 'data_pagamento', 'data_registro']:
+                if field in data and isinstance(data[field], datetime):
+                    data[field] = data[field].isoformat()
+            multas.append(data)
+        
+        return jsonify(multas), 200
+    except Exception as e:
+        print(f"Erro ao buscar multas: {e}")
+        return jsonify({"error": "Erro ao buscar multas."}), 500
+
+
+@app.route('/api/multas', methods=['POST'])
+@requires_auth
+def post_multa():
+    """Cria uma nova multa."""
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+    
+    data = request.get_json() or {}
+    placa = (data.get('placa') or '').strip().upper()
+    descricao = (data.get('descricao') or '').strip()
+    data_infracao = (data.get('data_infracao') or '').strip()
+    data_vencimento = (data.get('data_vencimento') or '').strip()
+    valor = data.get('valor')
+    motorista = (data.get('motorista') or '').strip()
+    local = (data.get('local') or '').strip()
+    observacao = (data.get('observacao') or '').strip()
+    status = (data.get('status') or 'pendente').strip()
+    
+    if not placa or not descricao or not data_vencimento or valor is None:
+        return jsonify({"error": "Campos 'placa', 'descricao', 'data_vencimento' e 'valor' são obrigatórios."}), 400
+    
+    try:
+        # Converte datas para datetime
+        dt_infracao = None
+        if data_infracao:
+            dt_infracao = datetime.fromisoformat(data_infracao.replace('Z', '+00:00'))
+        
+        dt_vencimento = datetime.fromisoformat(data_vencimento.replace('Z', '+00:00'))
+        
+        # Cria a multa
+        multas_ref = db.collection('multas')
+        doc_data = {
+            'placa': placa,
+            'descricao': descricao,
+            'data_infracao': dt_infracao,
+            'data_vencimento': dt_vencimento,
+            'valor': float(valor),
+            'motorista': motorista,
+            'local': local,
+            'observacao': observacao,
+            'status': status,
+            'data_registro': firestore.SERVER_TIMESTAMP,
+            'data_pagamento': None
+        }
+        
+        multas_ref.add(doc_data)
+        
+        return jsonify({"message": "Multa registrada com sucesso."}), 201
+    except Exception as e:
+        print(f"Erro ao criar multa: {e}")
+        return jsonify({"error": "Erro ao criar multa."}), 500
+
+
+@app.route('/api/multas/<multa_id>', methods=['PUT'])
+@requires_auth
+def update_multa(multa_id):
+    """Atualiza uma multa existente."""
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+    
+    data = request.get_json() or {}
+    
+    try:
+        multa_ref = db.collection('multas').document(multa_id)
+        multa_doc = multa_ref.get()
+        
+        if not multa_doc.exists:
+            return jsonify({"error": "Multa não encontrada."}), 404
+        
+        update_data = {}
+        
+        # Campos atualizáveis
+        if 'descricao' in data:
+            update_data['descricao'] = data['descricao'].strip()
+        if 'data_infracao' in data and data['data_infracao']:
+            update_data['data_infracao'] = datetime.fromisoformat(data['data_infracao'].replace('Z', '+00:00'))
+        if 'data_vencimento' in data and data['data_vencimento']:
+            update_data['data_vencimento'] = datetime.fromisoformat(data['data_vencimento'].replace('Z', '+00:00'))
+        if 'valor' in data:
+            update_data['valor'] = float(data['valor'])
+        if 'motorista' in data:
+            update_data['motorista'] = data['motorista'].strip()
+        if 'local' in data:
+            update_data['local'] = data['local'].strip()
+        if 'observacao' in data:
+            update_data['observacao'] = data['observacao'].strip()
+        if 'status' in data:
+            update_data['status'] = data['status'].strip()
+            # Se marcar como paga, registra data de pagamento
+            if data['status'] == 'paga' and 'data_pagamento' not in update_data:
+                update_data['data_pagamento'] = firestore.SERVER_TIMESTAMP
+        if 'data_pagamento' in data and data['data_pagamento']:
+            update_data['data_pagamento'] = datetime.fromisoformat(data['data_pagamento'].replace('Z', '+00:00'))
+        
+        if update_data:
+            multa_ref.update(update_data)
+            return jsonify({"message": "Multa atualizada com sucesso."}), 200
+        else:
+            return jsonify({"message": "Nenhum campo para atualizar."}), 200
+            
+    except Exception as e:
+        print(f"Erro ao atualizar multa: {e}")
+        return jsonify({"error": "Erro ao atualizar multa."}), 500
+
+
+@app.route('/api/multas/<multa_id>', methods=['DELETE'])
+@requires_auth
+def delete_multa(multa_id):
+    """Deleta uma multa."""
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+    
+    try:
+        multa_ref = db.collection('multas').document(multa_id)
+        multa_doc = multa_ref.get()
+        
+        if not multa_doc.exists:
+            return jsonify({"error": "Multa não encontrada."}), 404
+        
+        multa_data = multa_doc.to_dict()
+        
+        # Se tem documento no storage, deletar também
+        if multa_data.get('documento_url'):
+            try:
+                # Extrair o caminho do arquivo da URL
+                documento_url = multa_data['documento_url']
+                if 'firebasestorage.googleapis.com' in documento_url:
+                    import urllib.parse
+                    path_start = documento_url.find('/o/') + 3
+                    path_end = documento_url.find('?')
+                    if path_start > 2 and path_end > path_start:
+                        file_path = urllib.parse.unquote(documento_url[path_start:path_end])
+                        bucket = firebase_storage.bucket()
+                        blob = bucket.blob(file_path)
+                        blob.delete()
+                        print(f"✅ Documento da multa {multa_id} deletado do storage: {file_path}")
+            except Exception as e:
+                print(f"⚠️ Erro ao deletar documento do storage: {e}")
+        
+        multa_ref.delete()
+        return jsonify({"message": "Multa deletada com sucesso."}), 200
+        
+    except Exception as e:
+        print(f"Erro ao deletar multa: {e}")
+        return jsonify({"error": "Erro ao deletar multa."}), 500
+
+
+@app.route('/api/multas/<multa_id>/upload-documento', methods=['POST'])
+@requires_auth
+def upload_documento_multa(multa_id):
+    """Upload documento da multa"""
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+    
+    try:
+        # Verificar se multa existe
+        multa_ref = db.collection('multas').document(multa_id)
+        multa_doc = multa_ref.get()
+        
+        if not multa_doc.exists:
+            return jsonify({"error": "Multa não encontrada."}), 404
+        
+        multa_data = multa_doc.to_dict()
+        
+        # Verificar se tem arquivo
+        if 'file' not in request.files:
+            return jsonify({"error": "Nenhum arquivo foi enviado."}), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({"error": "Nome de arquivo vazio."}), 400
+        
+        # Validar tipo de arquivo
+        allowed_extensions = {'.pdf', '.jpg', '.jpeg', '.png'}
+        file_ext = os.path.splitext(file.filename)[1].lower()
+        
+        if file_ext not in allowed_extensions:
+            return jsonify({"error": f"Tipo de arquivo não permitido. Use: {', '.join(allowed_extensions)}"}), 400
+        
+        # Se já existe documento, deletar o antigo do storage
+        if multa_data.get('documento_url'):
+            try:
+                old_url = multa_data['documento_url']
+                if 'firebasestorage.googleapis.com' in old_url:
+                    import urllib.parse
+                    path_start = old_url.find('/o/') + 3
+                    path_end = old_url.find('?')
+                    if path_start > 2 and path_end > path_start:
+                        old_file_path = urllib.parse.unquote(old_url[path_start:path_end])
+                        bucket = firebase_storage.bucket()
+                        old_blob = bucket.blob(old_file_path)
+                        old_blob.delete()
+                        print(f"✅ Documento antigo da multa deletado: {old_file_path}")
+            except Exception as e:
+                print(f"⚠️ Erro ao deletar documento antigo: {e}")
+        
+        # Gerar nome único para o arquivo
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        placa = multa_data.get('placa', 'SEMPLACA')
+        safe_filename = f"multa_{placa}_{timestamp}{file_ext}"
+        
+        # Upload para Firebase Storage
+        bucket = firebase_storage.bucket()
+        blob = bucket.blob(f'multas/{safe_filename}')
+        blob.upload_from_file(file, content_type=file.content_type)
+        
+        # Tornar o arquivo publicamente acessível
+        blob.make_public()
+        documento_url = blob.public_url
+        
+        # Atualizar Firestore com a URL do documento
+        multa_ref.update({
+            'documento_url': documento_url,
+            'documento_updated_at': datetime.now(timezone.utc)
+        })
+        
+        print(f"✅ Documento da multa {multa_id} enviado: {safe_filename}")
+        
+        return jsonify({
+            "message": "Documento enviado com sucesso!",
+            "documento_url": documento_url
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Erro ao fazer upload do documento da multa: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": "Erro ao fazer upload do documento."}), 500
+
+
+@app.route('/api/multas/<multa_id>/documento', methods=['GET'])
+def get_documento_multa(multa_id):
+    """Retorna a URL do documento da multa"""
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+    
+    try:
+        multa_ref = db.collection('multas').document(multa_id)
+        multa_doc = multa_ref.get()
+        
+        if not multa_doc.exists:
+            return jsonify({"error": "Multa não encontrada."}), 404
+        
+        multa_data = multa_doc.to_dict()
+        documento_url = multa_data.get('documento_url')
+        
+        if not documento_url:
+            return jsonify({"error": "Multa não possui documento anexado."}), 404
+        
+        return jsonify({"documento_url": documento_url}), 200
+        
+    except Exception as e:
+        print(f"Erro ao buscar documento da multa: {e}")
+        return jsonify({"error": "Erro ao buscar documento."}), 500
+
+
+# ============================================
+# REVISÕES - Gestão de Manutenção Periódica
+# ============================================
+
+@app.route('/api/revisoes', methods=['GET', 'POST'])
+def revisoes():
+    """Lista todas as revisões ou cria uma nova"""
+    if not db:
+        return jsonify({"error": "Banco de dados não conectado"}), 500
+    
+    if request.method == 'GET':
+        try:
+            placa_filtro = request.args.get('placa', '').strip().upper()
+            status_filtro = request.args.get('status', '').strip().lower()
+            
+            revisoes_ref = db.collection('revisoes')
+            
+            if placa_filtro:
+                revisoes_ref = revisoes_ref.where('placa', '==', placa_filtro)
+            
+            revisoes_docs = revisoes_ref.order_by('data_revisao', direction=firestore.Query.DESCENDING).stream()
+            
+            revisoes_list = []
+            for doc in revisoes_docs:
+                revisao = doc.to_dict()
+                revisao['id'] = doc.id
+                
+                # Calcular status dinamicamente baseado no KM atual do KM Mensal
+                if 'km_proxima_revisao' in revisao and 'placa' in revisao:
+                    # Buscar último registro de KM do veículo
+                    km_docs = db.collection('km_mensal').where('placa', '==', revisao['placa']).order_by('mes_ano', direction=firestore.Query.DESCENDING).limit(1).stream()
+                    km_atual = 0
+                    
+                    for km_doc in km_docs:
+                        km_data = km_doc.to_dict()
+                        km_atual = km_data.get('km_valor', 0) or 0
+                        break
+                    
+                    km_proxima = revisao.get('km_proxima_revisao', 0)
+                    
+                    if km_atual > 0:
+                        if km_atual >= km_proxima:
+                            revisao['status'] = 'atrasada'
+                        elif km_atual >= (km_proxima - 1000):  # 1000 km antes
+                            revisao['status'] = 'proxima'
+                        else:
+                            revisao['status'] = 'em_dia'
+                        
+                        revisao['km_atual'] = km_atual
+                        revisao['km_restante'] = km_proxima - km_atual
+                    else:
+                        revisao['status'] = 'em_dia'
+                        revisao['km_atual'] = 0
+                        revisao['km_restante'] = km_proxima
+                
+                # Aplicar filtro de status se especificado
+                if status_filtro and revisao.get('status', '') != status_filtro:
+                    continue
+                
+                revisoes_list.append(revisao)
+            
+            return jsonify(revisoes_list), 200
+            
+        except Exception as e:
+            print(f"Erro ao buscar revisões: {e}")
+            return jsonify({"error": "Erro ao buscar revisões."}), 500
+    
+    elif request.method == 'POST':
+        try:
+            data = request.json
+            
+            # Validações
+            if not data.get('placa') or not data.get('tipo_revisao'):
+                return jsonify({"error": "Placa e tipo de revisão são obrigatórios."}), 400
+            
+            placa = data['placa'].strip().upper()
+            
+            # Criar documento de revisão
+            revisao = {
+                'placa': placa,
+                'tipo_revisao': data.get('tipo_revisao', '').strip(),
+                'km_revisao': int(data.get('km_revisao', 0)),
+                'data_revisao': data.get('data_revisao'),
+                'km_proxima_revisao': int(data.get('km_proxima_revisao', 0)),
+                'data_proxima_prevista': data.get('data_proxima_prevista'),
+                'oficina': data.get('oficina', '').strip(),
+                'valor': float(data.get('valor', 0)) if data.get('valor') else None,
+                'observacao': data.get('observacao', '').strip(),
+                'created_at': datetime.now(timezone.utc),
+                'updated_at': datetime.now(timezone.utc)
+            }
+            
+            db.collection('revisoes').add(revisao)
+            
+            print(f"✅ Revisão cadastrada: {placa} - {revisao['tipo_revisao']}")
+            return jsonify({"message": "Revisão cadastrada com sucesso!"}), 201
+            
+        except ValueError as ve:
+            return jsonify({"error": f"Erro de validação: {str(ve)}"}), 400
+        except Exception as e:
+            print(f"Erro ao criar revisão: {e}")
+            return jsonify({"error": "Erro ao criar revisão."}), 500
+
+
+@app.route('/api/revisoes/<revisao_id>', methods=['GET', 'PUT', 'DELETE'])
+def revisao_detail(revisao_id):
+    """Obtém, atualiza ou deleta uma revisão específica"""
+    if not db:
+        return jsonify({"error": "Banco de dados não conectado"}), 500
+    
+    revisao_ref = db.collection('revisoes').document(revisao_id)
+    
+    if request.method == 'GET':
+        try:
+            revisao_doc = revisao_ref.get()
+            if not revisao_doc.exists:
+                return jsonify({"error": "Revisão não encontrada."}), 404
+            
+            revisao = revisao_doc.to_dict()
+            revisao['id'] = revisao_doc.id
+            
+            return jsonify(revisao), 200
+            
+        except Exception as e:
+            print(f"Erro ao buscar revisão: {e}")
+            return jsonify({"error": "Erro ao buscar revisão."}), 500
+    
+    elif request.method == 'PUT':
+        try:
+            data = request.json
+            
+            revisao_doc = revisao_ref.get()
+            if not revisao_doc.exists:
+                return jsonify({"error": "Revisão não encontrada."}), 404
+            
+            # Atualizar campos
+            update_data = {
+                'placa': data.get('placa', '').strip().upper(),
+                'tipo_revisao': data.get('tipo_revisao', '').strip(),
+                'km_revisao': int(data.get('km_revisao', 0)),
+                'data_revisao': data.get('data_revisao'),
+                'km_proxima_revisao': int(data.get('km_proxima_revisao', 0)),
+                'data_proxima_prevista': data.get('data_proxima_prevista'),
+                'oficina': data.get('oficina', '').strip(),
+                'valor': float(data.get('valor', 0)) if data.get('valor') else None,
+                'observacao': data.get('observacao', '').strip(),
+                'updated_at': datetime.now(timezone.utc)
+            }
+            
+            revisao_ref.update(update_data)
+            
+            print(f"✅ Revisão {revisao_id} atualizada")
+            return jsonify({"message": "Revisão atualizada com sucesso!"}), 200
+            
+        except ValueError as ve:
+            return jsonify({"error": f"Erro de validação: {str(ve)}"}), 400
+        except Exception as e:
+            print(f"Erro ao atualizar revisão: {e}")
+            return jsonify({"error": "Erro ao atualizar revisão."}), 500
+    
+    elif request.method == 'DELETE':
+        try:
+            revisao_doc = revisao_ref.get()
+            if not revisao_doc.exists:
+                return jsonify({"error": "Revisão não encontrada."}), 404
+            
+            revisao_ref.delete()
+            
+            print(f"✅ Revisão {revisao_id} deletada")
+            return jsonify({"message": "Revisão deletada com sucesso."}), 200
+            
+        except Exception as e:
+            print(f"Erro ao deletar revisão: {e}")
+            return jsonify({"error": "Erro ao deletar revisão."}), 500
+
+
+# ============================================
+# ROTAS DE GERAÇÃO DE PDF
+# ============================================
+
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib import colors
+from reportlab.lib.units import cm
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from io import BytesIO
+
+@app.route('/pdf/motoristas', methods=['GET'])
+def pdf_motoristas():
+    """Gera PDF com lista de todos os motoristas"""
+    if not db:
+        return jsonify({"error": "Banco de dados não conectado"}), 500
+    
+    try:
+        # Obter filtro de status (todos, ativos, inativos)
+        filtro_status = request.args.get('status', 'todos')  # 'todos', 'ativos', 'inativos'
+        
+        # Buscar motoristas
+        motoristas_ref = db.collection('motoristas').stream()
+        motoristas = []
+        for doc in motoristas_ref:
+            m = doc.to_dict()
+            m['id'] = doc.id
+            
+            # Aplicar filtro de status
+            status_ativo = m.get('status_ativo', True)  # Default true se não existir
+            if filtro_status == 'ativos' and not status_ativo:
+                continue
+            elif filtro_status == 'inativos' and status_ativo:
+                continue
+            
+            motoristas.append(m)
+        
+        # Criar PDF
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
+        elements = []
+        
+        # Estilos
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            textColor=colors.HexColor('#1f2937'),
+            spaceAfter=30,
+            alignment=TA_CENTER
+        )
+        
+        # Título com filtro
+        titulo_filtro = {
+            'todos': 'RELATÓRIO DE MOTORISTAS - TODOS',
+            'ativos': 'RELATÓRIO DE MOTORISTAS - APENAS ATIVOS',
+            'inativos': 'RELATÓRIO DE MOTORISTAS - APENAS INATIVOS'
+        }
+        
+        elements.append(Paragraph(titulo_filtro.get(filtro_status, 'RELATÓRIO DE MOTORISTAS'), title_style))
+        elements.append(Paragraph(f"Gerado em: {datetime.now(LOCAL_TZ).strftime('%d/%m/%Y %H:%M')}", styles['Normal']))
+        elements.append(Paragraph(f"Total de motoristas: {len(motoristas)}", styles['Normal']))
+        elements.append(Spacer(1, 0.5*cm))
+        
+        # Tabela com coluna Status
+        data = [['Nome', 'Empresa', 'Função', 'Status', 'Viagens']]
+        for m in motoristas:
+            status_ativo = m.get('status_ativo', True)
+            status_texto = 'Ativo' if status_ativo else 'Inativo'
+            
+            data.append([
+                m.get('nome', '-'),
+                m.get('empresa', '-'),
+                m.get('funcao', '-'),
+                status_texto,
+                str(m.get('viagens_totais', 0))
+            ])
+        
+        table = Table(data, colWidths=[5*cm, 3.5*cm, 3.5*cm, 2*cm, 2*cm])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4f46e5')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 10),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
+        ]))
+        elements.append(table)
+        
+        # Gerar PDF
+        doc.build(elements)
+        buffer.seek(0)
+        
+        return Response(
+            buffer.getvalue(),
+            mimetype='application/pdf',
+            headers={'Content-Disposition': f'attachment;filename=motoristas_{filtro_status}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'}
+        )
+        
+    except Exception as e:
+        print(f"Erro ao gerar PDF de motoristas: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/pdf/veiculos', methods=['GET'])
+def pdf_veiculos():
+    """Gera PDF com lista de veículos (com filtro de status)"""
+    if not db:
+        return jsonify({"error": "Banco de dados não conectado"}), 500
+    
+    try:
+        # Filtro de status (ativos, inativos ou todos)
+        status_filter = request.args.get('status', 'todos')  # 'todos', 'ativos', 'inativos'
+        
+        # Buscar veículos
+        veiculos_ref = db.collection('veiculos').stream()
+        veiculos = []
+        for doc in veiculos_ref:
+            v = doc.to_dict()
+            v['id'] = doc.id
+            
+            # Aplicar filtro de status
+            status_ativo = v.get('status_ativo', True)
+            if status_filter == 'ativos' and not status_ativo:
+                continue
+            elif status_filter == 'inativos' and status_ativo:
+                continue
+            
+            # Buscar total real de abastecimentos e litros
+            placa = v.get('placa')
+            if placa:
+                refuels_query = db.collection('refuels').where(
+                    filter=firestore.FieldFilter('veiculo', '==', placa)
+                ).stream()
+                
+                total_count = 0
+                total_litros = 0
+                for refuel_doc in refuels_query:
+                    total_count += 1
+                    refuel_data = refuel_doc.to_dict()
+                    litros = refuel_data.get('litros', 0)
+                    if litros:
+                        try:
+                            total_litros += float(litros)
+                        except:
+                            pass
+                
+                v['total_refuels_real'] = total_count
+                v['total_litros_real'] = total_litros
+            else:
+                v['total_refuels_real'] = 0
+                v['total_litros_real'] = 0
+                
+            veiculos.append(v)
+        
+        # Ordenar: ativos primeiro, inativos no final
+        veiculos.sort(key=lambda x: (not x.get('status_ativo', True), x.get('placa', '')))
+        
+        # Criar PDF
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
+        elements = []
+        
+        # Estilos
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            textColor=colors.HexColor('#1f2937'),
+            spaceAfter=30,
+            alignment=TA_CENTER
+        )
+        
+        # Título com filtro
+        if status_filter == 'ativos':
+            titulo = "RELATÓRIO DE VEÍCULOS - APENAS ATIVOS"
+        elif status_filter == 'inativos':
+            titulo = "RELATÓRIO DE VEÍCULOS - APENAS INATIVOS"
+        else:
+            titulo = "RELATÓRIO DE VEÍCULOS - TODOS"
+        
+        elements.append(Paragraph(titulo, title_style))
+        elements.append(Paragraph(f"Gerado em: {datetime.now(LOCAL_TZ).strftime('%d/%m/%Y %H:%M')}", styles['Normal']))
+        elements.append(Spacer(1, 0.5*cm))
+        
+        # Tabela
+        data = [['Placa', 'Modelo', 'Status', 'Km Atual', 'Média km/L', 'Total Abast.', 'Total Litros']]
+        for v in veiculos:
+            total_abast = v.get('total_refuels_real', 0)
+            total_litros = v.get('total_litros_real', 0)
+            status_ativo = v.get('status_ativo', True)
+            status_texto = 'Ativo' if status_ativo else 'Inativo'
+            
+            data.append([
+                v.get('placa', '-'),
+                v.get('modelo', '-'),
+                status_texto,
+                str(v.get('ultimo_odometro', '-')),
+                f"{v.get('media_kmpl', 0):.2f}" if v.get('media_kmpl') else '-',
+                str(total_abast),
+                f"{total_litros:.1f}L" if total_litros > 0 else '0L'
+            ])
+        
+        table = Table(data, colWidths=[2.2*cm, 3.0*cm, 1.8*cm, 2.2*cm, 2.4*cm, 2.4*cm, 2.4*cm])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#10b981')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 10),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
+        ]))
+        elements.append(table)
+        
+        # Gerar PDF
+        doc.build(elements)
+        buffer.seek(0)
+        
+        return Response(
+            buffer.getvalue(),
+            mimetype='application/pdf',
+            headers={'Content-Disposition': f'attachment;filename=veiculos_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'}
+        )
+        
+    except Exception as e:
+        print(f"Erro ao gerar PDF de veículos: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/pdf/abastecimentos', methods=['GET'])
+def pdf_abastecimentos():
+    """Gera PDF com lista de abastecimentos (filtros opcionais via query params)"""
+    if not db:
+        return jsonify({"error": "Banco de dados não conectado"}), 500
+    
+    try:
+        # Filtros opcionais
+        veiculo = request.args.get('veiculo')
+        data_inicio = request.args.get('data_inicio')
+        data_fim = request.args.get('data_fim')
+        
+        # Query base
+        query = db.collection('refuels')
+        
+        # Aplicar filtros
+        filters = []
+        if veiculo:
+            filters.append(firestore.FieldFilter('veiculo', '==', veiculo))
+        
+        if data_inicio:
+            try:
+                dt_inicio = datetime.fromisoformat(data_inicio)
+                filters.append(firestore.FieldFilter('timestamp', '>=', dt_inicio))
+            except:
+                pass
+        
+        if data_fim:
+            try:
+                dt_fim = datetime.fromisoformat(data_fim)
+                filters.append(firestore.FieldFilter('timestamp', '<=', dt_fim))
+            except:
+                pass
+        
+        if filters:
+            query = query.where(filter=And(filters))
+        
+        # Limitar a 500 registros
+        refuels_docs = list(query.order_by('timestamp', direction=firestore.Query.DESCENDING).limit(500).stream())
+        
+        refuels = []
+        for doc in refuels_docs:
+            r = doc.to_dict()
+            r['id'] = doc.id
+            refuels.append(r)
+        
+        # Criar PDF em paisagem para mais colunas
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=1.5*cm, leftMargin=1.5*cm, topMargin=2*cm, bottomMargin=2*cm)
+        elements = []
+        
+        # Estilos
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            textColor=colors.HexColor('#1f2937'),
+            spaceAfter=30,
+            alignment=TA_CENTER
+        )
+        
+        # Título
+        titulo = "RELATÓRIO DE ABASTECIMENTOS"
+        if veiculo:
+            titulo += f" - Veículo: {veiculo}"
+        elements.append(Paragraph(titulo, title_style))
+        elements.append(Paragraph(f"Gerado em: {datetime.now(LOCAL_TZ).strftime('%d/%m/%Y %H:%M')}", styles['Normal']))
+        elements.append(Spacer(1, 0.5*cm))
+        
+        # Se for de um veículo específico, simplifica (sem valor e km/L)
+        if veiculo:
+            data = [['Data', 'Motorista', 'Litros', 'Odômetro']]
+            
+            if len(refuels) == 0:
+                data.append(['Nenhum abastecimento encontrado', '', '', ''])
+            
+            for r in refuels:
+                ts = r.get('timestamp')
+                data_str = '-'
+                if ts:
+                    if isinstance(ts, datetime):
+                        data_str = ts.strftime('%d/%m/%Y')
+                    else:
+                        try:
+                            data_str = datetime.fromisoformat(str(ts)).strftime('%d/%m/%Y')
+                        except:
+                            pass
+                
+                litros = r.get('litros')
+                odometro = r.get('odometro')
+                
+                data.append([
+                    data_str if data_str else '-',
+                    r.get('motorista', '-') or '-',
+                    f"{float(litros):.1f}L" if litros not in (None, '', 0) else '-',
+                    str(odometro) if odometro not in (None, '', '-') else '-'
+                ])
+            
+            table = Table(data, colWidths=[4*cm, 8*cm, 4*cm, 5*cm])
+        else:
+            # Relatório geral (todos veículos)
+            data = [['Data', 'Veículo', 'Motorista', 'Litros', 'Valor', 'Odômetro', 'km/L']]
+            
+            if len(refuels) == 0:
+                data.append(['Nenhum abastecimento encontrado', '', '', '', '', '', ''])
+            
+            for r in refuels:
+                ts = r.get('timestamp')
+                data_str = '-'
+                if ts:
+                    if isinstance(ts, datetime):
+                        data_str = ts.strftime('%d/%m/%Y')
+                    else:
+                        try:
+                            data_str = datetime.fromisoformat(str(ts)).strftime('%d/%m/%Y')
+                        except:
+                            pass
+                
+                litros = r.get('litros')
+                valor = r.get('valor')
+                odometro = r.get('odometro')
+                kmpl = r.get('kmpl')
+                
+                data.append([
+                    data_str if data_str else '-',
+                    r.get('veiculo', '-') or '-',
+                    r.get('motorista', '-') or '-',
+                    f"{float(litros):.1f}L" if litros not in (None, '', 0) else '-',
+                    f"R$ {float(valor):.2f}" if valor not in (None, '', 0) else '-',
+                    str(odometro) if odometro not in (None, '', '-') else '-',
+                    f"{float(kmpl):.2f}" if kmpl not in (None, '', '-') and isinstance(kmpl, (int, float)) else '-'
+                ])
+            
+            table = Table(data, colWidths=[3*cm, 3*cm, 4*cm, 2.5*cm, 3*cm, 3*cm, 2.5*cm])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f59e0b')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
+        ]))
+        elements.append(table)
+        
+        # Gerar PDF
+        doc.build(elements)
+        buffer.seek(0)
+        
+        filename = f'abastecimentos_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+        return Response(
+            buffer.getvalue(),
+            mimetype='application/pdf',
+            headers={'Content-Disposition': f'attachment;filename={filename}'}
+        )
+        
+    except Exception as e:
+        print(f"Erro ao gerar PDF de abastecimentos: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/pdf/saidas', methods=['GET'])
+def pdf_saidas():
+    """Gera PDF com lista de saídas (filtros opcionais via query params)"""
+    if not db:
+        return jsonify({"error": "Banco de dados não conectado"}), 500
+    
+    try:
+        # Filtros opcionais
+        veiculo = request.args.get('veiculo')
+        motorista = request.args.get('motorista')
+        status = request.args.get('status')  # 'em_curso' ou 'finalizada'
+        data_inicio = request.args.get('data_inicio')
+        data_fim = request.args.get('data_fim')
+        
+        # Query base
+        query = db.collection('saidas')
+        
+        # Aplicar filtros
+        filters = []
+        if veiculo:
+            filters.append(firestore.FieldFilter('veiculo', '==', veiculo))
+        if motorista:
+            filters.append(firestore.FieldFilter('motorista', '==', motorista))
+        if status:
+            filters.append(firestore.FieldFilter('status', '==', status))
+        
+        if data_inicio:
+            try:
+                dt_inicio = datetime.fromisoformat(data_inicio)
+                filters.append(firestore.FieldFilter('timestampSaida', '>=', dt_inicio))
+            except:
+                pass
+        
+        if data_fim:
+            try:
+                dt_fim = datetime.fromisoformat(data_fim)
+                filters.append(firestore.FieldFilter('timestampSaida', '<=', dt_fim))
+            except:
+                pass
+        
+        if filters:
+            query = query.where(filter=And(filters))
+        
+        # Limitar a 500 registros
+        saidas_docs = list(query.order_by('timestampSaida', direction=firestore.Query.DESCENDING).limit(500).stream())
+        
+        saidas = []
+        for doc in saidas_docs:
+            s = doc.to_dict()
+            s['id'] = doc.id
+            saidas.append(s)
+        
+        # Criar PDF em paisagem
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=1.5*cm, leftMargin=1.5*cm, topMargin=2*cm, bottomMargin=2*cm)
+        elements = []
+        
+        # Estilos
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            textColor=colors.HexColor('#1f2937'),
+            spaceAfter=30,
+            alignment=TA_CENTER
+        )
+        
+        # Título
+        titulo = "RELATÓRIO DE SAÍDAS"
+        if veiculo:
+            titulo += f" - Veículo: {veiculo}"
+        if motorista:
+            titulo += f" - Motorista: {motorista}"
+        elements.append(Paragraph(titulo, title_style))
+        elements.append(Paragraph(f"Gerado em: {datetime.now(LOCAL_TZ).strftime('%d/%m/%Y %H:%M')}", styles['Normal']))
+        elements.append(Spacer(1, 0.5*cm))
+        
+        # Tabela
+        data = [['Data Saída', 'Veículo', 'Motorista', 'Destino', 'Status', 'Data Retorno']]
+        for s in saidas:
+            ts_saida = s.get('timestampSaida')
+            data_saida = '-'
+            if ts_saida:
+                if isinstance(ts_saida, datetime):
+                    data_saida = ts_saida.strftime('%d/%m/%Y %H:%M')
+                else:
+                    try:
+                        data_saida = datetime.fromisoformat(str(ts_saida)).strftime('%d/%m/%Y %H:%M')
+                    except:
+                        pass
+            
+            ts_retorno = s.get('timestampRetorno') or s.get('timestampChegada')
+            data_retorno = '-'
+            if ts_retorno:
+                if isinstance(ts_retorno, datetime):
+                    data_retorno = ts_retorno.strftime('%d/%m/%Y %H:%M')
+                else:
+                    try:
+                        data_retorno = datetime.fromisoformat(str(ts_retorno)).strftime('%d/%m/%Y %H:%M')
+                    except:
+                        pass
+            
+            status_text = '✅ Finalizada' if s.get('status') == 'finalizada' else '🚗 Em Curso'
+            
+            # Buscar trajeto/destino
+            destino = s.get('trajeto') or s.get('destino') or '-'
+            if destino != '-' and len(destino) > 30:
+                destino = destino[:30] + '...'
+            
+            data.append([
+                data_saida,
+                s.get('veiculo', '-') or '-',
+                s.get('motorista', '-') or '-',
+                destino,
+                status_text,
+                data_retorno
+            ])
+        
+        table = Table(data, colWidths=[4*cm, 3*cm, 4*cm, 5*cm, 3*cm, 4*cm])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3b82f6')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
+        ]))
+        elements.append(table)
+        
+        # Gerar PDF
+        doc.build(elements)
+        buffer.seek(0)
+        
+        filename = f'saidas_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+        return Response(
+            buffer.getvalue(),
+            mimetype='application/pdf',
+            headers={'Content-Disposition': f'attachment;filename={filename}'}
+        )
+        
+    except Exception as e:
+        print(f"Erro ao gerar PDF de saídas: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/pdf/multas', methods=['GET'])
+def pdf_multas():
+    """Gera PDF com lista de multas (filtros opcionais via query params)"""
+    if not db:
+        return jsonify({"error": "Banco de dados não conectado"}), 500
+    
+    try:
+        # Filtros opcionais
+        veiculo = request.args.get('veiculo')
+        status = request.args.get('status')  # 'pendente', 'paga', 'contestada'
+        data_inicio = request.args.get('data_inicio')
+        data_fim = request.args.get('data_fim')
+        
+        # Query base
+        query = db.collection('multas')
+        
+        # Aplicar filtros
+        filters = []
+        if veiculo:
+            filters.append(firestore.FieldFilter('placa', '==', veiculo))
+        if status:
+            filters.append(firestore.FieldFilter('status', '==', status))
+        
+        if data_inicio:
+            try:
+                dt_inicio = datetime.fromisoformat(data_inicio)
+                filters.append(firestore.FieldFilter('data_vencimento', '>=', dt_inicio))
+            except:
+                pass
+        
+        if data_fim:
+            try:
+                dt_fim = datetime.fromisoformat(data_fim)
+                filters.append(firestore.FieldFilter('data_vencimento', '<=', dt_fim))
+            except:
+                pass
+        
+        if filters:
+            query = query.where(filter=And(filters))
+        
+        # Limitar a 500 registros
+        multas_docs = list(query.order_by('data_vencimento', direction=firestore.Query.DESCENDING).limit(500).stream())
+        
+        multas = []
+        for doc in multas_docs:
+            m = doc.to_dict()
+            m['id'] = doc.id
+            multas.append(m)
+        
+        # Criar PDF em paisagem
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=1.5*cm, leftMargin=1.5*cm, topMargin=2*cm, bottomMargin=2*cm)
+        elements = []
+        
+        # Estilos
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            textColor=colors.HexColor('#1f2937'),
+            spaceAfter=30,
+            alignment=TA_CENTER
+        )
+        
+        # Título
+        titulo = "RELATÓRIO DE MULTAS"
+        if veiculo:
+            titulo += f" - Veículo: {veiculo}"
+        if status:
+            status_texto = {'pendente': 'Pendentes', 'paga': 'Pagas', 'contestada': 'Contestadas'}.get(status, status)
+            titulo += f" - Status: {status_texto}"
+        
+        elements.append(Paragraph(titulo, title_style))
+        elements.append(Paragraph(f"Gerado em: {datetime.now(LOCAL_TZ).strftime('%d/%m/%Y %H:%M')}", styles['Normal']))
+        elements.append(Spacer(1, 0.5*cm))
+        
+        # Tabela
+        data = [['Status', 'Veículo', 'Descrição', 'Valor', 'Vencimento', 'Motorista', 'Local']]
+        
+        if len(multas) == 0:
+            data.append(['Nenhuma multa encontrada', '', '', '', '', '', ''])
+        
+        total_valor = 0
+        for m in multas:
+            data_vencimento = m.get('data_vencimento')
+            data_venc_str = '-'
+            if data_vencimento:
+                if isinstance(data_vencimento, datetime):
+                    data_venc_str = data_vencimento.strftime('%d/%m/%Y')
+                else:
+                    try:
+                        data_venc_str = datetime.fromisoformat(str(data_vencimento)).strftime('%d/%m/%Y')
+                    except:
+                        pass
+            
+            # Status text
+            status_map = {
+                'pendente': '⏳ Pendente',
+                'paga': '✅ Paga',
+                'contestada': '⚖️ Contestada'
+            }
+            status_text = status_map.get(m.get('status', 'pendente'), '⏳ Pendente')
+            
+            # Verifica se está vencida
+            if m.get('status') == 'pendente' and data_vencimento:
+                try:
+                    dt_venc = datetime.fromisoformat(str(data_vencimento)) if isinstance(data_vencimento, str) else data_vencimento
+                    if dt_venc < datetime.now(timezone.utc):
+                        status_text = '⏰ VENCIDA'
+                except:
+                    pass
+            
+            valor = m.get('valor', 0) or 0
+            total_valor += valor
+            
+            descricao = m.get('descricao', '-') or '-'
+            if len(descricao) > 30:
+                descricao = descricao[:30] + '...'
+            
+            local = m.get('local', '-') or '-'
+            if len(local) > 20:
+                local = local[:20] + '...'
+            
+            data.append([
+                status_text,
+                m.get('placa', '-') or '-',
+                descricao,
+                f"R$ {valor:.2f}",
+                data_venc_str,
+                m.get('motorista', '-') or '-',
+                local
+            ])
+        
+        # Adicionar linha de total
+        if len(multas) > 0:
+            data.append(['', '', 'TOTAL:', f"R$ {total_valor:.2f}", '', '', ''])
+        
+        table = Table(data, colWidths=[3.5*cm, 3*cm, 5*cm, 3*cm, 3*cm, 4*cm, 3.5*cm])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#ef4444')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.lightgrey]),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#E5E7EB')),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ]))
+        elements.append(table)
+        
+        # Gerar PDF
+        doc.build(elements)
+        buffer.seek(0)
+        
+        filename = f'multas_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+        return Response(
+            buffer.getvalue(),
+            mimetype='application/pdf',
+            headers={'Content-Disposition': f'attachment;filename={filename}'}
+        )
+        
+    except Exception as e:
+        print(f"Erro ao gerar PDF de multas: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/pdf/revisoes', methods=['GET'])
+def pdf_revisoes():
+    """Gera PDF com lista de revisões (filtros opcionais via query params)"""
+    if not db:
+        return jsonify({"error": "Banco de dados não conectado"}), 500
+    
+    try:
+        # Filtros opcionais
+        veiculo = request.args.get('veiculo')
+        status = request.args.get('status')  # 'em_dia', 'proxima', 'atrasada'
+        
+        # Query base
+        query = db.collection('revisoes')
+        
+        # Aplicar filtro de veículo
+        if veiculo:
+            query = query.where('placa', '==', veiculo)
+        
+        # Buscar revisões
+        revisoes_docs = list(query.order_by('data_revisao', direction=firestore.Query.DESCENDING).limit(500).stream())
+        
+        revisoes = []
+        for doc in revisoes_docs:
+            r = doc.to_dict()
+            r['id'] = doc.id
+            
+            # Calcular status dinâmico usando KM Mensal
+            if 'km_proxima_revisao' in r and 'placa' in r:
+                km_docs = db.collection('km_mensal').where('placa', '==', r['placa']).order_by('mes_ano', direction=firestore.Query.DESCENDING).limit(1).stream()
+                km_atual = 0
+                
+                for km_doc in km_docs:
+                    km_data = km_doc.to_dict()
+                    km_atual = km_data.get('km_valor', 0) or 0
+                    break
+                
+                km_proxima = r.get('km_proxima_revisao', 0)
+                
+                if km_atual > 0:
+                    if km_atual >= km_proxima:
+                        r['status'] = 'atrasada'
+                    elif km_atual >= (km_proxima - 1000):
+                        r['status'] = 'proxima'
+                    else:
+                        r['status'] = 'em_dia'
+                    
+                    r['km_atual'] = km_atual
+                    r['km_restante'] = km_proxima - km_atual
+                else:
+                    r['status'] = 'em_dia'
+                    r['km_atual'] = 0
+                    r['km_restante'] = km_proxima
+            
+            # Aplicar filtro de status se especificado
+            if status and r.get('status', '') != status:
+                continue
+            
+            revisoes.append(r)
+        
+        # Criar PDF em paisagem
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=1.5*cm, leftMargin=1.5*cm, topMargin=2*cm, bottomMargin=2*cm)
+        elements = []
+        
+        # Estilos
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            textColor=colors.HexColor('#1f2937'),
+            spaceAfter=30,
+            alignment=TA_CENTER
+        )
+        
+        # Título
+        titulo = "RELATÓRIO DE REVISÕES PERIÓDICAS"
+        if veiculo:
+            titulo += f" - Veículo: {veiculo}"
+        if status:
+            status_texto = {'em_dia': 'Em Dia', 'proxima': 'Próximas', 'atrasada': 'Atrasadas'}.get(status, status)
+            titulo += f" - Status: {status_texto}"
+        
+        elements.append(Paragraph(titulo, title_style))
+        elements.append(Paragraph(f"Gerado em: {datetime.now(LOCAL_TZ).strftime('%d/%m/%Y %H:%M')}", styles['Normal']))
+        elements.append(Spacer(1, 0.5*cm))
+        
+        # Tabela
+        data = [['Status', 'Veículo', 'Tipo', 'KM Revisão', 'Data', 'KM Próxima', 'KM Restante', 'Oficina']]
+        
+        if len(revisoes) == 0:
+            data.append(['Nenhuma revisão encontrada', '', '', '', '', '', '', ''])
+        
+        for r in revisoes:
+            data_revisao = r.get('data_revisao')
+            data_rev_str = '-'
+            if data_revisao:
+                if isinstance(data_revisao, datetime):
+                    data_rev_str = data_revisao.strftime('%d/%m/%Y')
+                else:
+                    try:
+                        data_rev_str = datetime.fromisoformat(str(data_revisao)).strftime('%d/%m/%Y')
+                    except:
+                        pass
+            
+            # Status text
+            status_map = {
+                'em_dia': '✅ Em dia',
+                'proxima': '⚠️ Próxima',
+                'atrasada': '🚨 Atrasada'
+            }
+            status_text = status_map.get(r.get('status', 'em_dia'), '✅ Em dia')
+            
+            km_restante_str = '-'
+            if 'km_restante' in r:
+                if r['km_restante'] < 0:
+                    km_restante_str = f"{abs(r['km_restante']):,} km atrasado".replace(',', '.')
+                else:
+                    km_restante_str = f"{r['km_restante']:,} km".replace(',', '.')
+            
+            data.append([
+                status_text,
+                r.get('placa', '-') or '-',
+                r.get('tipo_revisao', '-') or '-',
+                f"{r.get('km_revisao', 0):,}".replace(',', '.') if r.get('km_revisao') else '-',
+                data_rev_str,
+                f"{r.get('km_proxima_revisao', 0):,}".replace(',', '.') if r.get('km_proxima_revisao') else '-',
+                km_restante_str,
+                r.get('oficina', '-') or '-'
+            ])
+        
+        table = Table(data, colWidths=[3*cm, 3*cm, 4*cm, 3*cm, 3*cm, 3*cm, 3.5*cm, 4*cm])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#7c3aed')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+        ]))
+        elements.append(table)
+        
+        # Gerar PDF
+        doc.build(elements)
+        buffer.seek(0)
+        
+        filename = f'revisoes_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+        return Response(
+            buffer.getvalue(),
+            mimetype='application/pdf',
+            headers={'Content-Disposition': f'attachment;filename={filename}'}
+        )
+        
+    except Exception as e:
+        print(f"Erro ao gerar PDF de revisões: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/pdf/km-mensal', methods=['GET'])
+@requires_auth
+def gerar_pdf_km_mensal():
+    """Gera PDF com dados de km mensal por veículo"""
+    try:
+        from io import BytesIO
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.lib.units import cm
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet
+        from datetime import datetime
+        
+        # Obter filtros da query string
+        mes_filtro = request.args.get('mes')  # Formato: YYYY-MM
+        ano_filtro = request.args.get('ano')  # Formato: YYYY
+        
+        print(f"📊 [PDF KM] Gerando PDF com filtros: mes={mes_filtro}, ano={ano_filtro}")
+        
+        # Buscar dados de km mensal da coleção km_mensal
+        km_ref = db.collection('km_mensal')
+        
+        # Aplicar filtros
+        if mes_filtro:
+            km_ref = km_ref.where(filter=firestore.FieldFilter('mes_ano', '==', mes_filtro))
+        elif ano_filtro:
+            # Filtrar por ano (YYYY-01 até YYYY-12)
+            km_ref = km_ref.where(filter=firestore.FieldFilter('mes_ano', '>=', f'{ano_filtro}-01'))
+            km_ref = km_ref.where(filter=firestore.FieldFilter('mes_ano', '<=', f'{ano_filtro}-12'))
+        
+        docs = km_ref.stream()
+        
+        # Processar dados
+        registros = []
+        for doc in docs:
+            data = doc.to_dict()
+            registros.append({
+                'placa': data.get('placa', 'N/A'),
+                'mes_ano': data.get('mes_ano', 'N/A'),
+                'km_valor': data.get('km_valor', 0) or 0,
+                'observacao': data.get('observacao', '')
+            })
+        
+        print(f"📦 [PDF KM] Encontrados {len(registros)} registros")
+        
+        # Criar PDF
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=1.5*cm, bottomMargin=1.5*cm)
+        elements = []
+        styles = getSampleStyleSheet()
+        
+        # Título com filtro
+        titulo_filtro = "Relatório de Km Mensal por Veículo"
+        if mes_filtro:
+            mes_nome = datetime.strptime(mes_filtro, '%Y-%m').strftime('%B/%Y')
+            titulo_filtro += f" - {mes_nome}"
+        elif ano_filtro:
+            titulo_filtro += f" - Ano {ano_filtro}"
+        
+        title = Paragraph(f"<b>{titulo_filtro}</b>", styles['Title'])
+        elements.append(title)
+        elements.append(Spacer(1, 0.5*cm))
+        
+        # Subtítulo com data
+        subtitle = Paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", styles['Normal'])
+        elements.append(subtitle)
+        elements.append(Spacer(1, 0.8*cm))
+        
+        # Criar tabela (simplificada)
+        header = ['Placa', 'Mês/Ano', 'KM (Odômetro)', 'Observação']
+        data = [header]
+        
+        if registros:
+            # Ordenar por mes_ano e placa
+            registros.sort(key=lambda x: (x['mes_ano'], x['placa']))
+            
+            for reg in registros:
+                mes_formatado = datetime.strptime(reg['mes_ano'], '%Y-%m').strftime('%b/%Y') if reg['mes_ano'] != 'N/A' else 'N/A'
+                
+                row = [
+                    reg['placa'],
+                    mes_formatado,
+                    f"{reg['km_valor']:,} km".replace(',', '.'),
+                    reg['observacao'][:40] if reg['observacao'] else '-'
+                ]
+                data.append(row)
+        else:
+            data.append(['Nenhum registro encontrado', '', '', ''])
+        
+        # Criar tabela com larguras de coluna ajustadas
+        col_widths = [3.5*cm, 3*cm, 4*cm, 8*cm]
+        table = Table(data, colWidths=col_widths, repeatRows=1)
+        
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4F46E5')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#E5E7EB')),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('FONTNAME', (0, 1), (-1, -2), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.lightgrey])
+        ]))
+        elements.append(table)
+        
+        # Gerar PDF
+        doc.build(elements)
+        buffer.seek(0)
+        
+        # Nome do arquivo com filtro
+        filename_base = 'km_mensal_veiculos'
+        if mes_filtro:
+            filename_base += f'_{mes_filtro}'
+        elif ano_filtro:
+            filename_base += f'_{ano_filtro}'
+        filename = f'{filename_base}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+        
+        print(f"✅ [PDF KM] PDF gerado: {filename}")
+        
+        return Response(
+            buffer.getvalue(),
+            mimetype='application/pdf',
+            headers={'Content-Disposition': f'attachment;filename={filename}'}
+        )
+        
+    except Exception as e:
+        print(f"❌ [PDF KM] Erro ao gerar PDF: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 from waitress import serve
+
+# ✅ Endpoint de health check para UptimeRobot/Render
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint - mantém servidor acordado no Render"""
+    return jsonify({
+        "status": "healthy",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "service": "Frota Sanemar"
+    }), 200
 
 if __name__ == '__main__':
     print("RODOUUUUUUUUUUU")
-    serve(app, host='0.0.0.0', port=5000)
+    # threads=8: Permite processar 8 requisições simultâneas
+    # channel_timeout=60: Timeout de 60s para requisições longas
+    serve(app, host='0.0.0.0', port=5000, threads=8, channel_timeout=60)
