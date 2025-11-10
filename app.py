@@ -65,26 +65,61 @@ def requires_auth_historico(f):
         return f(*args, **kwargs)
     return decorated
 
-# Inicializa o cliente Firestore
-try:
-    db = firestore.Client()
-    print("Conexão com o Firestore estabelecida com sucesso.")
-except Exception as e:
-    print(f"Erro ao conectar com o Firestore: {e}")
-    db = None
+# Inicializa Firebase com suporte para variável de ambiente (produção) ou arquivo local (dev)
+import json
+import tempfile
 
-# Inicializa Firebase Admin SDK para Storage
-try:
-    if not firebase_admin._apps:
-        cred = credentials.Certificate('firebase-credentials.json')
-        firebase_admin.initialize_app(cred, {
-            'storageBucket': 'frota-sanemar.firebasestorage.app'
-        })
-    bucket = firebase_storage.bucket()
-    print("✅ Firebase Storage inicializado com sucesso.")
-except Exception as e:
-    print(f"❌ Erro ao inicializar Firebase Storage: {e}")
-    bucket = None
+def initialize_firebase():
+    """Inicializa Firebase Admin SDK e Firestore.
+    - Produção (Render): Lê credenciais da variável GOOGLE_APPLICATION_CREDENTIALS_JSON
+    - Desenvolvimento: Lê do arquivo firebase-credentials.json
+    """
+    try:
+        # Tenta ler credenciais da variável de ambiente (PRODUÇÃO - Render)
+        credentials_json = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON')
+        
+        if credentials_json:
+            print("🔧 Modo PRODUÇÃO: Lendo credenciais da variável de ambiente")
+            # Cria arquivo temporário com as credenciais
+            credentials_dict = json.loads(credentials_json)
+            
+            # Inicializa Firebase Admin SDK
+            if not firebase_admin._apps:
+                cred = credentials.Certificate(credentials_dict)
+                firebase_admin.initialize_app(cred, {
+                    'storageBucket': 'frota-sanemar.firebasestorage.app'
+                })
+            
+            # Inicializa Firestore (usa as credenciais do ambiente)
+            db = firestore.Client()
+            bucket = firebase_storage.bucket()
+            
+            print("✅ Firebase inicializado com sucesso (PRODUÇÃO)")
+            return db, bucket
+            
+        else:
+            print("🔧 Modo DESENVOLVIMENTO: Lendo credenciais do arquivo local")
+            # Modo desenvolvimento - lê do arquivo
+            if not firebase_admin._apps:
+                cred = credentials.Certificate('firebase-credentials.json')
+                firebase_admin.initialize_app(cred, {
+                    'storageBucket': 'frota-sanemar.firebasestorage.app'
+                })
+            
+            db = firestore.Client()
+            bucket = firebase_storage.bucket()
+            
+            print("✅ Firebase inicializado com sucesso (DESENVOLVIMENTO)")
+            return db, bucket
+            
+    except Exception as e:
+        print(f"❌ Erro ao inicializar Firebase: {e}")
+        import traceback
+        traceback.print_exc()
+        return None, None
+
+# Inicializa Firebase
+db, bucket = initialize_firebase()
 
 # Flag global para indicar que o Firestore está indisponível (por ex. quota excedida)
 FIRESTORE_AVAILABLE = True
