@@ -466,7 +466,12 @@
                                    placeholder="HH:MM">
                         </td>
                         <td class="py-3 px-4">
-                            <div class="flex gap-2">
+                            <div class="flex gap-2 flex-wrap">
+                                <button onclick='editarSaidaEmCurso("${v.id}", ${veiculoDataStr})' 
+                                        class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-semibold transition-all"
+                                        title="Editar trajeto/solicitante">
+                                    ✏️ Editar
+                                </button>
                                 <button onclick='registrarChegadaComHorario("${v.veiculo}", "${inputId}", ${veiculoDataStr})' 
                                         class="px-3 py-1 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-semibold transition-all">
                                     Chegada
@@ -873,6 +878,125 @@
 
         // Disponibiliza globalmente
             window.showDetailedConfirm = showDetailedConfirm;
-        </script>
+    </script>
+
+    <!-- Modal de Edição Rápida -->
+    <div id="modal-editar-rapido" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full animate-fade-in">
+            <div class="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-t-2xl">
+                <h3 class="text-2xl font-bold">✏️ Editar Saída em Curso</h3>
+            </div>
+            <form id="form-editar-rapido" class="p-6 space-y-4">
+                <input type="hidden" id="edit-rapido-saida-id">
+                
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Veículo (Placa)</label>
+                    <input type="text" id="edit-rapido-veiculo" 
+                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-300 bg-gray-100 cursor-not-allowed"
+                           readonly>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Motorista</label>
+                    <input type="text" id="edit-rapido-motorista" 
+                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-300 bg-gray-100 cursor-not-allowed"
+                           readonly>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Solicitante</label>
+                    <input type="text" id="edit-rapido-solicitante" 
+                           class="w-full px-4 py-3 rounded-xl border-2 border-indigo-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
+                           placeholder="Nome do solicitante"
+                           required>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Trajeto</label>
+                    <input type="text" id="edit-rapido-trajeto" 
+                           class="w-full px-4 py-3 rounded-xl border-2 border-indigo-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
+                           placeholder="Destino ou trajeto"
+                           required>
+                </div>
+
+                <div class="flex gap-3 justify-end pt-4 border-t border-gray-200">
+                    <button type="button" onclick="fecharModalEditarRapido()" 
+                            class="px-8 py-3 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold transition-all">
+                        ❌ Cancelar
+                    </button>
+                    <button type="submit" 
+                            class="px-8 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-semibold transition-all">
+                        💾 Salvar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Função para abrir modal de edição rápida
+        window.editarSaidaEmCurso = function(saidaId, veiculoData) {
+            const modal = document.getElementById('modal-editar-rapido');
+            
+            // Preenche os campos
+            document.getElementById('edit-rapido-saida-id').value = saidaId;
+            document.getElementById('edit-rapido-veiculo').value = veiculoData.veiculo;
+            document.getElementById('edit-rapido-motorista').value = veiculoData.motorista;
+            document.getElementById('edit-rapido-solicitante').value = veiculoData.solicitante || '';
+            document.getElementById('edit-rapido-trajeto').value = veiculoData.trajeto || '';
+            
+            // Mostra modal
+            modal.classList.remove('hidden');
+        };
+
+        // Função para fechar modal
+        window.fecharModalEditarRapido = function() {
+            const modal = document.getElementById('modal-editar-rapido');
+            modal.classList.add('hidden');
+            document.getElementById('form-editar-rapido').reset();
+        };
+
+        // Submit do formulário de edição rápida
+        document.getElementById('form-editar-rapido').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const saidaId = document.getElementById('edit-rapido-saida-id').value;
+            const solicitante = document.getElementById('edit-rapido-solicitante').value;
+            const trajeto = document.getElementById('edit-rapido-trajeto').value;
+
+            try {
+                const response = await fetch(`/api/saidas/${saidaId}/atualizar-rapido`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ solicitante, trajeto })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    if (typeof showToast === 'function') {
+                        showToast('success', '✅ Saída atualizada com sucesso!');
+                    } else {
+                        alert('✅ Saída atualizada com sucesso!');
+                    }
+                    fecharModalEditarRapido();
+                    fetchVeiculosEmCurso(); // Atualiza tabela
+                } else {
+                    if (typeof showToast === 'function') {
+                        showToast('error', `❌ Erro: ${result.error || 'Falha ao atualizar'}`);
+                    } else {
+                        alert(`❌ Erro: ${result.error || 'Falha ao atualizar'}`);
+                    }
+                }
+            } catch (error) {
+                console.error('Erro ao atualizar:', error);
+                if (typeof showToast === 'function') {
+                    showToast('error', '❌ Erro ao atualizar saída');
+                } else {
+                    alert('❌ Erro ao atualizar saída');
+                }
+            }
+        });
+    </script>
     </body>
     </html>

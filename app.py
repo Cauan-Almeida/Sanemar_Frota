@@ -514,10 +514,11 @@ def get_veiculos_em_curso():
         for doc in viagens_em_curso:
             data = doc.to_dict()
             veiculos.append({
+                "id": doc.id,  # ✅ Adicionado ID do documento
                 "veiculo": data.get("veiculo"),
                 "motorista": data.get("motorista"),
-                "solicitante": data.get("solicitante"),  # ✅ Adicionado
-                "trajeto": data.get("trajeto"),  # ✅ Adicionado
+                "solicitante": data.get("solicitante"),
+                "trajeto": data.get("trajeto"),
                 "horarioSaida": data.get("horarioSaida")
             })
         
@@ -1057,6 +1058,52 @@ def delete_saida(saida_id):
 
     except Exception as e:
         print(f"❌ Erro ao excluir saída: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/saidas/<saida_id>/atualizar-rapido', methods=['PATCH'])
+def atualizar_saida_rapido(saida_id):
+    """Atualiza apenas solicitante e trajeto de uma saída em curso (sem autenticação)"""
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+
+    try:
+        dados = request.get_json()
+        
+        # Validação dos campos permitidos
+        if 'solicitante' not in dados or 'trajeto' not in dados:
+            return jsonify({"error": "Campos 'solicitante' e 'trajeto' são obrigatórios"}), 400
+
+        # Busca o documento
+        saida_ref = db.collection('saidas').document(saida_id)
+        saida_doc = saida_ref.get()
+
+        if not saida_doc.exists:
+            return jsonify({"error": "Saída não encontrada."}), 404
+
+        # Verifica se está em curso
+        saida_data = saida_doc.to_dict()
+        if saida_data.get('status') != 'em_curso':
+            return jsonify({"error": "Apenas saídas em curso podem ser editadas desta forma."}), 400
+
+        # Atualiza apenas solicitante e trajeto
+        update_data = {
+            'solicitante': dados['solicitante'].strip(),
+            'trajeto': dados['trajeto'].strip()
+        }
+        
+        saida_ref.update(update_data)
+        
+        # 🔥 LIMPA CACHE após edição
+        dashboard_cache.clear()
+        historico_cache['expires'] = 0
+        print("🗑️ Cache do dashboard e histórico invalidados após edição rápida")
+        
+        print(f"✅ Saída {saida_id} atualizada rapidamente (solicitante/trajeto)")
+        return jsonify({"message": "Saída atualizada com sucesso.", "id": saida_id}), 200
+
+    except Exception as e:
+        print(f"❌ Erro ao atualizar saída rápido: {e}")
         return jsonify({"error": str(e)}), 500
 
 
