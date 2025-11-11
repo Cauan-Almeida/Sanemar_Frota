@@ -261,6 +261,37 @@
             return `${dia}/${mes}/${ano} ${horas}:${minutos}`;
         }
 
+        // Função para mostrar toast de notificação
+        function mostrarToast(mensagem, tipo = 'info') {
+            // Cria elemento do toast
+            const toast = document.createElement('div');
+            toast.className = `fixed top-4 right-4 px-6 py-4 rounded-lg shadow-lg text-white font-semibold z-50 transform transition-all duration-300 ${
+                tipo === 'success' ? 'bg-green-500' : 
+                tipo === 'error' ? 'bg-red-500' : 
+                'bg-blue-500'
+            }`;
+            toast.textContent = mensagem;
+            toast.style.transform = 'translateX(400px)';
+            
+            document.body.appendChild(toast);
+            
+            // Anima entrada
+            setTimeout(() => {
+                toast.style.transform = 'translateX(0)';
+            }, 10);
+            
+            // Remove após 3 segundos
+            setTimeout(() => {
+                toast.style.transform = 'translateX(400px)';
+                setTimeout(() => {
+                    document.body.removeChild(toast);
+                }, 300);
+            }, 3000);
+        }
+
+        // Disponibiliza globalmente
+        window.mostrarToast = mostrarToast;
+
         // Atualiza estatísticas
         function atualizarStats(registros) {
             const emCurso = registros.filter(r => r.status === 'em_curso').length;
@@ -568,10 +599,15 @@
         }
 
         // Submit do formulário de edição
-        document.getElementById('form-editar').addEventListener('submit', async (e) => {
-            e.preventDefault();
+        const formEditar = document.getElementById('form-editar');
+        if (formEditar) {
+            console.log('✅ Formulário de edição encontrado, registrando listener...');
+            formEditar.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                console.log('🔄 Iniciando edição...');
 
-            const saidaId = document.getElementById('edit-saida-id').value;
+                const saidaId = document.getElementById('edit-saida-id').value;
+                console.log('📝 ID da saída:', saidaId);
             
             // Converte datetime-local para ISO mantendo timezone local
             const saidaInput = document.getElementById('edit-timestamp-saida').value;
@@ -604,8 +640,25 @@
                 const result = await response.json();
 
                 if (response.ok) {
+                    console.log('✅ Salvou com sucesso, fechando modal...');
                     mostrarToast('✅ Registro atualizado com sucesso!', 'success');
-                    fecharModalEditar();
+                    
+                    // ✅ Fecha modal diretamente via DOM
+                    const modal = document.getElementById('modal-editar');
+                    if (modal) {
+                        modal.classList.add('hidden');
+                        console.log('✅ Modal fechado');
+                    }
+                    
+                    // ✅ Reset do formulário
+                    const form = document.getElementById('form-editar');
+                    if (form) {
+                        form.reset();
+                        console.log('✅ Formulário resetado');
+                    }
+                    
+                    // ✅ Recarrega os dados do histórico em background
+                    carregarHistorico().catch(err => console.error('Erro ao recarregar:', err));
                 } else {
                     mostrarToast(`❌ Erro: ${result.error || 'Falha ao atualizar'}`, 'error');
                 }
@@ -613,7 +666,10 @@
                 console.error('Erro ao atualizar:', error);
                 mostrarToast('❌ Erro ao atualizar registro', 'error');
             }
-        });
+            });
+        } else {
+            console.error('❌ Formulário de edição não encontrado!');
+        }
 
         // Force uppercase no campo veículo do modal
         document.getElementById('edit-veiculo').addEventListener('input', (e) => {
