@@ -171,12 +171,21 @@ def index():
         return render_template('maintenance.html'), 503
 
     veiculos = []
+    veiculos_completos = []  # Lista com objetos {placa, modelo}
     motoristas = []
     if db:
         try:
             veiculos_ref = db.collection('veiculos').stream()
-            veiculos = [doc.to_dict().get('placa') for doc in veiculos_ref if doc.to_dict().get('placa')]
+            for doc in veiculos_ref:
+                data = doc.to_dict()
+                if data.get('placa'):
+                    veiculos.append(data.get('placa'))
+                    veiculos_completos.append({
+                        'placa': data.get('placa'),
+                        'modelo': data.get('modelo', '')
+                    })
             veiculos.sort()
+            veiculos_completos.sort(key=lambda x: x['placa'])
 
             motoristas_ref = db.collection('motoristas').stream()
             motoristas = [doc.to_dict().get('nome') for doc in motoristas_ref if doc.to_dict().get('nome')]
@@ -187,7 +196,7 @@ def index():
             print(f"Erro ao buscar veículos ou motoristas: {e}")
             return render_template('maintenance.html'), 503
 
-    return render_template('index.html', veiculos=veiculos, motoristas=motoristas)
+    return render_template('index.html', veiculos=veiculos, veiculos_completos=veiculos_completos, motoristas=motoristas)
 
 
 # --- Rota para Service Worker ---
@@ -1007,6 +1016,11 @@ def update_saida(saida_id):
         # Atualiza no Firestore
         saida_ref.update(update_data)
         
+        # 🔥 LIMPA CACHE após edição
+        dashboard_cache.clear()
+        historico_cache['expires'] = 0
+        print("🗑️ Cache do dashboard e histórico invalidados após edição")
+        
         print(f"✅ Saída {saida_id} atualizada com sucesso")
         print(f"📅 Timestamp salvo (UTC): {update_data['timestampSaida']}")
         return jsonify({"message": "Saída atualizada com sucesso.", "id": saida_id}), 200
@@ -1032,6 +1046,11 @@ def delete_saida(saida_id):
 
         # Deleta o documento
         saida_ref.delete()
+        
+        # 🔥 LIMPA CACHE após exclusão
+        dashboard_cache.clear()
+        historico_cache['expires'] = 0
+        print("🗑️ Cache do dashboard e histórico invalidados após exclusão")
         
         print(f"🗑️ Saída {saida_id} excluída com sucesso")
         return jsonify({"message": "Saída excluída com sucesso."}), 200

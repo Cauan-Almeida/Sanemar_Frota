@@ -19,6 +19,27 @@
         .gradient-btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); transition: all 0.3s; }
         .gradient-btn:hover { transform: scale(1.02); box-shadow: 0 10px 25px -5px rgba(102, 126, 234, 0.5); }
         
+        /* Melhorias para campos de hora em MOBILE */
+        input[type="time"] {
+            font-size: 18px !important;
+            min-height: 50px !important;
+            color: #1f2937 !important;
+            font-weight: 600 !important;
+        }
+        
+        /* Garante visibilidade em mobile */
+        @media (max-width: 768px) {
+            input[type="time"] {
+                font-size: 20px !important;
+                min-height: 56px !important;
+                padding: 16px !important;
+            }
+            select, input[type="text"] {
+                font-size: 16px !important;
+                min-height: 50px !important;
+            }
+        }
+        
         /* Esconde forçadamente qualquer badge/botão de "em curso" */
         a[href*="curso"]:not([href="/dashboard"]),
         button:not(.gradient-btn):not([type="submit"]):not([type="button"]):has-text("curso") {
@@ -59,17 +80,35 @@
             <form id="form-saida" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">Veículo (Placa)</label>
-                    <input list="veiculos-list" id="saida-veiculo" name="veiculo" 
-                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
-                           placeholder="Digite a placa" required>
-                    <datalist id="veiculos-list">{% for v in veiculos %}<option value="{{ v }}">{% endfor %}</datalist>
+                    <select id="saida-veiculo-select" onchange="handleVeiculoChange()" 
+                            class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all bg-white">
+                        <option value="">Selecione o veículo...</option>
+                        {% for v in veiculos_completos %}
+                        <option value="{{ v.placa }}">{{ v.placa }}{% if v.modelo %} - {{ v.modelo }}{% endif %}</option>
+                        {% endfor %}
+                        <option value="__NAO_CADASTRADO__" style="background: #fef3c7; font-weight: bold;">➕ Minha placa não está na lista</option>
+                    </select>
+                    <input type="text" id="saida-veiculo-input" name="veiculo" 
+                           placeholder="Digite a placa (ex: ABC1234)" 
+                           style="display: none; text-transform: uppercase;"
+                           class="w-full px-4 py-3 rounded-xl border-2 border-amber-400 focus:border-amber-500 focus:ring-4 focus:ring-amber-100 transition-all mt-2">
+                    <input type="hidden" id="saida-veiculo" name="veiculo" required>
                 </div>
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">Motorista</label>
-                    <input list="motoristas-list" id="saida-motorista" name="motorista"
-                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
-                           placeholder="Nome do motorista" required>
-                    <datalist id="motoristas-list">{% for m in motoristas %}<option value="{{ m }}">{% endfor %}</datalist>
+                    <select id="saida-motorista-select" onchange="handleMotoristaChange()"
+                            class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all bg-white">
+                        <option value="">Selecione o motorista...</option>
+                        {% for m in motoristas %}
+                        <option value="{{ m }}">{{ m }}</option>
+                        {% endfor %}
+                        <option value="__NAO_CADASTRADO__" style="background: #fef3c7; font-weight: bold;">➕ Meu nome não está na lista</option>
+                    </select>
+                    <input type="text" id="saida-motorista-input" name="motorista" 
+                           placeholder="Digite o nome completo" 
+                           style="display: none;"
+                           class="w-full px-4 py-3 rounded-xl border-2 border-amber-400 focus:border-amber-500 focus:ring-4 focus:ring-amber-100 transition-all mt-2">
+                    <input type="hidden" id="saida-motorista" name="motorista" required>
                 </div>
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">Solicitante</label>
@@ -132,15 +171,35 @@
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">Placa</label>
-                    <input list="veiculos-list" id="quick-refuel-placa"
-                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all"
-                           placeholder="Placa">
+                    <select id="quick-refuel-placa-select" onchange="handleRefuelPlacaChange()" 
+                            class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all bg-white">
+                        <option value="">Selecione o veículo...</option>
+                        {% for v in veiculos_completos %}
+                        <option value="{{ v.placa }}">{{ v.placa }}{% if v.modelo %} - {{ v.modelo }}{% endif %}</option>
+                        {% endfor %}
+                        <option value="__NAO_CADASTRADO__" style="background: #fef3c7; font-weight: bold;">➕ Minha placa não está na lista</option>
+                    </select>
+                    <input type="text" id="quick-refuel-placa-input" 
+                           placeholder="Digite a placa (ex: ABC1234)" 
+                           style="display: none; text-transform: uppercase;"
+                           class="w-full px-4 py-3 rounded-xl border-2 border-amber-400 focus:border-amber-500 focus:ring-4 focus:ring-amber-100 transition-all mt-2">
+                    <input type="hidden" id="quick-refuel-placa">
                 </div>
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">Motorista</label>
-                    <input list="motoristas-list" id="quick-refuel-motorista"
-                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all"
-                           placeholder="Motorista">
+                    <select id="quick-refuel-motorista-select" onchange="handleRefuelMotoristaChange()"
+                            class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all bg-white">
+                        <option value="">Selecione o motorista...</option>
+                        {% for m in motoristas %}
+                        <option value="{{ m }}">{{ m }}</option>
+                        {% endfor %}
+                        <option value="__NAO_CADASTRADO__" style="background: #fef3c7; font-weight: bold;">➕ Meu nome não está na lista</option>
+                    </select>
+                    <input type="text" id="quick-refuel-motorista-input" 
+                           placeholder="Digite o nome completo" 
+                           style="display: none;"
+                           class="w-full px-4 py-3 rounded-xl border-2 border-amber-400 focus:border-amber-500 focus:ring-4 focus:ring-amber-100 transition-all mt-2">
+                    <input type="hidden" id="quick-refuel-motorista">
                 </div>
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">Litros</label>
@@ -172,6 +231,102 @@
                 showToast(message, type);
             } else {
                 console.log(`[${type}] ${message}`);
+            }
+        }
+        
+        // Handler para veículo - toggle entre SELECT e INPUT
+        function handleVeiculoChange() {
+            const select = document.getElementById('saida-veiculo-select');
+            const input = document.getElementById('saida-veiculo-input');
+            const hidden = document.getElementById('saida-veiculo');
+            
+            if (select.value === '__NAO_CADASTRADO__') {
+                // Mostra input, esconde select
+                select.style.display = 'none';
+                input.style.display = 'block';
+                input.required = true;
+                input.focus();
+                hidden.value = ''; // Limpa hidden até preencher input
+            } else {
+                // Usa valor do select
+                hidden.value = select.value;
+            }
+        }
+        
+        // Handler para motorista - toggle entre SELECT e INPUT
+        function handleMotoristaChange() {
+            const select = document.getElementById('saida-motorista-select');
+            const input = document.getElementById('saida-motorista-input');
+            const hidden = document.getElementById('saida-motorista');
+            
+            if (select.value === '__NAO_CADASTRADO__') {
+                // Mostra input, esconde select
+                select.style.display = 'none';
+                input.style.display = 'block';
+                input.required = true;
+                input.focus();
+                hidden.value = ''; // Limpa hidden até preencher input
+            } else {
+                // Usa valor do select
+                hidden.value = select.value;
+            }
+        }
+        
+        // Atualiza hidden input conforme usuário digita
+        document.addEventListener('DOMContentLoaded', () => {
+            const veiculoInput = document.getElementById('saida-veiculo-input');
+            const motoristaInput = document.getElementById('saida-motorista-input');
+            
+            veiculoInput.addEventListener('input', function() {
+                document.getElementById('saida-veiculo').value = this.value;
+            });
+            
+            motoristaInput.addEventListener('input', function() {
+                document.getElementById('saida-motorista').value = this.value;
+            });
+            
+            // Abastecimento rápido - listeners
+            const refuelPlacaInput = document.getElementById('quick-refuel-placa-input');
+            const refuelMotoristaInput = document.getElementById('quick-refuel-motorista-input');
+            
+            refuelPlacaInput.addEventListener('input', function() {
+                document.getElementById('quick-refuel-placa').value = this.value;
+            });
+            
+            refuelMotoristaInput.addEventListener('input', function() {
+                document.getElementById('quick-refuel-motorista').value = this.value;
+            });
+        });
+        
+        // Handler para abastecimento - veículo
+        function handleRefuelPlacaChange() {
+            const select = document.getElementById('quick-refuel-placa-select');
+            const input = document.getElementById('quick-refuel-placa-input');
+            const hidden = document.getElementById('quick-refuel-placa');
+            
+            if (select.value === '__NAO_CADASTRADO__') {
+                select.style.display = 'none';
+                input.style.display = 'block';
+                input.focus();
+                hidden.value = '';
+            } else {
+                hidden.value = select.value;
+            }
+        }
+        
+        // Handler para abastecimento - motorista
+        function handleRefuelMotoristaChange() {
+            const select = document.getElementById('quick-refuel-motorista-select');
+            const input = document.getElementById('quick-refuel-motorista-input');
+            const hidden = document.getElementById('quick-refuel-motorista');
+            
+            if (select.value === '__NAO_CADASTRADO__') {
+                select.style.display = 'none';
+                input.style.display = 'block';
+                input.focus();
+                hidden.value = '';
+            } else {
+                hidden.value = select.value;
             }
         }
         
@@ -242,8 +397,19 @@
                         
                         if (response.ok) {
                             showToast('success', '✅ ' + (result.message || 'Abastecimento registrado!'), 3000);
+                            // Reseta campos
                             document.getElementById('quick-refuel-placa').value = '';
+                            document.getElementById('quick-refuel-placa-select').value = '';
+                            document.getElementById('quick-refuel-placa-select').style.display = 'block';
+                            document.getElementById('quick-refuel-placa-input').style.display = 'none';
+                            document.getElementById('quick-refuel-placa-input').value = '';
+                            
                             document.getElementById('quick-refuel-motorista').value = '';
+                            document.getElementById('quick-refuel-motorista-select').value = '';
+                            document.getElementById('quick-refuel-motorista-select').style.display = 'block';
+                            document.getElementById('quick-refuel-motorista-input').style.display = 'none';
+                            document.getElementById('quick-refuel-motorista-input').value = '';
+                            
                             document.getElementById('quick-refuel-litros').value = '';
                             document.getElementById('quick-refuel-odometro').value = '';
                         } else {
