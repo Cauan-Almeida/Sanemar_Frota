@@ -1809,14 +1809,23 @@
         e.preventDefault();
 
         const saidaId = document.getElementById('edit-dashboard-saida-id').value;
+        
+        // Converte datetime-local para ISO mantendo timezone local
+        const saidaInput = document.getElementById('edit-dashboard-timestamp-saida').value;
+        const chegadaInput = document.getElementById('edit-dashboard-timestamp-chegada').value;
+        
+        // IMPORTANTE: datetime-local não tem timezone, então forçamos interpretação como local
+        const saidaISO = saidaInput ? saidaInput + ':00' : null;
+        const chegadaISO = chegadaInput ? chegadaInput + ':00' : null;
+        
         const dados = {
             veiculo: document.getElementById('edit-dashboard-veiculo').value.toUpperCase(),
             motorista: document.getElementById('edit-dashboard-motorista').value,
             solicitante: document.getElementById('edit-dashboard-solicitante').value,
             trajeto: document.getElementById('edit-dashboard-trajeto').value,
             status: document.getElementById('edit-dashboard-status').value,
-            timestampSaida: new Date(document.getElementById('edit-dashboard-timestamp-saida').value).toISOString(),
-            timestampChegada: document.getElementById('edit-dashboard-timestamp-chegada').value ? new Date(document.getElementById('edit-dashboard-timestamp-chegada').value).toISOString() : null
+            timestampSaida: saidaISO,
+            timestampChegada: chegadaISO
         };
 
         try {
