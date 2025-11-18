@@ -370,7 +370,7 @@ async function loadMotoristasData() {
         console.error('Erro ao carregar motoristas:', error);
         const tabelaBody = document.getElementById('tabela-motoristas');
         if (tabelaBody) {
-            tabelaBody.innerHTML = '<tr><td colspan="7" class="p-4 text-center text-red-500">Erro ao carregar dados</td></tr>';
+            tabelaBody.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-red-500">Erro ao carregar dados</td></tr>';
         }
     }
 }
@@ -384,6 +384,16 @@ function criarLinhaMotorista(motorista, ativo) {
     const nomeCompleto = motorista.nome || '-';
     const nomeFormatado = formatarNomeAbreviado(nomeCompleto);
     const inativoLabel = ativo ? '' : ' [INATIVO]';
+    
+    // Seção badge
+    const secao = motorista.secao || 'Outros';
+    const secaoBadge = `<span class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">👷 ${secao}</span>`;
+    
+    // Visibilidade badge
+    const visivel = motorista.visivel_para_motoristas !== false;
+    const visibilidadeBadge = visivel
+        ? '<span class="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold">👁️ Visível</span>'
+        : '<span class="px-3 py-1 bg-rose-100 text-rose-700 rounded-full text-xs font-bold">🔒 Oculto</span>';
     
     // Status badge
     const statusBadge = ativo
@@ -408,6 +418,7 @@ function criarLinhaMotorista(motorista, ativo) {
         <td class="p-4 font-semibold text-gray-900">${nomeFormatado}${inativoLabel}</td>
         <td class="p-4 text-gray-700">${motorista.empresa || '-'}</td>
         <td class="p-4 text-gray-700">${motorista.funcao || '-'}</td>
+        <td class="p-4"><div class="flex flex-col gap-1">${secaoBadge}${visibilidadeBadge}</div></td>
         <td class="p-4">${statusBadge}</td>
         <td class="p-4">${cnhButtons}</td>
         <td class="p-4 text-gray-600 text-sm">${formatarData(motorista.dataCadastro)}</td>
@@ -445,17 +456,24 @@ let motoristasCache = [];
 function pesquisarMotoristas() {
     const searchTerm = document.getElementById('search-motoristas')?.value.toLowerCase() || '';
     
+    if (!motoristasCache || motoristasCache.length === 0) {
+        console.warn('Cache de motoristas vazio');
+        return;
+    }
+    
     if (searchTerm.trim() === '') {
         renderMotoristas(motoristasCache);
         return;
     }
     
     const filtered = motoristasCache.filter(m => 
-        m.nome.toLowerCase().includes(searchTerm) ||
+        (m.nome && m.nome.toLowerCase().includes(searchTerm)) ||
         (m.empresa && m.empresa.toLowerCase().includes(searchTerm)) ||
-        (m.funcao && m.funcao.toLowerCase().includes(searchTerm))
+        (m.funcao && m.funcao.toLowerCase().includes(searchTerm)) ||
+        (m.secao && m.secao.toLowerCase().includes(searchTerm))
     );
     
+    console.log(`Pesquisa: "${searchTerm}" - ${filtered.length} resultado(s)`);
     renderMotoristas(filtered);
 }
 
@@ -464,7 +482,7 @@ function renderMotoristas(motoristas) {
     tabelaBody.innerHTML = '';
     
     if (motoristas.length === 0) {
-        tabelaBody.innerHTML = '<tr><td colspan="7" class="p-4 text-center text-gray-500">Nenhum motorista encontrado</td></tr>';
+        tabelaBody.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-gray-500">Nenhum motorista encontrado</td></tr>';
         return;
     }
     
@@ -482,7 +500,7 @@ function renderMotoristas(motoristas) {
         const divisorTr = document.createElement('tr');
         divisorTr.className = 'bg-gray-200';
         divisorTr.innerHTML = `
-            <td colspan="7" class="p-3 text-center font-bold text-gray-600">
+            <td colspan="8" class="p-3 text-center font-bold text-gray-600">
                 📦 MOTORISTAS INATIVOS (${motoristasInativos.length})
             </td>
         `;
@@ -511,6 +529,27 @@ async function editarMotorista(id) {
         document.getElementById('motorista-nome').value = motorista.nome || '';
         document.getElementById('motorista-empresa').value = motorista.empresa || '';
         document.getElementById('motorista-funcao').value = motorista.funcao || '';
+        
+        // Preenche seção e visibilidade
+        const secaoSelect = document.getElementById('motorista-secao');
+        const secaoCustom = document.getElementById('motorista-secao-custom');
+        const motoristaSecao = motorista.secao || 'Outros';
+        
+        // Verifica se a seção é uma das pré-definidas
+        const opcoesSecao = ['Base de Itaipuaçu', 'Base ETE de Araçatiba', 'Sede Sanemar', 'Van', 'Outros'];
+        if (opcoesSecao.includes(motoristaSecao)) {
+            secaoSelect.value = motoristaSecao;
+            secaoCustom.style.display = 'none';
+            secaoCustom.value = '';
+        } else {
+            // Seção customizada
+            secaoSelect.value = '__NOVA__';
+            secaoCustom.style.display = 'block';
+            secaoCustom.value = motoristaSecao;
+        }
+        
+        // Preenche visibilidade
+        document.getElementById('motorista-visivel').checked = motorista.visivel_para_motoristas !== false;
         
         // Adiciona campo hidden com ID
         let hiddenId = document.getElementById('motorista-id-edit');
@@ -769,21 +808,68 @@ function updateStatCards(stats) {
     }
 }
 
+// ✅ Variáveis globais para gerenciamento de tabs de categoria
+window.historicoCompleto = [];
+window.categoriaAtiva = 'todos';
+
 function populateHistoryTable(historico) {
     const tabelaBody = document.getElementById('tabela-historico');
     if (!tabelaBody) return;
 
+    // Armazena histórico completo para filtragem por categoria
+    window.historicoCompleto = historico || [];
+
+    console.log('📋 Populando tabela com', historico.length, 'registros');
+    console.log('🏷️ Categoria ativa:', window.categoriaAtiva);
+    console.log('🔍 Primeiro registro:', historico[0]);
+
+    // Agrupa histórico por categoria
+    const categorias = {
+        'Base de Itaipuaçu': [],
+        'Base ETE de Araçatiba': [],
+        'Sede Sanemar': [],
+        'Vans': [],
+        'Comercial': [],
+        'Outros': []
+    };
+    
+    historico.forEach(item => {
+        let cat = item.categoria || 'Outros';
+        // Mescla 'Van' em 'Vans'
+        if (cat === 'Van') cat = 'Vans';
+        
+        if (categorias[cat]) {
+            categorias[cat].push(item);
+        } else {
+            categorias['Outros'].push(item);
+        }
+    });
+
+    // Atualiza contadores nos botões das tabs
+    const totalItems = historico.length;
+    document.querySelector('[data-category="todos"] .count-badge').textContent = totalItems;
+    document.querySelector('[data-category="Base de Itaipuaçu"] .count-badge').textContent = categorias['Base de Itaipuaçu'].length;
+    document.querySelector('[data-category="Base ETE de Araçatiba"] .count-badge').textContent = categorias['Base ETE de Araçatiba'].length;
+    document.querySelector('[data-category="Sede Sanemar"] .count-badge').textContent = categorias['Sede Sanemar'].length;
+    document.querySelector('[data-category="Vans"] .count-badge').textContent = categorias['Vans'].length;
+    document.querySelector('[data-category="Comercial"] .count-badge').textContent = categorias['Comercial'].length;
+    document.querySelector('[data-category="Outros"] .count-badge').textContent = categorias['Outros'].length;
+
+    // Filtra por categoria ativa
+    let itemsParaMostrar = historico;
+    if (window.categoriaAtiva !== 'todos') {
+        itemsParaMostrar = categorias[window.categoriaAtiva] || [];
+    }
+
     tabelaBody.innerHTML = '';
 
-    if (!historico || historico.length === 0) {
-        tabelaBody.innerHTML = '<tr><td colspan="8" class="text-center p-4">Nenhum registro encontrado.</td></tr>';
+    if (itemsParaMostrar.length === 0) {
+        tabelaBody.innerHTML = '<tr><td colspan="8" class="text-center p-4">Nenhum registro encontrado nesta categoria.</td></tr>';
         return;
     }
 
-    console.log('📋 Populando tabela com', historico.length, 'registros');
-    console.log('🔍 Primeiro registro:', historico[0]);
-
-    historico.forEach(item => {
+    // Renderiza os itens filtrados (sem headers de categoria)
+    itemsParaMostrar.forEach(item => {
         if (!item.id) {
             console.warn('⚠️ Registro SEM ID:', item);
         }
@@ -890,7 +976,7 @@ function populateHistoryTable(historico) {
         tr.appendChild(acoesTd);
 
         tabelaBody.appendChild(tr);
-    });
+    });  // Fecha forEach de items
 }
 
 function renderChart(canvasId, type, label, colors) {
@@ -932,4 +1018,25 @@ function updateChartData(chart, chartData) {
         chart.data.datasets[0].data = chartData.data;
         chart.update();
     }
+}
+
+// ==========================================
+// 🏷️ GERENCIAMENTO DE TABS DE CATEGORIA
+// ==========================================
+
+// Função para trocar de categoria
+function trocarCategoria(categoria) {
+    console.log('🔄 Trocando para categoria:', categoria);
+    
+    // Atualiza categoria ativa
+    window.categoriaAtiva = categoria;
+    
+    // Remove active de todas as tabs
+    document.querySelectorAll('.historico-category-tab').forEach(t => t.classList.remove('active'));
+    
+    // Adiciona active na tab clicada
+    document.querySelector(`[data-category="${categoria}"]`)?.classList.add('active');
+    
+    // Re-renderiza a tabela com a categoria filtrada
+    populateHistoryTable(window.historicoCompleto);
 }

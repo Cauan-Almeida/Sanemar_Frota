@@ -243,6 +243,40 @@ function adicionarValidacoesDuplicidade() {
         const trajeto = formData.get('trajeto')?.trim();
         const horario = formData.get('horario') || null;
         
+        // Coleta categoria e seção (com suporte a customização)
+        const veiculoCategoriaSelect = document.getElementById('saida-veiculo-categoria');
+        const veiculoCategoriaCustom = document.getElementById('saida-veiculo-categoria-custom');
+        const motoristaSecaoSelect = document.getElementById('saida-motorista-secao');
+        const motoristaSecaoCustom = document.getElementById('saida-motorista-secao-custom');
+        
+        let veiculo_categoria = 'Outros';
+        if (veiculoCategoriaSelect) {
+            if (veiculoCategoriaSelect.value === '__NOVA__') {
+                if (!veiculoCategoriaCustom || !veiculoCategoriaCustom.value.trim()) {
+                    exibirMensagem('⚠️ Digite o nome da nova categoria do veículo.', 'error');
+                    if (veiculoCategoriaCustom) veiculoCategoriaCustom.focus();
+                    return;
+                }
+                veiculo_categoria = veiculoCategoriaCustom.value.trim();
+            } else {
+                veiculo_categoria = veiculoCategoriaSelect.value || 'Outros';
+            }
+        }
+        
+        let motorista_secao = 'Outros';
+        if (motoristaSecaoSelect) {
+            if (motoristaSecaoSelect.value === '__NOVA__') {
+                if (!motoristaSecaoCustom || !motoristaSecaoCustom.value.trim()) {
+                    exibirMensagem('⚠️ Digite o nome da nova seção do motorista.', 'error');
+                    if (motoristaSecaoCustom) motoristaSecaoCustom.focus();
+                    return;
+                }
+                motorista_secao = motoristaSecaoCustom.value.trim();
+            } else {
+                motorista_secao = motoristaSecaoSelect.value || 'Outros';
+            }
+        }
+        
         // Validações básicas
         if (!veiculo) {
             exibirMensagem('⚠️ Informe a placa do veículo.', 'error');
@@ -318,7 +352,9 @@ function adicionarValidacoesDuplicidade() {
                 motorista,
                 solicitante,
                 trajeto,
-                horario
+                horario,
+                veiculo_categoria,
+                motorista_secao
             };
             
             const response = await fetch('/api/saida', {

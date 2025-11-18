@@ -44,13 +44,7 @@ class ConnectionMonitor {
         `;
         document.body.prepend(this.offlineBanner);
         
-        // Banner Online (reconexão) - DISCRETO
-        this.onlineBanner = document.createElement('div');
-        this.onlineBanner.id = 'online-banner';
-        this.onlineBanner.innerHTML = `
-            <span>✅ Conexão restabelecida</span>
-        `;
-        document.body.prepend(this.onlineBanner);
+        // Banner Online removido - não mostrar mais reconexão
         
         // Status Badge - DISCRETO no header (substitui ícone flutuante)
         this.statusIndicator = document.createElement('div');
@@ -98,9 +92,6 @@ class ConnectionMonitor {
         // Mostra banner offline
         this.offlineBanner.classList.add('show');
         
-        // Esconde banner online se estiver visível
-        this.onlineBanner.classList.remove('show');
-        
         this.isOnline = false;
         this.previousState = false;
     }
@@ -115,11 +106,7 @@ class ConnectionMonitor {
         // Esconde banner offline
         this.offlineBanner.classList.remove('show');
         
-        // Mostra banner de reconexão por 2 segundos
-        this.onlineBanner.classList.add('show');
-        setTimeout(() => {
-            this.onlineBanner.classList.remove('show');
-        }, 2000);
+        // Banner online removido - não mostrar mais
         
         this.isOnline = true;
         this.previousState = true;

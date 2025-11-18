@@ -11,6 +11,7 @@ from firebase_admin import credentials, storage as firebase_storage
 from dotenv import load_dotenv
 from collections import Counter
 import io
+import bcrypt
 
 # --- Funções Auxiliares ---
 def serialize_doc(doc):
@@ -128,6 +129,167 @@ db, bucket = initialize_firebase()
 # Flag global para indicar que o Firestore está indisponível (por ex. quota excedida)
 FIRESTORE_AVAILABLE = True
 
+# ==========================================
+# 💾 SISTEMA DE BACKUP DE ARQUIVOS
+# ==========================================
+# Move arquivos para pasta de backup ao invés de deletar
+
+def backup_storage_file(blob_path, reason='delete'):
+    """
+    Move arquivo do Storage para pasta de backup ao invés de deletar.
+    
+    Args:
+        blob_path (str): Caminho do arquivo no Storage (ex: motoristas/abc123/cnh_123.pdf)
+        reason (str): Motivo do backup ('delete', 'replace', etc.)
+    
+    Returns:
+        str: URL do arquivo no backup, ou None se falhar
+    """
+    if not bucket:
+        print(f"⚠️ Backup: Storage indisponível")
+        return None
+    
+    try:
+        # Blob original
+        source_blob = bucket.blob(blob_path)
+        
+        # Verifica se arquivo existe
+        if not source_blob.exists():
+            print(f"⚠️ Arquivo não existe: {blob_path}")
+            return None
+        
+        # Cria nome do backup com timestamp
+        timestamp = datetime.now(LOCAL_TZ).strftime('%Y%m%d_%H%M%S')
+        backup_path = f"deleted_backups/{timestamp}_{reason}/{blob_path}"
+        
+        # Copia arquivo para backup
+        backup_blob = bucket.blob(backup_path)
+        backup_blob.rewrite(source_blob)
+        
+        # Torna backup público (opcional)
+        backup_blob.make_public()
+        backup_url = backup_blob.public_url
+        
+        print(f"✅ Arquivo copiado para backup: {backup_path}")
+        
+        # Agora pode deletar o original com segurança
+        source_blob.delete()
+        print(f"🗑️ Original deletado: {blob_path}")
+        
+        return backup_url
+        
+    except Exception as e:
+        print(f"❌ Erro ao fazer backup de {blob_path}: {e}")
+        return None
+
+# ==========================================
+# 🔍 SISTEMA DE AUDITORIA
+# ==========================================
+# Registra TODAS as ações no banco de dados:
+# - Quem fez (usuário)
+# - O que fez (action: create, update, delete)
+# - Quando (timestamp)
+# - Onde (coleção e documento)
+# - Dados antes e depois (para rollback)
+
+def log_audit(action, collection_name, doc_id, old_data=None, new_data=None, user=None):
+    """
+    Registra uma ação de auditoria no Firestore.
+    
+    Args:
+        action (str): 'create', 'update', 'delete'
+        collection_name (str): Nome da coleção afetada
+        doc_id (str): ID do documento afetado
+        old_data (dict): Dados antes da modificação (para update/delete)
+        new_data (dict): Dados depois da modificação (para create/update)
+        user (str): Usuário que executou a ação (pega da sessão se None)
+    """
+    if not db:
+        print(f"⚠️ Auditoria: Firestore indisponível, log não registrado")
+        return
+    
+    try:
+        # Pega usuário da sessão se não fornecido
+        if user is None:
+            user = session.get('username', 'sistema')
+        
+        # Timestamp atual
+        now = datetime.now(LOCAL_TZ)
+        
+        # Prepara o documento de auditoria
+        audit_doc = {
+            'action': action,  # create, update, delete
+            'collection': collection_name,
+            'document_id': doc_id,
+            'user': user,
+            'timestamp': now,
+            'ip_address': request.remote_addr if request else None,
+            'user_agent': request.headers.get('User-Agent') if request else None
+        }
+        
+        # Adiciona dados antigos/novos se fornecidos
+        if old_data:
+            # Remove campos sensíveis se necessário
+            audit_doc['old_data'] = serialize_doc(old_data)
+        
+        if new_data:
+            audit_doc['new_data'] = serialize_doc(new_data)
+        
+        # Salva no Firestore
+        db.collection('audit_log').add(audit_doc)
+        
+        print(f"✅ Auditoria: {action.upper()} em {collection_name}/{doc_id} por {user}")
+    
+    except Exception as e:
+        # Não deve interromper a operação principal
+        print(f"❌ Erro ao registrar auditoria: {e}")
+        import traceback
+        traceback.print_exc()
+
+# ==========================================
+# 👤 SISTEMA DE GERENCIAMENTO DE USUÁRIOS
+# ==========================================
+
+def hash_password(password):
+    """Gera hash bcrypt de uma senha"""
+    try:
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+        return hashed.decode('utf-8')
+    except:
+        # Fallback caso bcrypt não esteja instalado
+        import hashlib
+        return hashlib.sha256(password.encode()).hexdigest()
+
+def verify_password(password, password_hash):
+    """Verifica se senha corresponde ao hash"""
+    try:
+        return bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
+    except:
+        # Fallback para SHA256
+        import hashlib
+        return hashlib.sha256(password.encode()).hexdigest() == password_hash
+
+def get_user_by_username(username):
+    """Busca usuário no Firestore por username"""
+    if not db:
+        return None
+    try:
+        users_ref = db.collection('usuarios')
+        query = users_ref.where(filter=firestore.FieldFilter('username', '==', username)).where(filter=firestore.FieldFilter('ativo', '==', True)).limit(1).get()
+        if query:
+            user_doc = query[0]
+            user_data = user_doc.to_dict()
+            user_data['id'] = user_doc.id
+            return user_data
+        return None
+    except Exception as e:
+        print(f"Erro ao buscar usuário: {e}")
+        return None
+
+# Flag global para indicar que o Firestore está indisponível (por ex. quota excedida)
+FIRESTORE_AVAILABLE = True
+
 def mark_firestore_unavailable_if_quota(e):
     """Marca FIRESTORE_AVAILABLE = False se detectarmos erro de quota/excesso de uso.
     Retorna True se marcou como indisponível."""
@@ -172,31 +334,87 @@ def index():
 
     veiculos = []
     veiculos_completos = []  # Lista com objetos {placa, modelo}
+    veiculos_agrupados = {
+        'Base de Itaipuaçu': [],
+        'Base ETE de Araçatiba': [],
+        'Sede Sanemar': [],
+        'Vans': [],
+        'Comercial': [],
+        'Outros': []
+    }
     motoristas = []
     if db:
         try:
             veiculos_ref = db.collection('veiculos').stream()
             for doc in veiculos_ref:
                 data = doc.to_dict()
-                if data.get('placa'):
-                    veiculos.append(data.get('placa'))
-                    veiculos_completos.append({
-                        'placa': data.get('placa'),
+                placa = data.get('placa')
+                if not placa:
+                    continue
+                
+                # Verifica se veículo está visível (padrão: True se campo não existir)
+                visivel = data.get('visivel_para_motoristas', True)
+                
+                if visivel:
+                    veiculos.append(placa)
+                    veiculo_obj = {
+                        'placa': placa,
                         'modelo': data.get('modelo', '')
-                    })
+                    }
+                    veiculos_completos.append(veiculo_obj)
+                    
+                    # Agrupa por categoria
+                    categoria = data.get('categoria', 'Outros')
+                    if categoria in veiculos_agrupados:
+                        veiculos_agrupados[categoria].append(veiculo_obj)
+                    else:
+                        veiculos_agrupados['Outros'].append(veiculo_obj)
+            
+            # Ordena cada grupo
             veiculos.sort()
             veiculos_completos.sort(key=lambda x: x['placa'])
+            for categoria in veiculos_agrupados:
+                veiculos_agrupados[categoria].sort(key=lambda x: x['placa'])
 
+            # Agrupa motoristas por seção (somente visíveis)
+            motoristas_agrupados = {
+                'Base de Itaipuaçu': [],
+                'Base ETE de Araçatiba': [],
+                'Sede Sanemar': [],
+                'Van': [],
+                'Outros': []
+            }
             motoristas_ref = db.collection('motoristas').stream()
-            motoristas = [doc.to_dict().get('nome') for doc in motoristas_ref if doc.to_dict().get('nome')]
+            motoristas = []
+            for doc in motoristas_ref:
+                data = doc.to_dict()
+                nome = data.get('nome')
+                if nome:
+                    # Verifica visibilidade (padrão: True)
+                    visivel = data.get('visivel_para_motoristas', True)
+                    if visivel:
+                        motoristas.append(nome)
+                        secao = data.get('secao', 'Outros')
+                        if secao in motoristas_agrupados:
+                            motoristas_agrupados[secao].append(nome)
+                        else:
+                            motoristas_agrupados['Outros'].append(nome)
+            
             motoristas.sort()
+            for secao in motoristas_agrupados:
+                motoristas_agrupados[secao].sort()
 
         except Exception as e:
             mark_firestore_unavailable_if_quota(e)
             print(f"Erro ao buscar veículos ou motoristas: {e}")
             return render_template('maintenance.html'), 503
 
-    return render_template('index.html', veiculos=veiculos, veiculos_completos=veiculos_completos, motoristas=motoristas)
+    return render_template('index.html', 
+                         veiculos=veiculos, 
+                         veiculos_completos=veiculos_completos, 
+                         veiculos_agrupados=veiculos_agrupados,
+                         motoristas=motoristas,
+                         motoristas_agrupados=motoristas_agrupados)
 
 
 # --- Rota para Service Worker ---
@@ -214,8 +432,33 @@ def login_page():
         username = request.form.get('username')
         password = request.form.get('password')
         
-        # Verifica credenciais
-        if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
+        # Tenta buscar usuário no Firestore primeiro
+        user = get_user_by_username(username)
+        
+        if user and verify_password(password, user['password_hash']):
+            # Usuário encontrado no Firestore
+            session['logged_in'] = True
+            session['user_type'] = user.get('tipo', 'operador')
+            session['username'] = username
+            session['nome_completo'] = user.get('nome_completo', username)
+            session['user_id'] = user.get('id')
+            
+            # Registra login no audit_log
+            log_audit('login', 'usuarios', user.get('id'), new_data={'username': username})
+            
+            # Redireciona conforme tipo de usuário
+            if user.get('tipo') == 'admin':
+                next_page = request.args.get('next') or url_for('dashboard')
+            elif user.get('tipo') == 'historico':
+                next_page = request.args.get('next') or url_for('historico_page')
+            else:
+                next_page = request.args.get('next') or url_for('index')
+            
+            return redirect(next_page)
+        
+        # Fallback: verifica credenciais antigas (variáveis de ambiente)
+        # REMOVER após migrar todos os usuários para Firestore
+        elif username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
             session['logged_in'] = True
             session['user_type'] = 'admin'
             session['username'] = username
@@ -252,7 +495,10 @@ def logout():
 def dashboard():
     if not FIRESTORE_AVAILABLE:
         return render_template('maintenance.html'), 503
-    return render_template('dashboard.html')
+    
+    # Passa o tipo de usuário para o template
+    user_type = session.get('user_type', 'operador')
+    return render_template('dashboard.html', user_type=user_type)
 
 @app.route('/motorista/<nome>')
 def motorista_detalhes(nome):
@@ -404,6 +650,8 @@ def api_saida():
     solicitante = (data.get('solicitante') or '').strip()
     trajeto = (data.get('trajeto') or '').strip()
     horario = data.get('horario') # Horário é opcional
+    veiculo_categoria = data.get('veiculo_categoria', 'Outros')
+    motorista_secao = data.get('motorista_secao', 'Outros')
 
     # Normaliza entradas: placa em maiúsculas; nomes e textos capitalizados
     def title_case(s):
@@ -417,7 +665,7 @@ def api_saida():
     if not all([veiculo, motorista, solicitante, trajeto]):
         return jsonify({"error": "Todos os campos de saída são obrigatórios."}), 400
 
-    response_message = handle_saida(veiculo, motorista, solicitante, trajeto, horario)
+    response_message = handle_saida(veiculo, motorista, solicitante, trajeto, horario, veiculo_categoria, motorista_secao)
 
     # Lógica de resposta baseada na mensagem de retorno
     if "sucesso" in response_message:
@@ -471,6 +719,7 @@ def api_abastecimento():
     motorista = (data.get('motorista') or '').strip()
     litros = data.get('litros')
     odometro = data.get('odometro')
+    veiculo_categoria = data.get('veiculo_categoria', 'Outros')
 
     # Normaliza placa e nome
     placa = normalize_plate(placa) if placa else placa
@@ -482,6 +731,25 @@ def api_abastecimento():
         return jsonify({"error": "Placa, motorista e litros são obrigatórios."}), 400
 
     try:
+        # Verifica/Cria veículo se não existir
+        veiculos_ref = db.collection('veiculos')
+        veiculo_query = veiculos_ref.where(filter=firestore.FieldFilter('placa', '==', placa)).limit(1).stream()
+        veiculo_docs = list(veiculo_query)
+        
+        if not veiculo_docs:
+            # Cria veículo automaticamente
+            veiculos_ref.add({
+                'placa': placa,
+                'tipo': 'Não especificado',
+                'modelo': 'Não especificado',
+                'categoria': veiculo_categoria,
+                'visivel_para_motoristas': True,
+                'status_ativo': True,
+                'dataCadastro': firestore.SERVER_TIMESTAMP,
+                'viagens_totais': 0
+            })
+            print(f"🚗 Veículo {placa} criado automaticamente na categoria {veiculo_categoria}")
+        
         # Registra no Firestore na coleção 'refuels' (mesma coleção dos gráficos)
         refuels_ref = db.collection('refuels')
         now_utc = datetime.now(timezone.utc)
@@ -513,13 +781,24 @@ def get_veiculos_em_curso():
         veiculos = []
         for doc in viagens_em_curso:
             data = doc.to_dict()
+            placa = data.get("veiculo")
+            
+            # Buscar categoria do veículo
+            categoria = "Outros"  # valor padrão
+            if placa:
+                veiculo_docs = db.collection('veiculos').where(filter=firestore.FieldFilter('placa', '==', placa)).limit(1).get()
+                if veiculo_docs:
+                    veiculo_data = veiculo_docs[0].to_dict()
+                    categoria = veiculo_data.get('categoria', 'Outros')
+            
             veiculos.append({
                 "id": doc.id,  # ✅ Adicionado ID do documento
-                "veiculo": data.get("veiculo"),
+                "veiculo": placa,
                 "motorista": data.get("motorista"),
                 "solicitante": data.get("solicitante"),
                 "trajeto": data.get("trajeto"),
-                "horarioSaida": data.get("horarioSaida")
+                "horarioSaida": data.get("horarioSaida"),
+                "categoria": categoria  # ✅ Categoria do veículo
             })
         
         return jsonify(veiculos), 200
@@ -527,6 +806,230 @@ def get_veiculos_em_curso():
     except Exception as e:
         print(f"Erro ao buscar veículos em curso: {e}")
         return jsonify({"error": "Ocorreu um erro ao buscar os veículos em curso."}), 500
+
+# ==========================================
+# 👤 API DE GERENCIAMENTO DE USUÁRIOS
+# ==========================================
+
+@app.route('/api/usuarios', methods=['GET'])
+@requires_auth
+def get_usuarios():
+    """Lista todos os usuários (somente admin)"""
+    if session.get('user_type') != 'admin':
+        return jsonify({"error": "Acesso negado"}), 403
+    
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+    
+    try:
+        usuarios = []
+        users_ref = db.collection('usuarios').stream()
+        for doc in users_ref:
+            data = doc.to_dict()
+            # Remove password_hash da resposta
+            data.pop('password_hash', None)
+            data['id'] = doc.id
+            usuarios.append(data)
+        
+        # Ordena por nome
+        usuarios.sort(key=lambda x: x.get('nome_completo', ''))
+        return jsonify(usuarios), 200
+        
+    except Exception as e:
+        print(f"Erro ao buscar usuários: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/usuarios', methods=['POST'])
+@requires_auth
+def create_usuario():
+    """Cria novo usuário (somente admin)"""
+    if session.get('user_type') != 'admin':
+        return jsonify({"error": "Acesso negado"}), 403
+    
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+    
+    data = request.get_json() or {}
+    username = (data.get('username') or '').strip()
+    password = (data.get('password') or '').strip()
+    nome_completo = (data.get('nome_completo') or '').strip()
+    tipo = (data.get('tipo') or 'operador').strip()
+    
+    if not username or not password or not nome_completo:
+        return jsonify({"error": "username, password e nome_completo são obrigatórios"}), 400
+    
+    if tipo not in ['admin', 'historico', 'operador']:
+        return jsonify({"error": "tipo deve ser: admin, historico ou operador"}), 400
+    
+    try:
+        # Verifica se username já existe
+        existing = db.collection('usuarios').where(filter=firestore.FieldFilter('username', '==', username)).limit(1).get()
+        if len(list(existing)) > 0:
+            return jsonify({"error": "Username já existe"}), 400
+        
+        # Cria hash da senha
+        password_hash = hash_password(password)
+        
+        # Cria documento do usuário
+        user_data = {
+            'username': username,
+            'password_hash': password_hash,
+            'nome_completo': nome_completo,
+            'tipo': tipo,
+            'ativo': True,
+            'data_criacao': datetime.now(LOCAL_TZ)
+        }
+        
+        doc_ref = db.collection('usuarios').add(user_data)
+        
+        # Auditoria
+        log_audit('create', 'usuarios', doc_ref[1].id, new_data={'username': username, 'tipo': tipo})
+        
+        return jsonify({"message": "Usuário criado com sucesso", "id": doc_ref[1].id}), 201
+        
+    except Exception as e:
+        print(f"Erro ao criar usuário: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/usuarios/<user_id>', methods=['PUT'])
+@requires_auth
+def update_usuario(user_id):
+    """Atualiza usuário (somente admin)"""
+    if session.get('user_type') != 'admin':
+        return jsonify({"error": "Acesso negado"}), 403
+    
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+    
+    data = request.get_json() or {}
+    
+    try:
+        user_ref = db.collection('usuarios').document(user_id)
+        user_doc = user_ref.get()
+        
+        if not user_doc.exists:
+            return jsonify({"error": "Usuário não encontrado"}), 404
+        
+        old_data = user_doc.to_dict()
+        update_data = {}
+        
+        # Campos permitidos para atualizar
+        if 'nome_completo' in data:
+            update_data['nome_completo'] = data['nome_completo'].strip()
+        if 'tipo' in data:
+            if data['tipo'] not in ['admin', 'historico', 'operador']:
+                return jsonify({"error": "tipo inválido"}), 400
+            update_data['tipo'] = data['tipo']
+        if 'ativo' in data:
+            update_data['ativo'] = bool(data['ativo'])
+        
+        # Atualizar senha se fornecida
+        if 'password' in data and data['password']:
+            update_data['password_hash'] = hash_password(data['password'])
+        
+        if not update_data:
+            return jsonify({"error": "Nenhum campo para atualizar"}), 400
+        
+        user_ref.update(update_data)
+        
+        # Auditoria (sem incluir password_hash)
+        audit_data = {k: v for k, v in update_data.items() if k != 'password_hash'}
+        log_audit('update', 'usuarios', user_id, old_data={'username': old_data.get('username')}, new_data=audit_data)
+        
+        return jsonify({"message": "Usuário atualizado com sucesso"}), 200
+        
+    except Exception as e:
+        print(f"Erro ao atualizar usuário: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/usuarios/<user_id>', methods=['DELETE'])
+@requires_auth
+def delete_usuario(user_id):
+    """Desativa usuário (não deleta, apenas marca como inativo)"""
+    if session.get('user_type') != 'admin':
+        return jsonify({"error": "Acesso negado"}), 403
+    
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+    
+    try:
+        user_ref = db.collection('usuarios').document(user_id)
+        user_doc = user_ref.get()
+        
+        if not user_doc.exists:
+            return jsonify({"error": "Usuário não encontrado"}), 404
+        
+        user_data = user_doc.to_dict()
+        
+        # Não permite deletar a si mesmo
+        if user_data.get('username') == session.get('username'):
+            return jsonify({"error": "Você não pode desativar sua própria conta"}), 400
+        
+        # Marca como inativo ao invés de deletar
+        user_ref.update({'ativo': False})
+        
+        # Auditoria
+        log_audit('deactivate', 'usuarios', user_id, old_data={'username': user_data.get('username'), 'ativo': True})
+        
+        return jsonify({"message": "Usuário desativado com sucesso"}), 200
+        
+    except Exception as e:
+        print(f"Erro ao desativar usuário: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# ==========================================
+# 📋 API DE LOGS DE AUDITORIA
+# ==========================================
+
+@app.route('/api/audit-logs', methods=['GET'])
+@requires_auth
+def get_audit_logs():
+    """Lista logs de auditoria (somente admin)"""
+    if session.get('user_type') != 'admin':
+        return jsonify({"error": "Acesso negado - somente administradores"}), 403
+    
+    if not db:
+        return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
+    
+    try:
+        # Filtros opcionais
+        user_filter = request.args.get('user', '').strip()
+        action_filter = request.args.get('action', '').strip()
+        collection_filter = request.args.get('collection', '').strip()
+        limit_param = request.args.get('limit', '50')
+        
+        try:
+            limit_value = int(limit_param)
+            if limit_value > 50:  # Máximo de 50 para economizar quota
+                limit_value = 50
+        except:
+            limit_value = 50
+        
+        # Query base
+        query = db.collection('audit_log').order_by('timestamp', direction=firestore.Query.DESCENDING)
+        
+        # Aplica filtros
+        if user_filter:
+            query = query.where(filter=firestore.FieldFilter('user', '==', user_filter))
+        if action_filter:
+            query = query.where(filter=firestore.FieldFilter('action', '==', action_filter))
+        if collection_filter:
+            query = query.where(filter=firestore.FieldFilter('collection', '==', collection_filter))
+        
+        # Executa query
+        logs_docs = query.limit(limit_value).stream()
+        
+        logs = []
+        for doc in logs_docs:
+            log_data = serialize_doc(doc.to_dict())
+            log_data['id'] = doc.id
+            logs.append(log_data)
+        
+        return jsonify(logs), 200
+        
+    except Exception as e:
+        print(f"Erro ao buscar logs de auditoria: {e}")
+        return jsonify({"error": str(e)}), 500
 
 # Cache para histórico (5 minutos)
 historico_cache = {'data': None, 'expires': 0}
@@ -584,59 +1087,38 @@ def get_historico():
         if motorista_filtro:
             needs_local_filter = True
 
-        # 4. Executa a query
-        if not data_filtro and not placa_filtro:
+        # 4. Ordena e Executa a query
+        # Se não houver filtros de data, não precisa do order_by timestampSaida no query
+        if data_filtro:
+            query = query.order_by('timestampSaida', direction=firestore.Query.DESCENDING)
+        elif not data_filtro and not placa_filtro:
             # Sem filtros, ordena por timestamp
             query = query.order_by('timestampSaida', direction=firestore.Query.DESCENDING)
         
-        # ✅ OTIMIZAÇÃO: LIMIT AGRESSIVO - 100 docs (antes era 500!)
-        historico_docs = query.limit(100).stream()  # REDUZIDO 80%! 
+        # ✅ OTIMIZAÇÃO: LIMIT AGRESSIVO - 50 docs para economizar quota!
+        historico_docs = query.limit(50).stream()  # REDUZIDO 90%! 
 
         historico = []
-        for doc in historico_docs:
-            data = serialize_doc(doc.to_dict())
-            data['id'] = doc.id  # Adiciona o ID do documento
-            historico.append(data)
+        veiculos_cache_map = {}  # Cache de categorias dos veículos
         
-        # Aplica filtros locais se necessário
-        if needs_local_filter:
-            historico_filtrado = []
-            for item in historico:
-                # Filtro de placa (case insensitive, partial match)
-                if placa_filtro:
-                    item_placa = (item.get('veiculo') or '').upper()
-                    filtro_placa_upper = placa_filtro.upper()
-                    if filtro_placa_upper not in item_placa:
-                        continue
-                
-                # Filtro de motorista (case insensitive, partial match)
-                if motorista_filtro:
-                    item_motorista = (item.get('motorista') or '').upper()
-                    filtro_motorista_upper = motorista_filtro.upper()
-                    if filtro_motorista_upper not in item_motorista:
-                        continue
-                
-                historico_filtrado.append(item)
-            
-            historico = historico_filtrado
-
-        # 4. Ordena e Executa a query
-        # Importante: O Firestore pode pedir índices compostos se você usar múltiplos 'where' com 'order_by'
-        # Se der erro, o próprio Firebase te dará o link para criar o índice.
-        
-        # Se não houver filtros de data, não precisa do order_by timestampSaida no query
-        # Isso evita problemas de índice composto
-        if data_filtro:
-            query = query.order_by('timestampSaida', direction=firestore.Query.DESCENDING)
-        
-        # OTIMIZAÇÃO: Limite reduzido de 500 para 100 (80% de economia)
-        # Histórico raramente precisa de mais de 100 registros na tela
-        historico_docs = query.limit(100).stream() 
-
-        historico = []
         for doc in historico_docs:
             data = serialize_doc(doc.to_dict())
             data['id'] = doc.id  # ✅ ADICIONA O ID DO DOCUMENTO
+            
+            # Busca categoria do veículo (com cache para evitar queries repetidas)
+            placa = data.get('veiculo')
+            if placa and placa not in veiculos_cache_map:
+                try:
+                    veiculo_docs = db.collection('veiculos').where(filter=firestore.FieldFilter('placa', '==', placa)).limit(1).get()
+                    if veiculo_docs:
+                        veiculo_info = veiculo_docs[0].to_dict()
+                        veiculos_cache_map[placa] = veiculo_info.get('categoria', 'Outros')
+                    else:
+                        veiculos_cache_map[placa] = 'Outros'
+                except:
+                    veiculos_cache_map[placa] = 'Outros'
+            
+            data['categoria'] = veiculos_cache_map.get(placa, 'Outros')
             historico.append(data)
         
         # DEBUG: Verifica se os IDs foram adicionados
@@ -710,6 +1192,10 @@ def post_motorista():
     nome = (data.get('nome') or '').strip()
     funcao = (data.get('funcao') or '').strip()
     empresa = (data.get('empresa') or '').strip()
+    secao = (data.get('secao') or 'Outros').strip()
+    if not secao:
+        secao = 'Outros'
+    visivel = data.get('visivel_para_motoristas', True)
 
     if not nome:
         return jsonify({"error": "O campo 'nome' é obrigatório."}), 400
@@ -725,6 +1211,8 @@ def post_motorista():
             'nome': nome,
             'funcao': funcao,
             'empresa': empresa,
+            'secao': secao,
+            'visivel_para_motoristas': visivel,
             'status': 'nao_credenciado',
             'status_ativo': True,  # ✅ Novo campo: Ativo por padrão
             'cnh_url': None,  # ✅ Novo campo: URL da CNH
@@ -747,6 +1235,10 @@ def update_motorista(motorista_id):
     nome = (data.get('nome') or '').strip()
     funcao = (data.get('funcao') or '').strip()
     empresa = (data.get('empresa') or '').strip()
+    secao = (data.get('secao') or 'Outros').strip()
+    if not secao:
+        secao = 'Outros'
+    visivel = data.get('visivel_para_motoristas', True)
 
     try:
         motorista_ref = db.collection('motoristas').document(motorista_id)
@@ -754,6 +1246,9 @@ def update_motorista(motorista_id):
 
         if not motorista_doc.exists:
             return jsonify({"error": "Motorista não encontrado."}), 404
+        
+        # Salva dados antigos para auditoria
+        motorista_data = motorista_doc.to_dict()
 
         update_data = {}
         if nome:
@@ -762,10 +1257,17 @@ def update_motorista(motorista_id):
             update_data['funcao'] = funcao
         if empresa:
             update_data['empresa'] = empresa
+        if 'secao' in data and secao:
+            update_data['secao'] = secao
+        if 'visivel_para_motoristas' in data:
+            update_data['visivel_para_motoristas'] = visivel
 
         if not update_data:
             return jsonify({"error": "Nenhum campo para atualizar."}), 400
 
+        # Auditoria: registra atualização do motorista
+        log_audit('update', 'motoristas', motorista_id, old_data=motorista_data, new_data=update_data)
+        
         motorista_ref.update(update_data)
         return jsonify({"message": "Motorista atualizado com sucesso."}), 200
 
@@ -786,9 +1288,44 @@ def delete_motorista(motorista_id):
 
         if not motorista_doc.exists:
             return jsonify({"error": "Motorista não encontrado."}), 404
+        
+        # Salva dados antigos para auditoria
+        motorista_data = motorista_doc.to_dict()
+        
+        # 💾 BACKUP: Se tem CNH anexada, mover para pasta de backup
+        backup_urls = []
+        if motorista_data.get('cnh_url'):
+            try:
+                # Extrai caminho do arquivo da URL
+                cnh_url = motorista_data['cnh_url']
+                if 'firebasestorage.googleapis.com' in cnh_url:
+                    import urllib.parse
+                    path_start = cnh_url.find('/o/') + 3
+                    path_end = cnh_url.find('?')
+                    if path_start > 2 and path_end > path_start:
+                        file_path = urllib.parse.unquote(cnh_url[path_start:path_end])
+                        backup_url = backup_storage_file(file_path, reason='motorista_deleted')
+                        if backup_url:
+                            backup_urls.append({
+                                'tipo': 'cnh',
+                                'url_original': cnh_url,
+                                'url_backup': backup_url
+                            })
+                            print(f"✅ CNH do motorista {motorista_data.get('nome')} salva em backup")
+            except Exception as e:
+                print(f"⚠️ Erro ao fazer backup da CNH: {e}")
+        
+        # Adiciona URLs de backup nos dados de auditoria
+        motorista_data['_backups'] = backup_urls
 
+        # Auditoria: registra exclusão do motorista COM backups
+        log_audit('delete', 'motoristas', motorista_id, old_data=motorista_data)
+        
         motorista_ref.delete()
-        return jsonify({"message": "Motorista excluído com sucesso."}), 200
+        return jsonify({
+            "message": "Motorista excluído com sucesso.",
+            "backups": backup_urls
+        }), 200
 
     except Exception as e:
         print(f"Erro ao excluir motorista: {e}")
@@ -972,6 +1509,9 @@ def update_saida(saida_id):
 
         if not saida_doc.exists:
             return jsonify({"error": "Saída não encontrada."}), 404
+        
+        # Salva dados antigos para auditoria
+        saida_data_old = saida_doc.to_dict()
 
         # Converte timestamps de string ISO para datetime
         try:
@@ -1014,6 +1554,9 @@ def update_saida(saida_id):
             except:
                 pass  # Ignora se der erro na chegada
         
+        # Auditoria: registra atualização da saída
+        log_audit('update', 'saidas', saida_id, old_data=saida_data_old, new_data=update_data)
+        
         # Atualiza no Firestore
         saida_ref.update(update_data)
         
@@ -1044,6 +1587,12 @@ def delete_saida(saida_id):
 
         if not saida_doc.exists:
             return jsonify({"error": "Saída não encontrada."}), 404
+        
+        # Salva dados antigos para auditoria
+        saida_data = saida_doc.to_dict()
+        
+        # Auditoria: registra exclusão da saída
+        log_audit('delete', 'saidas', saida_id, old_data=saida_data)
 
         # Deleta o documento
         saida_ref.delete()
@@ -1511,8 +2060,8 @@ def get_refuels_summary():
         
         # OTIMIZAÇÃO CRÍTICA: Reduzido de 5000 para 500
         # 5000 docs = consome toda a quota em poucos reloads
-        # 500 docs = suficiente para ver padrões recentes
-        docs_total = list(refuels_ref.limit(500).stream())  # 90% de economia!
+        # 50 docs = suficiente para ver padrões recentes e economizar quota
+        docs_total = list(refuels_ref.limit(50).stream())  # 99% de economia!
         
         totals = {}
         for d in docs_total:
@@ -1534,7 +2083,7 @@ def get_refuels_summary():
                 query_month = refuels_ref.where(filter=And([
                     firestore.FieldFilter('timestamp', '>=', month_start),
                     firestore.FieldFilter('timestamp', '<=', month_end)
-                ])).limit(1000)
+                ])).limit(50)
                 
                 docs_month = list(query_month.stream())
                 
@@ -1627,6 +2176,17 @@ def patch_veiculo(placa):
             modelo = data.get('modelo', '').strip()
             update_fields['modelo'] = modelo if modelo else None
             
+        # Permite atualizar categoria
+        if 'categoria' in data:
+            categoria = (data.get('categoria') or 'Outros').strip()
+            if not categoria:
+                categoria = 'Outros'
+            update_fields['categoria'] = categoria
+            
+        # Permite atualizar visibilidade
+        if 'visivel_para_motoristas' in data:
+            update_fields['visivel_para_motoristas'] = data.get('visivel_para_motoristas', True)
+            
         # Permite atualizar media_kmpl
         if 'media_kmpl' in data:
             try:
@@ -1667,31 +2227,43 @@ def delete_veiculo(placa):
         vdoc = q[0]
         veiculo_data = vdoc.to_dict()
         
-        # Se tem documento no storage, deletar também
+        # 💾 BACKUP: Se tem documento anexado, mover para pasta de backup
+        backup_urls = []
         if veiculo_data.get('documento_url'):
             try:
                 # Extrair o caminho do arquivo da URL
                 documento_url = veiculo_data['documento_url']
                 if 'firebasestorage.googleapis.com' in documento_url:
-                    # Parse o caminho do arquivo
                     import urllib.parse
                     path_start = documento_url.find('/o/') + 3
                     path_end = documento_url.find('?')
                     if path_start > 2 and path_end > path_start:
                         file_path = urllib.parse.unquote(documento_url[path_start:path_end])
-                        bucket = firebase_storage.bucket()
-                        blob = bucket.blob(file_path)
-                        blob.delete()
-                        print(f"✅ Documento do veículo {placa_norm} deletado do storage: {file_path}")
+                        backup_url = backup_storage_file(file_path, reason='veiculo_deleted')
+                        if backup_url:
+                            backup_urls.append({
+                                'tipo': 'documento',
+                                'url_original': documento_url,
+                                'url_backup': backup_url
+                            })
+                            print(f"✅ Documento do veículo {placa_norm} salvo em backup")
             except Exception as e:
-                print(f"⚠️ Erro ao deletar documento do storage: {e}")
-                # Continua mesmo se falhar a exclusão do arquivo
+                print(f"⚠️ Erro ao fazer backup do documento: {e}")
+        
+        # Adiciona URLs de backup nos dados de auditoria
+        veiculo_data['_backups'] = backup_urls
+        
+        # Auditoria: registra exclusão do veículo ANTES de deletar
+        log_audit('delete', 'veiculos', vdoc.id, old_data=veiculo_data)
         
         # Deletar documento do Firestore
         vdoc.reference.delete()
         print(f"✅ Veículo {placa_norm} excluído com sucesso")
         
-        return jsonify({"message": "Veículo excluído com sucesso."}), 200
+        return jsonify({
+            "message": "Veículo excluído com sucesso.",
+            "backups": backup_urls
+        }), 200
         
     except Exception as e:
         print(f"❌ Erro ao excluir veículo: {e}")
@@ -1739,9 +2311,15 @@ def post_veiculo():
             return jsonify({"error": "Veículo com esta placa já existe."}), 400
         
         # Criar novo veículo
+        categoria = (data.get('categoria') or 'Outros').strip()
+        if not categoria:
+            categoria = 'Outros'
+            
         veiculo_data = {
             'placa': placa,
             'modelo': data.get('modelo', '').strip(),
+            'categoria': categoria,
+            'visivel_para_motoristas': data.get('visivel_para_motoristas', True),
             'timestamp': datetime.now(timezone.utc),
             'documento_url': None,  # Campo para documento do veículo
             'status_ativo': True    # Status ativo/inativo do veículo
@@ -1753,7 +2331,11 @@ def post_veiculo():
             except:
                 pass
         
-        veiculos_ref.add(veiculo_data)
+        doc_ref = veiculos_ref.add(veiculo_data)
+        
+        # Auditoria: registra criação do veículo
+        log_audit('create', 'veiculos', doc_ref[1].id, new_data=veiculo_data)
+        
         return jsonify({"message": "Veículo cadastrado com sucesso.", "placa": placa}), 201
         
     except Exception as e:
@@ -2241,7 +2823,7 @@ def get_dashboard_realtime():
 
 # --- Lógica de Negócio ---
 
-def handle_saida(veiculo_placa, motorista_nome, solicitante, trajeto, horario=None):
+def handle_saida(veiculo_placa, motorista_nome, solicitante, trajeto, horario=None, veiculo_categoria='Outros', motorista_secao='Outros'):
     try:
         # Normaliza placa recebida
         veiculo_placa = normalize_plate(veiculo_placa) if veiculo_placa else veiculo_placa
@@ -2264,6 +2846,7 @@ def handle_saida(veiculo_placa, motorista_nome, solicitante, trajeto, horario=No
             # Motorista é novo. Cria o documento já com o total 1.
             motoristas_ref.add({
                 'nome': motorista_nome,
+                'secao': motorista_secao,
                 'status': 'nao_credenciado',
                 'dataCadastro': firestore.SERVER_TIMESTAMP,
                 'viagens_totais': 1  # Inicia a contagem em 1
@@ -2286,6 +2869,8 @@ def handle_saida(veiculo_placa, motorista_nome, solicitante, trajeto, horario=No
                 'placa': veiculo_placa,
                 'tipo': 'Não especificado',  # Campo padrão
                 'modelo': 'Não especificado',  # Campo padrão
+                'categoria': veiculo_categoria,
+                'visivel_para_motoristas': True,
                 'ano': None,
                 'km_atual': 0,
                 'status_ativo': True,  # Ativo por padrão
@@ -3394,7 +3979,7 @@ def pdf_abastecimentos():
             query = query.where(filter=And(filters))
         
         # Limitar a 500 registros
-        refuels_docs = list(query.order_by('timestamp', direction=firestore.Query.DESCENDING).limit(500).stream())
+        refuels_docs = list(query.order_by('timestamp', direction=firestore.Query.DESCENDING).limit(50).stream())
         
         refuels = []
         for doc in refuels_docs:
@@ -3566,7 +4151,7 @@ def pdf_saidas():
             query = query.where(filter=And(filters))
         
         # Limitar a 500 registros
-        saidas_docs = list(query.order_by('timestampSaida', direction=firestore.Query.DESCENDING).limit(500).stream())
+        saidas_docs = list(query.order_by('timestampSaida', direction=firestore.Query.DESCENDING).limit(50).stream())
         
         saidas = []
         for doc in saidas_docs:
@@ -3714,7 +4299,7 @@ def pdf_multas():
             query = query.where(filter=And(filters))
         
         # Limitar a 500 registros
-        multas_docs = list(query.order_by('data_vencimento', direction=firestore.Query.DESCENDING).limit(500).stream())
+        multas_docs = list(query.order_by('data_vencimento', direction=firestore.Query.DESCENDING).limit(50).stream())
         
         multas = []
         for doc in multas_docs:
@@ -3864,7 +4449,7 @@ def pdf_revisoes():
             query = query.where('placa', '==', veiculo)
         
         # Buscar revisões
-        revisoes_docs = list(query.order_by('data_revisao', direction=firestore.Query.DESCENDING).limit(500).stream())
+        revisoes_docs = list(query.order_by('data_revisao', direction=firestore.Query.DESCENDING).limit(50).stream())
         
         revisoes = []
         for doc in revisoes_docs:

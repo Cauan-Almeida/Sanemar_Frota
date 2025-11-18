@@ -10,8 +10,11 @@
     <style>
         * { font-family: 'Inter', sans-serif; }
         body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
-        .card-hover { transition: all 0.3s ease; }
-        .card-hover:hover { transform: translateY(-4px); box-shadow: 0 20px 30px -5px rgba(0, 0, 0, 0.2); }
+        /* Removidas todas as animações e transições para carregamento mais rápido */
+        .card-hover:hover { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        /* Desabilita transições globalmente nesta página */
+        * { transition: none !important; }
+        button:hover, a:hover { transform: none !important; }
     </style>
 </head>
 <body class="p-4 md:p-8">
@@ -70,8 +73,8 @@
     </div>
 
     <!-- Modal Cadastrar/Editar Veículo -->
-    <div id="modal-veiculo" class="hidden fixed inset-0 bg-black bg-opacity-50 items-center justify-center z-50 p-4">
-        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8">
+    <div id="modal-veiculo" class="hidden fixed inset-0 bg-black bg-opacity-50 items-center justify-center z-50 p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 my-8 max-h-screen overflow-y-auto">
             <h2 id="modal-title" class="text-2xl font-bold mb-6 text-gray-800">Cadastrar Veículo</h2>
             <form id="form-veiculo" class="space-y-4">
                 <div>
@@ -85,6 +88,22 @@
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">Consumo Médio (km/L)</label>
                     <input type="number" step="0.01" id="input-media-kmpl" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all" placeholder="0.00">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">📍 Categoria / Localização</label>
+                    <select id="input-categoria" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all">
+                        <option value="Base de Itaipuaçu">Base de Itaipuaçu</option>
+                        <option value="Base ETE de Araçatiba">Base ETE de Araçatiba</option>
+                        <option value="Sede Sanemar">Sede Sanemar</option>
+                        <option value="Vans">Vans</option>
+                        <option value="Outros">Outros</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="flex items-center space-x-3 cursor-pointer">
+                        <input type="checkbox" id="input-visivel" checked class="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500">
+                        <span class="text-sm font-semibold text-gray-700">👁️ Visível para motoristas (desmarque para veículos apenas de documentos)</span>
+                    </label>
                 </div>
                 <div class="flex gap-3 pt-4">
                     <button type="button" id="btn-cancel" class="flex-1 px-6 py-3 bg-gray-200 hover:bg-gray-300 rounded-xl font-semibold transition-all">
@@ -244,12 +263,29 @@
                         ${statusAtivo ? '⏸️' : '▶️'}
                     </button>`;
                     
+                    const categoriaEmoji = {
+                        'Base de Itaipuaçu': '📍',
+                        'Base ETE de Araçatiba': '📍',
+                        'Sede Sanemar': '📍',
+                        'Vans': '🚐',
+                        'Outros': '🚗'
+                    };
+                    
+                    const categoria = v.categoria || 'Outros';
+                    const visivel = v.visivel_para_motoristas !== false;
+                    
                     card.innerHTML = `
                         <div class="flex items-start justify-between mb-4">
                             <div>
                                 <h3 class="text-2xl font-bold text-gray-800">${placa}</h3>
                                 <p class="text-gray-600">${v.modelo || 'Modelo não informado'}</p>
-                                <div class="mt-1">${statusBadge}</div>
+                                <div class="mt-2 flex flex-wrap gap-2">
+                                    ${statusBadge}
+                                    <span class="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">${categoriaEmoji[categoria]} ${categoria}</span>
+                                    ${visivel 
+                                        ? '<span class="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">👁️ Visível</span>'
+                                        : '<span class="px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-bold">🔒 Oculto</span>'}
+                                </div>
                             </div>
                             <div class="flex gap-2">
                                 ${statusButton}
@@ -322,9 +358,21 @@
         const btnCancel = document.getElementById('btn-cancel');
 
         btnAdd.addEventListener('click', () => {
+            console.log('🔵 Abrindo modal de novo veículo');
             editingPlaca = null;
             modalTitle.textContent = 'Cadastrar Veículo';
             formVeiculo.reset();
+            document.getElementById('input-placa').disabled = false;
+            
+            const categoriaSelect = document.getElementById('input-categoria');
+            const visivelCheckbox = document.getElementById('input-visivel');
+            
+            console.log('📍 Campo categoria existe?', categoriaSelect !== null);
+            console.log('👁️ Campo visível existe?', visivelCheckbox !== null);
+            
+            if (categoriaSelect) categoriaSelect.value = 'Outros';
+            if (visivelCheckbox) visivelCheckbox.checked = true;
+            
             modal.classList.remove('hidden');
             modal.classList.add('flex');
         });
@@ -347,6 +395,8 @@
                     document.getElementById('input-placa').disabled = true; // Não pode editar placa
                     document.getElementById('input-modelo').value = v.modelo || '';
                     document.getElementById('input-media-kmpl').value = v.media_kmpl || '';
+                    document.getElementById('input-categoria').value = v.categoria || 'Outros';
+                    document.getElementById('input-visivel').checked = v.visivel_para_motoristas !== false;
                     modal.classList.remove('hidden');
                     modal.classList.add('flex');
                 }
@@ -363,6 +413,8 @@
             const placa = document.getElementById('input-placa').value.trim().toUpperCase();
             const modelo = document.getElementById('input-modelo').value.trim();
             const media_kmpl = document.getElementById('input-media-kmpl').value;
+            const categoria = document.getElementById('input-categoria').value;
+            const visivel = document.getElementById('input-visivel').checked;
 
             if (!placa) {
                 alert('Informe a placa.');
@@ -370,7 +422,12 @@
             }
 
             try {
-                let payload = { placa, modelo };
+                let payload = { 
+                    placa, 
+                    modelo,
+                    categoria: categoria,
+                    visivel_para_motoristas: visivel
+                };
                 if (media_kmpl) payload.media_kmpl = Number(media_kmpl);
 
                 let res;

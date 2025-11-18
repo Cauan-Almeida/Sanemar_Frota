@@ -222,6 +222,18 @@ async function criarCardVeiculo(v, ativo) {
              📄
            </button>`;
     
+    // Categoria e visibilidade
+    const categoriaEmoji = {
+        'Base de Itaipuaçu': '📍',
+        'Base ETE de Araçatiba': '📍',
+        'Sede Sanemar': '📍',
+        'Vans': '🚐',
+        'Outros': '🚗'
+    };
+    
+    const categoria = v.categoria || 'Outros';
+    const visivel = v.visivel_para_motoristas !== false;
+    
     // Status badge e botão
     const statusBadge = ativo
         ? '<span class="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">✅ Ativo</span>'
@@ -236,7 +248,13 @@ async function criarCardVeiculo(v, ativo) {
             <div>
                 <h3 class="text-2xl font-bold text-gray-800">${placa}${inativoLabel}</h3>
                 <p class="text-gray-600">${v.modelo || 'Modelo não informado'}</p>
-                <div class="mt-1">${statusBadge}</div>
+                <div class="mt-2 flex flex-wrap gap-2">
+                    ${statusBadge}
+                    <span class="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">${categoriaEmoji[categoria]} ${categoria}</span>
+                    ${visivel 
+                        ? '<span class="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">👁️ Visível</span>'
+                        : '<span class="px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-bold">🔒 Oculto</span>'}
+                </div>
             </div>
             <div class="flex gap-2">
                 ${statusButton}
@@ -397,6 +415,10 @@ function initVeiculosModal() {
         modalTitle.textContent = 'Cadastrar Veículo';
         formVeiculo.reset();
         document.getElementById('input-placa').disabled = false;
+        document.getElementById('input-categoria').value = 'Outros';
+        document.getElementById('input-categoria-custom').style.display = 'none';
+        document.getElementById('input-categoria-custom').value = '';
+        document.getElementById('input-visivel').checked = true;
         modal.classList.remove('hidden');
         modal.classList.add('flex');
     });
@@ -423,8 +445,39 @@ function initVeiculosModal() {
         }
 
         try {
-            let payload = { placa, modelo };
+            const categoriaSelectEl = document.getElementById('input-categoria');
+            const categoriaCustomEl = document.getElementById('input-categoria-custom');
+            const visivelEl = document.getElementById('input-visivel');
+            
+            const categoriaSelect = categoriaSelectEl ? categoriaSelectEl.value : 'Outros';
+            const categoriaCustom = categoriaCustomEl ? categoriaCustomEl.value.trim() : '';
+            const visivel = visivelEl ? visivelEl.checked : true;
+            
+            // Validação: se selecionou nova categoria mas não digitou nada
+            if (categoriaSelect === '__NOVA__' && !categoriaCustom) {
+                if (typeof showToast === 'function') {
+                    showToast('Digite o nome da nova categoria', 'error');
+                } else {
+                    alert('Digite o nome da nova categoria');
+                }
+                categoriaCustomEl.focus();
+                return;
+            }
+            
+            // Se selecionou "Nova categoria", usa o valor digitado
+            const categoria = categoriaSelect === '__NOVA__' ? categoriaCustom : categoriaSelect;
+            
+            console.log('🔵 Dados do formulário:', { placa, modelo, categoria, visivel, categoriaSelect, categoriaCustom });
+            
+            let payload = { 
+                placa, 
+                modelo: modelo || '',
+                categoria: categoria || 'Outros',
+                visivel_para_motoristas: visivel
+            };
             if (media_kmpl) payload.media_kmpl = Number(media_kmpl);
+            
+            console.log('📤 Payload enviado:', payload);
 
             let res;
             if (editingPlaca) {
@@ -488,6 +541,26 @@ async function openEditVeiculo(placa) {
             document.getElementById('input-placa').disabled = true; // Não pode editar placa
             document.getElementById('input-modelo').value = v.modelo || '';
             document.getElementById('input-media-kmpl').value = v.media_kmpl || '';
+            
+            // Verificar se categoria é uma das padrões
+            const categoriaSelect = document.getElementById('input-categoria');
+            const categoriaCustomInput = document.getElementById('input-categoria-custom');
+            const categoria = v.categoria || 'Outros';
+            
+            // Verifica se categoria existe no select
+            const optionExists = Array.from(categoriaSelect.options).some(opt => opt.value === categoria);
+            
+            if (optionExists) {
+                categoriaSelect.value = categoria;
+                categoriaCustomInput.style.display = 'none';
+            } else {
+                // Categoria customizada
+                categoriaSelect.value = '__NOVA__';
+                categoriaCustomInput.value = categoria;
+                categoriaCustomInput.style.display = 'block';
+            }
+            
+            document.getElementById('input-visivel').checked = v.visivel_para_motoristas !== false;
             modal.classList.remove('hidden');
             modal.classList.add('flex');
         }

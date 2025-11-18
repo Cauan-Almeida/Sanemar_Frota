@@ -3,10 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Controle de Frota - Sanemar</title>
-    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico?v=2">
+    <script src="https://cdn.tailwindcss.com?v=3.4.0"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css?v=2">
     <link rel="manifest" href="/static/manifest.json">
     <style>
         * { font-family: 'Inter', sans-serif; }
@@ -84,8 +88,14 @@
                             class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all bg-white"
                             required>
                         <option value="">Selecione o veículo...</option>
-                        {% for v in veiculos_completos %}
-                        <option value="{{ v.placa }}">{{ v.placa }}{% if v.modelo %} - {{ v.modelo }}{% endif %}</option>
+                        {% for categoria, veiculos in veiculos_agrupados.items() %}
+                            {% if veiculos|length > 0 %}
+                            <optgroup label="📍 {{ categoria }}">
+                                {% for v in veiculos %}
+                                <option value="{{ v.placa }}">{{ v.placa }}{% if v.modelo %} - {{ v.modelo }}{% endif %}</option>
+                                {% endfor %}
+                            </optgroup>
+                            {% endif %}
                         {% endfor %}
                         <option value="__NAO_CADASTRADO__" style="background: #fef3c7; font-weight: bold;">➕ Minha placa não está na lista</option>
                     </select>
@@ -94,6 +104,35 @@
                            style="display: none; text-transform: uppercase;"
                            class="w-full px-4 py-3 rounded-xl border-2 border-amber-400 focus:border-amber-500 focus:ring-4 focus:ring-amber-100 transition-all mt-2"
                            required disabled>
+                    <div id="saida-veiculo-categoria-container" style="display: none;" class="mt-2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">📍 Categoria / Localização</label>
+                        <select id="saida-veiculo-categoria" name="veiculo_categoria" onchange="handleSaidaCategoriaChange()" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all">
+                            <option value="Base de Itaipuaçu">Base de Itaipuaçu</option>
+                            <option value="Base ETE de Araçatiba">Base ETE de Araçatiba</option>
+                            <option value="Sede Sanemar">Sede Sanemar</option>
+                            <option value="Vans">Vans</option>
+                            <option value="Comercial">Comercial</option>
+                            <option value="Outros">Outros</option>
+                            <option value="__NOVA__">➕ Adicionar nova categoria...</option>
+                        </select>
+                        <input type="text" id="saida-veiculo-categoria-custom" placeholder="Digite a nova categoria..." 
+                               style="display: none;" 
+                               class="w-full px-4 py-3 rounded-xl border-2 border-amber-400 focus:border-amber-500 focus:ring-4 focus:ring-amber-100 transition-all mt-2">
+                    </div>
+                    <div id="refuel-veiculo-categoria-container" style="display: none;" class="mt-2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">📍 Categoria / Localização</label>
+                        <select id="refuel-veiculo-categoria" name="veiculo_categoria" onchange="handleRefuelCategoriaChange()" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all">
+                            <option value="Base de Itaipuaçu">Base de Itaipuaçu</option>
+                            <option value="Base ETE de Araçatiba">Base ETE de Araçatiba</option>
+                            <option value="Sede Sanemar">Sede Sanemar</option>
+                            <option value="Vans">Vans</option>
+                            <option value="Outros">Outros</option>
+                            <option value="__NOVA__">➕ Adicionar nova categoria...</option>
+                        </select>
+                        <input type="text" id="refuel-veiculo-categoria-custom" placeholder="Digite a nova categoria..." 
+                               style="display: none;" 
+                               class="w-full px-4 py-3 rounded-xl border-2 border-amber-400 focus:border-amber-500 focus:ring-4 focus:ring-amber-100 transition-all mt-2">
+                    </div>
                 </div>
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">Motorista</label>
@@ -101,8 +140,14 @@
                             class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all bg-white"
                             required>
                         <option value="">Selecione o motorista...</option>
-                        {% for m in motoristas %}
-                        <option value="{{ m }}">{{ m }}</option>
+                        {% for secao, motoristas_secao in motoristas_agrupados.items() %}
+                            {% if motoristas_secao|length > 0 %}
+                            <optgroup label="👷 {{ secao }}">
+                                {% for m in motoristas_secao %}
+                                <option value="{{ m }}">{{ m }}</option>
+                                {% endfor %}
+                            </optgroup>
+                            {% endif %}
                         {% endfor %}
                         <option value="__NAO_CADASTRADO__" style="background: #fef3c7; font-weight: bold;">➕ Meu nome não está na lista</option>
                     </select>
@@ -111,6 +156,20 @@
                            style="display: none;"
                            class="w-full px-4 py-3 rounded-xl border-2 border-amber-400 focus:border-amber-500 focus:ring-4 focus:ring-amber-100 transition-all mt-2"
                            required disabled>
+                    <div id="saida-motorista-secao-container" style="display: none;" class="mt-2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">👷 Seção / Localidade</label>
+                        <select id="saida-motorista-secao" name="motorista_secao" onchange="handleMotoristaSecaoChange()" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all">
+                            <option value="Base de Itaipuaçu">Base de Itaipuaçu</option>
+                            <option value="Base ETE de Araçatiba">Base ETE de Araçatiba</option>
+                            <option value="Sede Sanemar">Sede Sanemar</option>
+                            <option value="Van">Van</option>
+                            <option value="Outros">Outros</option>
+                            <option value="__NOVA__">➕ Adicionar nova seção...</option>
+                        </select>
+                        <input type="text" id="saida-motorista-secao-custom" placeholder="Digite a nova seção..." 
+                               style="display: none;" 
+                               class="w-full px-4 py-3 rounded-xl border-2 border-amber-400 focus:border-amber-500 focus:ring-4 focus:ring-amber-100 transition-all mt-2">
+                    </div>
                 </div>
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">Solicitante</label>
@@ -176,8 +235,14 @@
                     <select id="quick-refuel-placa" onchange="handleRefuelPlacaChange()" 
                             class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all bg-white">
                         <option value="">Selecione o veículo...</option>
-                        {% for v in veiculos_completos %}
-                        <option value="{{ v.placa }}">{{ v.placa }}{% if v.modelo %} - {{ v.modelo }}{% endif %}</option>
+                        {% for categoria, veiculos in veiculos_agrupados.items() %}
+                            {% if veiculos|length > 0 %}
+                            <optgroup label="📍 {{ categoria }}">
+                                {% for v in veiculos %}
+                                <option value="{{ v.placa }}">{{ v.placa }}{% if v.modelo %} - {{ v.modelo }}{% endif %}</option>
+                                {% endfor %}
+                            </optgroup>
+                            {% endif %}
                         {% endfor %}
                         <option value="__NAO_CADASTRADO__" style="background: #fef3c7; font-weight: bold;">➕ Minha placa não está na lista</option>
                     </select>
@@ -186,14 +251,35 @@
                            style="display: none; text-transform: uppercase;"
                            class="w-full px-4 py-3 rounded-xl border-2 border-amber-400 focus:border-amber-500 focus:ring-4 focus:ring-amber-100 transition-all mt-2"
                            disabled>
+                    <div id="quick-refuel-categoria-container" style="display: none;" class="mt-2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">📍 Categoria / Localização</label>
+                        <select id="quick-refuel-categoria" name="veiculo_categoria" onchange="handleRefuelCategoriaChange()" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all">
+                            <option value="Base de Itaipuaçu">Base de Itaipuaçu</option>
+                            <option value="Base ETE de Araçatiba">Base ETE de Araçatiba</option>
+                            <option value="Sede Sanemar">Sede Sanemar</option>
+                            <option value="Vans">Vans</option>
+                            <option value="Comercial">Comercial</option>
+                            <option value="Outros">Outros</option>
+                            <option value="__NOVA__">➕ Adicionar nova categoria...</option>
+                        </select>
+                        <input type="text" id="quick-refuel-categoria-custom" placeholder="Digite a nova categoria..." 
+                               style="display: none;" 
+                               class="w-full px-4 py-3 rounded-xl border-2 border-amber-400 focus:border-amber-500 focus:ring-4 focus:ring-amber-100 transition-all mt-2">
+                    </div>
                 </div>
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">Motorista</label>
                     <select id="quick-refuel-motorista" onchange="handleRefuelMotoristaChange()"
                             class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all bg-white">
                         <option value="">Selecione o motorista...</option>
-                        {% for m in motoristas %}
-                        <option value="{{ m }}">{{ m }}</option>
+                        {% for secao, motoristas_secao in motoristas_agrupados.items() %}
+                        {% if motoristas_secao %}
+                        <optgroup label="👷 {{ secao }}">
+                            {% for m in motoristas_secao %}
+                            <option value="{{ m }}">{{ m }}</option>
+                            {% endfor %}
+                        </optgroup>
+                        {% endif %}
                         {% endfor %}
                         <option value="__NAO_CADASTRADO__" style="background: #fef3c7; font-weight: bold;">➕ Meu nome não está na lista</option>
                     </select>
@@ -202,6 +288,20 @@
                            style="display: none;"
                            class="w-full px-4 py-3 rounded-xl border-2 border-amber-400 focus:border-amber-500 focus:ring-4 focus:ring-amber-100 transition-all mt-2"
                            disabled>
+                    <div id="quick-refuel-motorista-secao-container" style="display: none;" class="mt-2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">👷 Seção do Motorista</label>
+                        <select id="quick-refuel-motorista-secao" name="motorista_secao" onchange="handleRefuelMotoristaSecaoChange()" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all">
+                            <option value="Base de Itaipuaçu">Base de Itaipuaçu</option>
+                            <option value="Base ETE de Araçatiba">Base ETE de Araçatiba</option>
+                            <option value="Sede Sanemar">Sede Sanemar</option>
+                            <option value="Van">Van</option>
+                            <option value="Outros">Outros</option>
+                            <option value="__NOVA__">➕ Adicionar nova seção...</option>
+                        </select>
+                        <input type="text" id="quick-refuel-motorista-secao-custom" placeholder="Digite a nova seção..." 
+                               style="display: none;" 
+                               class="w-full px-4 py-3 rounded-xl border-2 border-amber-400 focus:border-amber-500 focus:ring-4 focus:ring-amber-100 transition-all mt-2">
+                    </div>
                 </div>
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">Litros</label>
@@ -240,6 +340,7 @@
         function handleVeiculoChange() {
             const select = document.getElementById('saida-veiculo-select');
             const input = document.getElementById('saida-veiculo-input');
+            const categoriaContainer = document.getElementById('saida-veiculo-categoria-container');
             
             if (select.value === '__NAO_CADASTRADO__') {
                 // Mostra input, esconde select
@@ -249,7 +350,21 @@
                 input.style.display = 'block';
                 input.disabled = false;
                 input.required = true;
+                categoriaContainer.style.display = 'block';
                 input.focus();
+            }
+        }
+        
+        function handleSaidaCategoriaChange() {
+            const select = document.getElementById('saida-veiculo-categoria');
+            const customInput = document.getElementById('saida-veiculo-categoria-custom');
+            
+            if (select.value === '__NOVA__') {
+                customInput.style.display = 'block';
+                customInput.focus();
+            } else {
+                customInput.style.display = 'none';
+                customInput.value = '';
             }
         }
         
@@ -257,6 +372,7 @@
         function handleMotoristaChange() {
             const select = document.getElementById('saida-motorista-select');
             const input = document.getElementById('saida-motorista-input');
+            const secaoContainer = document.getElementById('saida-motorista-secao-container');
             
             if (select.value === '__NAO_CADASTRADO__') {
                 // Mostra input, esconde select
@@ -266,7 +382,21 @@
                 input.style.display = 'block';
                 input.disabled = false;
                 input.required = true;
+                secaoContainer.style.display = 'block';
                 input.focus();
+            }
+        }
+        
+        function handleMotoristaSecaoChange() {
+            const select = document.getElementById('saida-motorista-secao');
+            const customInput = document.getElementById('saida-motorista-secao-custom');
+            
+            if (select.value === '__NOVA__') {
+                customInput.style.display = 'block';
+                customInput.focus();
+            } else {
+                customInput.style.display = 'none';
+                customInput.value = '';
             }
         }
         
@@ -276,15 +406,30 @@
         function handleRefuelPlacaChange() {
             const select = document.getElementById('quick-refuel-placa');
             const input = document.getElementById('quick-refuel-placa-input');
+            const categoriaContainer = document.getElementById('quick-refuel-categoria-container');
             
             if (select.value === '__NAO_CADASTRADO__') {
                 select.disabled = true;
                 select.style.display = 'none';
                 input.style.display = 'block';
                 input.disabled = false;
+                categoriaContainer.style.display = 'block';
                 input.id = 'quick-refuel-placa';
                 select.id = 'quick-refuel-placa-select-hidden';
                 input.focus();
+            }
+        }
+        
+        function handleRefuelCategoriaChange() {
+            const select = document.getElementById('quick-refuel-categoria');
+            const customInput = document.getElementById('quick-refuel-categoria-custom');
+            
+            if (select.value === '__NOVA__') {
+                customInput.style.display = 'block';
+                customInput.focus();
+            } else {
+                customInput.style.display = 'none';
+                customInput.value = '';
             }
         }
         
@@ -292,15 +437,30 @@
         function handleRefuelMotoristaChange() {
             const select = document.getElementById('quick-refuel-motorista');
             const input = document.getElementById('quick-refuel-motorista-input');
+            const secaoContainer = document.getElementById('quick-refuel-motorista-secao-container');
             
             if (select.value === '__NAO_CADASTRADO__') {
                 select.disabled = true;
                 select.style.display = 'none';
                 input.style.display = 'block';
                 input.disabled = false;
+                secaoContainer.style.display = 'block';
                 input.id = 'quick-refuel-motorista';
                 select.id = 'quick-refuel-motorista-select-hidden';
                 input.focus();
+            }
+        }
+        
+        function handleRefuelMotoristaSecaoChange() {
+            const select = document.getElementById('quick-refuel-motorista-secao');
+            const customInput = document.getElementById('quick-refuel-motorista-secao-custom');
+            
+            if (select.value === '__NOVA__') {
+                customInput.style.display = 'block';
+                customInput.focus();
+            } else {
+                customInput.style.display = 'none';
+                customInput.value = '';
             }
         }
         
@@ -343,6 +503,24 @@
                     const litros = document.getElementById('quick-refuel-litros').value.trim();
                     const odometro = document.getElementById('quick-refuel-odometro').value.trim();
                     
+                    // Pega categoria (se campo customizado estiver visível, usa ele)
+                    const categoriaSelect = document.getElementById('quick-refuel-categoria');
+                    const categoriaCustomInput = document.getElementById('quick-refuel-categoria-custom');
+                    
+                    let categoria = 'Outros';
+                    if (categoriaSelect) {
+                        if (categoriaSelect.value === '__NOVA__') {
+                            if (!categoriaCustomInput || !categoriaCustomInput.value.trim()) {
+                                showToast('error', '⚠️ Digite o nome da nova categoria', 5000);
+                                if (categoriaCustomInput) categoriaCustomInput.focus();
+                                return;
+                            }
+                            categoria = categoriaCustomInput.value.trim();
+                        } else {
+                            categoria = categoriaSelect.value || 'Outros';
+                        }
+                    }
+                    
                     if (!placa || !motorista || !litros) {
                         showToast('error', '⚠️ Preencha placa, motorista e litros', 5000);
                         return;
@@ -364,7 +542,7 @@
                         const response = await fetch('/api/abastecimento', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ placa, motorista, litros, odometro })
+                            body: JSON.stringify({ placa, motorista, litros, odometro, veiculo_categoria: categoria })
                         });
                         
                         const result = await response.json();
@@ -442,53 +620,112 @@
                     return;
                 }
 
-                veiculos.forEach((v, index) => {
-                    const tr = document.createElement('tr');
-                    tr.className = 'border-b border-gray-100 hover:bg-blue-50 transition-colors';
-                    const inputId = `horario-chegada-${index}`;
+                // Agrupa veículos por categoria/local
+                const categorias = {
+                    'Base de Itaipuaçu': [],
+                    'Base ETE de Araçatiba': [],
+                    'Sede Sanemar': [],
+                    'Vans': [],
+                    'Comercial': [],
+                    'Outros': []
+                };
+                
+                veiculos.forEach(v => {
+                    let cat = v.categoria || 'Outros';
+                    // Mescla 'Van' em 'Vans'
+                    if (cat === 'Van') cat = 'Vans';
                     
-                    // Serializa os dados do veículo para passar na chamada
-                    const veiculoDataStr = JSON.stringify({
-                        veiculo: v.veiculo,
-                        motorista: v.motorista,
-                        solicitante: v.solicitante || 'Não informado',
-                        trajeto: v.trajeto || 'Não informado',
-                        horarioSaida: v.horarioSaida || 'Não informado'
-                    }).replace(/"/g, '&quot;');
-                    
-                    tr.innerHTML = `
-                        <td class="py-3 px-4 font-semibold">${v.veiculo}</td>
-                        <td class="py-3 px-4">${v.motorista}</td>
-                        <td class="py-3 px-4">${v.horarioSaida || '-'}</td>
-                        <td class="py-3 px-4">
-                            <input type="time" id="${inputId}" 
-                                   class="px-3 py-1 rounded-lg border-2 border-gray-300 focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-all"
-                                   placeholder="HH:MM">
-                        </td>
-                        <td class="py-3 px-4">
-                            <div class="flex gap-2 flex-wrap">
-                                <button onclick='editarSaidaEmCurso("${v.id}", ${veiculoDataStr})' 
-                                        class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-semibold transition-all"
-                                        title="Editar trajeto/solicitante">
-                                    ✏️ Editar
-                                </button>
-                                <button onclick='registrarChegadaComHorario("${v.veiculo}", "${inputId}", ${veiculoDataStr})' 
-                                        class="px-3 py-1 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-semibold transition-all">
-                                    Chegada
-                                </button>
-                                <button onclick="cancelarViagem('${v.veiculo}')" 
-                                        class="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-semibold transition-all">
-                                    Cancelar
-                                </button>
-                            </div>
-                        </td>
-                    `;
-                    tbody.appendChild(tr);
+                    if (categorias[cat]) {
+                        categorias[cat].push(v);
+                    } else {
+                        categorias['Outros'].push(v);
+                    }
                 });
+
+                let index = 0;
+                for (const [categoria, veiculosCategoria] of Object.entries(categorias)) {
+                    // Sempre mostra header, mesmo se vazio
+                    const headerTr = document.createElement('tr');
+                    headerTr.className = 'bg-gradient-to-r from-indigo-100 to-purple-100';
+                    headerTr.innerHTML = `<td colspan="5" class="py-2 px-4 font-bold text-gray-700">📍 ${categoria} (${veiculosCategoria.length})</td>`;
+                    tbody.appendChild(headerTr);
+                    
+                    if (veiculosCategoria.length === 0) continue;
+                    
+                    veiculosCategoria.forEach((v) => {
+                        const tr = document.createElement('tr');
+                        tr.id = `veiculo-row-${index}`;
+                        tr.className = 'border-b border-gray-100 hover:bg-blue-50 transition-colors';
+                        const inputId = `horario-chegada-${index}`;
+                        
+                        const veiculoDataStr = JSON.stringify({
+                            veiculo: v.veiculo,
+                            motorista: v.motorista,
+                            solicitante: v.solicitante || 'Não informado',
+                            trajeto: v.trajeto || 'Não informado',
+                            horarioSaida: v.horarioSaida || 'Não informado'
+                        }).replace(/"/g, '&quot;');
+                        
+                        tr.innerHTML = `
+                            <td class="py-3 px-4 font-semibold text-lg">${v.veiculo}</td>
+                            <td class="py-3 px-4 text-lg"><strong>${v.motorista}</strong></td>
+                            <td class="py-3 px-4">${v.horarioSaida || '-'}</td>
+                            <td class="py-3 px-4">
+                                <input type="time" id="${inputId}" 
+                                       class="px-3 py-1 rounded-lg border-2 border-gray-300 focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-all"
+                                       placeholder="HH:MM">
+                            </td>
+                            <td class="py-3 px-4">
+                                <div class="flex gap-2 flex-wrap">
+                                    <button onclick='editarSaidaEmCurso("${v.id}", ${veiculoDataStr})' 
+                                            class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-semibold transition-all"
+                                            title="Editar trajeto/solicitante">
+                                        ✏️ Editar
+                                    </button>
+                                    <button onclick='destacarERegistrarChegada(${index}, "${v.veiculo}", "${inputId}", ${veiculoDataStr})' 
+                                            class="px-3 py-1 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-semibold transition-all">
+                                        ✅ Chegada
+                                    </button>
+                                    <button onclick="cancelarViagem('${v.veiculo}')" 
+                                            class="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-semibold transition-all">
+                                        ❌ Cancelar
+                                    </button>
+                                </div>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                        index++;
+                    });
+                }
 
                 console.log(`✅ ${veiculos.length} veículos em curso carregados`);
             } catch (error) {
                 console.error('❌ Erro ao buscar veículos em curso:', error);
+            }
+        }
+
+        // Função para destacar linha e registrar chegada
+        async function destacarERegistrarChegada(rowIndex, placa, inputId, veiculoData) {
+            const row = document.getElementById(`veiculo-row-${rowIndex}`);
+            
+            // Destaca a linha instantaneamente
+            if (row) {
+                row.style.backgroundColor = '#fef3c7';
+                row.style.transform = 'scale(1.02)';
+                row.style.boxShadow = '0 4px 20px rgba(251, 191, 36, 0.5)';
+                row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            
+            // Registra chegada sem delay
+            await registrarChegadaComHorario(placa, inputId, veiculoData);
+            
+            // Remove destaque após confirmação
+            if (row) {
+                setTimeout(() => {
+                    row.style.backgroundColor = '';
+                    row.style.transform = '';
+                    row.style.boxShadow = '';
+                }, 300);
             }
         }
 
