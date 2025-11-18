@@ -97,7 +97,7 @@ class ConnectionMonitor {
     }
     
     handleOnline() {
-        console.log('✅ Conexão restabelecida');
+        // Conexão restabelecida silenciosamente
         
         // Atualiza indicador
         this.statusIndicator.className = 'online';

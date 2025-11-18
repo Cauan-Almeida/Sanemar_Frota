@@ -78,6 +78,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (tab === 'veiculos') {
             loadVeiculosData();
         }
+        
+        // Dashboard sempre recarrega o histórico (garante dados atualizados)
+        if (tab === 'dashboard') {
+            console.log('🔄 Recarregando histórico no dashboard');
+            loadHistoricoData();
+        }
 
         // Update main title
         const activeLink = document.querySelector(`.tab-link[data-tab="${tab}"]`);
