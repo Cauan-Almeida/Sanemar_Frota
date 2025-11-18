@@ -1,10 +1,13 @@
-const CACHE_NAME = 'frota-sanemar-cache-v8-connection';
+// ⚠️ AUMENTE ESTE NÚMERO SEMPRE QUE FIZER MUDANÇAS NO CÓDIGO
+const APP_VERSION = 'v9.0'; // <<< MUDE AQUI PARA FORÇAR ATUALIZAÇÃO
+const CACHE_NAME = `frota-sanemar-cache-${APP_VERSION}`;
 const OLD_CACHES = [
   'frota-sanemar-cache-v3',
   'frota-sanemar-cache-v4', 
   'frota-sanemar-cache-v5',
   'frota-sanemar-cache-v6-clean',
-  'frota-sanemar-cache-v7-final'
+  'frota-sanemar-cache-v7-final',
+  'frota-sanemar-cache-v8-connection'
 ];
 const urlsToCache = [
   '/',
@@ -25,13 +28,13 @@ const urlsToCache = [
 
 // Evento de Instalação: abre o cache e armazena os arquivos do app shell
 self.addEventListener('install', event => {
-  console.log('[SW v8] Instalando...');
+  console.log(`[SW ${APP_VERSION}] 🔄 Instalando nova versão...`);
   self.skipWaiting(); // Força ativação imediata
   
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
-        console.log('[SW v8] Cache aberto');
+        console.log(`[SW ${APP_VERSION}] ✅ Cache aberto`);
         return cache.addAll(urlsToCache);
       })
       .catch(err => console.warn('[SW v8] Erro na instalação:', err))
@@ -119,7 +122,7 @@ self.addEventListener('fetch', event => {
             return networkResponse;
           })
           .catch(err => {
-            console.warn('[SW v8] Erro na rede:', err);
+            console.warn(`[SW ${APP_VERSION}] ⚠️ Erro na rede:`, err);
             return new Response('Offline', { status: 503 });
           });
       })
@@ -128,23 +131,34 @@ self.addEventListener('fetch', event => {
 
 // Evento de Ativação: limpa caches antigos
 self.addEventListener('activate', event => {
-  console.log('[SW v8] Ativando...');
+  console.log(`[SW ${APP_VERSION}] 🔄 Ativando e limpando cache antigo...`);
   
   event.waitUntil(
     Promise.all([
-      // Remove todos os caches antigos
+      // Remove TODOS os caches antigos
       caches.keys().then(cacheNames => {
         return Promise.all(
           cacheNames.map(cacheName => {
             if (cacheName !== CACHE_NAME) {
-              console.log('[SW v8] Removendo cache antigo:', cacheName);
+              console.log(`[SW ${APP_VERSION}] 🗑️ Removendo cache antigo: ${cacheName}`);
               return caches.delete(cacheName);
             }
           })
         );
       }),
-      // Assume controle imediatamente
-      self.clients.claim()
+      // Assume controle imediatamente de TODAS as páginas
+      self.clients.claim().then(() => {
+        console.log(`[SW ${APP_VERSION}] ✅ Controle assumido - enviando mensagem de reload`);
+        // Notifica todos os clientes sobre a atualização
+        return self.clients.matchAll().then(clients => {
+          clients.forEach(client => {
+            client.postMessage({
+              type: 'SW_UPDATED',
+              version: APP_VERSION
+            });
+          });
+        });
+      })
     ])
   );
 });

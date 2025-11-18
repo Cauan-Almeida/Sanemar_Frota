@@ -31,8 +31,6 @@ class ConnectionMonitor {
         
         // Checa estado inicial
         this.checkConnection();
-        
-        console.log('🌐 Monitor de conexão inicializado');
     }
     
     createElements() {
@@ -83,8 +81,6 @@ class ConnectionMonitor {
     }
     
     handleOffline() {
-        console.warn('⚠️ Conexão perdida');
-        
         // Atualiza indicador
         this.statusIndicator.className = 'offline';
         this.statusIndicator.innerHTML = '<span class="status-dot"></span><span class="status-text">Offline</span>';
@@ -135,8 +131,6 @@ class ConnectionMonitor {
         this.offlineBanner?.remove();
         this.onlineBanner?.remove();
         this.statusIndicator?.remove();
-        
-        console.log('🌐 Monitor de conexão destruído');
     }
 }
 

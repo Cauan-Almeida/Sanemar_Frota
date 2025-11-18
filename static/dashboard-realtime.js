@@ -93,10 +93,11 @@ async function initRealtimeListeners() {
                         );
                     }
                     
-                    // Recarrega o histórico também
-                    if (typeof loadHistoricoData === 'function') {
-                        await loadHistoricoData();
-                    }
+                    // DESABILITADO: Recarregar histórico causa bugs nas tabs
+                    // O histórico já é carregado no DOMContentLoaded
+                    // if (typeof loadHistoricoData === 'function') {
+                    //     await loadHistoricoData();
+                    // }
                     
                     console.log('✅ Dashboard atualizado automaticamente!');
                 } catch (error) {

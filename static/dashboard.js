@@ -1,3 +1,9 @@
+// 🔧 Inicializa cache global ANTES de tudo
+if (!window.historicoCache) {
+    window.historicoCache = [];
+    console.log('✅ Cache global inicializado no dashboard.js');
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     // Inicializa os gráficos com um estado vazio
     const viagensPorVeiculoChart = renderChart('viagensPorVeiculoChart', 'bar', 'Nº de Viagens por Veículo', '#4F46E5');
@@ -17,9 +23,15 @@ document.addEventListener('DOMContentLoaded', () => {
     window.refuelPieMonthInstance = null;
     window.viagensChartsInitialized = true;
 
-    // Carrega os dados iniciais
-    loadDashboardData(viagensPorVeiculoChart, viagensPorMotoristaChart, viagensPorVeiculoChartTotal, viagensPorMotoristaChartTotal);
-    loadHistoricoData(); // Carrega o histórico inicial
+    // Aguarda a página estar completamente carregada
+    console.log('🚀 DOMContentLoaded executado');
+    
+    // Carrega dados do dashboard sem histórico (histórico carrega via switchTab)
+    window.addEventListener('load', () => {
+        console.log('🎯 Window load completo - carregando dados do dashboard');
+        loadDashboardData(viagensPorVeiculoChart, viagensPorMotoristaChart, viagensPorVeiculoChartTotal, viagensPorMotoristaChartTotal);
+        console.log('✅ Dashboard carregado - histórico será carregado via switchTab');
+    });
 
     // ✅ NÃO USA MAIS POLLING - USA REALTIME LISTENERS
     // O arquivo dashboard-realtime.js usa onSnapshot do Firestore
@@ -49,6 +61,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if(closeSidebarBtn) closeSidebarBtn.addEventListener('click', closeSidebar);
 
     function switchTab(tab) {
+        console.log('🔄 Trocando para aba:', tab);
+        
         mainContents.forEach(content => {
             content.classList.add('hidden');
         });
@@ -79,10 +93,13 @@ document.addEventListener('DOMContentLoaded', () => {
             loadVeiculosData();
         }
         
-        // Dashboard sempre recarrega o histórico (garante dados atualizados)
-        if (tab === 'dashboard') {
-            console.log('🔄 Recarregando histórico no dashboard');
-            loadHistoricoData();
+        // Dashboard carrega histórico somente na primeira vez (depois usa realtime)
+        if (tab === 'dashboard' && !dataLoaded.has('dashboard-historico')) {
+            console.log('📊 Carregando histórico pela primeira vez');
+            setTimeout(() => {
+                loadHistoricoData();
+                dataLoaded.add('dashboard-historico');
+            }, 100);
         }
 
         // Update main title
@@ -336,28 +353,27 @@ async function loadHistoricoData() {
 
     try {
         console.log('🔄 Carregando histórico da API...');
-        const response = await fetch(`/api/historico?${params.toString()}`);
+        const response = await fetch(`/api/historico?${params.toString()}`, {
+            cache: 'no-cache'
+        });
         const historico = await response.json();
         
         console.log('✅ API retornou', historico.length, 'registros');
-        console.log('🔍 Primeiro registro da API:', historico[0]);
-        console.log('🔑 CHAVES do primeiro registro:', Object.keys(historico[0]));
-        console.log('🆔 Primeiro registro tem ID?', historico[0]?.id);
-        console.log('📝 Valor do ID:', historico[0]?.id);
         
-        // Atualiza o cache global para usar nas funções de editar/excluir
-        if (window.historicoCache !== undefined) {
-            console.log('💾 Atualizando cache global...');
-            window.historicoCache = historico;
-            console.log('✅ Cache atualizado com', window.historicoCache.length, 'registros');
-            console.log('🔍 Primeiro no cache:', window.historicoCache[0]);
-        } else {
-            console.error('❌ window.historicoCache NÃO EXISTE!');
-        }
+        // DEBUG: mostra primeiros 5 registros com categorias
+        console.log('🔍 Primeiros 5 registros da API:');
+        historico.slice(0, 5).forEach((item, i) => {
+            console.log(`  📋 [${i}] ${item.veiculo} → Categoria: "${item.categoria || 'VAZIO'}"`);
+        });
+        
+        window.historicoCache = historico;
+        console.log('✅ Cache atualizado');
         
         populateHistoryTable(historico);
+        
+        console.log('✅ Histórico renderizado');
     } catch (error) {
-        console.error('Erro ao carregar histórico:', error);
+        console.error('❌ Erro ao carregar histórico:', error);
     }
 }
 
@@ -844,22 +860,47 @@ function populateHistoryTable(historico) {
         // Mescla 'Van' em 'Vans'
         if (cat === 'Van') cat = 'Vans';
         
+        // DEBUG: Ver o que está vindo
+        if (historico.indexOf(item) < 3) {
+            console.log('🔍 Item:', item.veiculo, '- Categoria:', cat, '- Original:', item.categoria);
+        }
+        
         if (categorias[cat]) {
             categorias[cat].push(item);
         } else {
+            console.warn('⚠️ Categoria desconhecida:', cat, '- indo para Outros');
             categorias['Outros'].push(item);
         }
     });
 
-    // Atualiza contadores nos botões das tabs
+    // Atualiza contadores nos botões das tabs (com verificação se existem)
     const totalItems = historico.length;
-    document.querySelector('[data-category="todos"] .count-badge').textContent = totalItems;
-    document.querySelector('[data-category="Base de Itaipuaçu"] .count-badge').textContent = categorias['Base de Itaipuaçu'].length;
-    document.querySelector('[data-category="Base ETE de Araçatiba"] .count-badge').textContent = categorias['Base ETE de Araçatiba'].length;
-    document.querySelector('[data-category="Sede Sanemar"] .count-badge').textContent = categorias['Sede Sanemar'].length;
-    document.querySelector('[data-category="Vans"] .count-badge').textContent = categorias['Vans'].length;
-    document.querySelector('[data-category="Comercial"] .count-badge').textContent = categorias['Comercial'].length;
-    document.querySelector('[data-category="Outros"] .count-badge').textContent = categorias['Outros'].length;
+    const updateBadge = (category, count) => {
+        const badge = document.querySelector(`[data-category="${category}"] .count-badge`);
+        if (badge) {
+            badge.textContent = count;
+            console.log(`✅ Badge atualizado: ${category} = ${count}`);
+        } else {
+            console.error(`❌ Badge NÃO encontrado para categoria: ${category}`);
+        }
+    };
+    
+    console.log('📊 Atualizando badges com contadores:');
+    console.log('  Total:', totalItems);
+    console.log('  Itaipuaçu:', categorias['Base de Itaipuaçu'].length);
+    console.log('  Araçatiba:', categorias['Base ETE de Araçatiba'].length);
+    console.log('  Sede:', categorias['Sede Sanemar'].length);
+    console.log('  Vans:', categorias['Vans'].length);
+    console.log('  Comercial:', categorias['Comercial'].length);
+    console.log('  Outros:', categorias['Outros'].length);
+    
+    updateBadge('todos', totalItems);
+    updateBadge('Base de Itaipuaçu', categorias['Base de Itaipuaçu'].length);
+    updateBadge('Base ETE de Araçatiba', categorias['Base ETE de Araçatiba'].length);
+    updateBadge('Sede Sanemar', categorias['Sede Sanemar'].length);
+    updateBadge('Vans', categorias['Vans'].length);
+    updateBadge('Comercial', categorias['Comercial'].length);
+    updateBadge('Outros', categorias['Outros'].length);
 
     // Filtra por categoria ativa
     let itemsParaMostrar = historico;

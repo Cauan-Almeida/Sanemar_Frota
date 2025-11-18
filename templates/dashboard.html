@@ -7,7 +7,8 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Dashboard de Frota</title>
-    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <meta name="app-version" content="9.0">
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico?v=9.0">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -1538,19 +1539,21 @@
 
     <!-- IMPORTANTE: Cache global ANTES de carregar dashboard.js -->
     <script>
-        // Cache global para histórico - DEVE estar antes de dashboard.js carregar
+        // Cache global para histórico - GARANTE que existe antes de tudo
         window.historicoCache = [];
-        console.log('✅ Cache global iniciado:', window.historicoCache);
+        window.historicoCompleto = [];
+        window.categoriaAtiva = 'todos';
+        console.log('✅ Cache global iniciado IMEDIATAMENTE');
     </script>
 
-    <script src="/static/toast.js?v=1.1" defer></script>
-    <script src="/static/dashboard.js?v=2.0" defer></script>
-    <script src="/static/dashboard-realtime.js?v=1.0" defer></script>
-    <script src="/static/km-multas.js?v=1.0" defer></script>
-    <script src="/static/revisoes-tab.js?v=1.0" defer></script>
-    <script src="/static/veiculos-tab.js?v=1.6" defer></script>
-    <script src="/static/relatorios-tab.js?v=1.0" defer></script>
-    <script src="/static/usuarios-tab.js?v=1.0" defer></script>
+    <script src="/static/toast.js?v=1.1"></script>
+    <script src="/static/dashboard.js?v=2.1"></script>
+    <script src="/static/dashboard-realtime.js?v=1.0"></script>
+    <script src="/static/km-multas.js?v=1.0"></script>
+    <script src="/static/revisoes-tab.js?v=1.0"></script>
+    <script src="/static/veiculos-tab.js?v=1.6"></script>
+    <script src="/static/relatorios-tab.js?v=1.0"></script>
+    <script src="/static/usuarios-tab.js?v=1.0"></script>
     <script>
         // Handle categoria select change
         function handleCategoriaChange() {
@@ -1866,10 +1869,47 @@
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js').then(registration => {
                     console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                    
+                    // Detecta atualização do Service Worker
+                    registration.addEventListener('updatefound', () => {
+                        const newWorker = registration.installing;
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'activated' && navigator.serviceWorker.controller) {
+                                // Nova versão ativada - mostra toast
+                                showUpdateToast();
+                            }
+                        });
+                    });
                 }, err => {
                     console.log('ServiceWorker registration failed: ', err);
                 });
             });
+        }
+        
+        // Toast de atualização disponível
+        function showUpdateToast() {
+            const toast = document.createElement('div');
+            toast.id = 'update-toast';
+            toast.className = 'fixed bottom-4 right-4 bg-gradient-to-r from-green-500 to-emerald-500 text-white px-6 py-4 rounded-xl shadow-2xl z-50 animate-bounce';
+            toast.innerHTML = `
+                <div class="flex items-center gap-3">
+                    <div class="text-2xl">🔄</div>
+                    <div>
+                        <div class="font-bold">Nova versão disponível!</div>
+                        <div class="text-sm opacity-90">Clique para atualizar</div>
+                    </div>
+                </div>
+            `;
+            toast.style.cursor = 'pointer';
+            toast.onclick = () => {
+                window.location.reload(true);
+            };
+            document.body.appendChild(toast);
+            
+            // Auto-reload após 10 segundos
+            setTimeout(() => {
+                window.location.reload(true);
+            }, 10000);
         }
     </script>
 

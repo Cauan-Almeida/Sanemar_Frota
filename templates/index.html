@@ -7,14 +7,24 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Controle de Frota - Sanemar</title>
-    <link rel="icon" type="image/x-icon" href="/static/favicon.ico?v=2">
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico?v=9.0">
+    <meta name="app-version" content="9.0">
     <script src="https://cdn.tailwindcss.com?v=3.4.0"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css?v=2">
     <link rel="manifest" href="/static/manifest.json">
     <style>
-        * { font-family: 'Inter', sans-serif; }
-        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+        * { 
+            font-family: 'Inter', sans-serif;
+            box-sizing: border-box;
+        }
+        body { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            min-height: 100vh;
+            direction: ltr;
+            text-align: left;
+            overflow-x: hidden;
+        }
         .glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
         .card-hover { transition: all 0.3s ease; }
         .card-hover:hover { transform: translateY(-2px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
@@ -52,6 +62,21 @@
             opacity: 0 !important;
             position: absolute !important;
             left: -9999px !important;
+        }
+        
+        /* Container de veículos em curso - FORÇA alinhamento esquerda e remove scroll */
+        #veiculos-em-curso-container {
+            width: 100%;
+            max-width: 100%;
+            overflow-x: hidden !important;
+            text-align: left;
+            direction: ltr;
+        }
+        
+        #veiculos-em-curso-container > * {
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
         }
     </style>
 </head>
@@ -202,24 +227,14 @@
         </div>
 
         <!-- Veículos em Curso -->
-        <div class="glass rounded-2xl shadow-2xl p-8 card-hover animate-fade-in">
-            <h2 class="text-2xl font-bold mb-6 flex items-center gap-3">
-                <span class="bg-gradient-to-r from-orange-500 to-red-500 text-white p-3 rounded-xl">🚦</span>
-                Veículos em Curso
+        <div class="glass rounded-2xl shadow-2xl p-4 md:p-8 card-hover animate-fade-in">
+            <h2 class="text-xl md:text-2xl font-bold mb-4 md:mb-6 flex items-center gap-2 md:gap-3">
+                <span class="bg-gradient-to-r from-orange-500 to-red-500 text-white p-2 md:p-3 rounded-xl text-lg md:text-2xl">🚦</span>
+                <span class="text-lg md:text-2xl">Veículos em Curso</span>
             </h2>
-            <div class="overflow-x-auto">
-                <table class="w-full min-w-[800px]" id="veiculos-em-curso-table">
-                    <thead>
-                        <tr class="border-b-2 border-gray-200">
-                            <th class="text-left py-4 px-4 font-bold text-gray-700">Placa</th>
-                            <th class="text-left py-4 px-4 font-bold text-gray-700">Motorista</th>
-                            <th class="text-left py-4 px-4 font-bold text-gray-700">Saída</th>
-                            <th class="text-left py-4 px-4 font-bold text-gray-700">Chegada</th>
-                            <th class="text-left py-4 px-4 font-bold text-gray-700">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
+            <!-- Container de veículos: cards no mobile, tabela no desktop -->
+            <div id="veiculos-em-curso-container">
+                <!-- Conteúdo será inserido aqui via JS -->
             </div>
         </div>
 
@@ -602,7 +617,10 @@
     <script src="/static/app-melhorado.js"></script>
     
     <!-- Funções globais para veículos em curso -->
-    <script>
+    <script id="veiculos-em-curso-script-v4">
+        // ⚠️ VERSÃO 4.0 - 2025-11-18 21:30 - CARDS RESPONSIVOS MOBILE
+        console.log('🔧 Script de veículos em curso v4.0 carregado');
+        
         // Função para buscar e exibir veículos em curso
         async function fetchVeiculosEmCurso() {
             try {
@@ -610,13 +628,13 @@
                 if (!response.ok) throw new Error('Erro ao buscar veículos');
                 
                 const veiculos = await response.json();
-                const tbody = document.querySelector('#veiculos-em-curso-table tbody');
-                if (!tbody) return;
+                const container = document.getElementById('veiculos-em-curso-container');
+                if (!container) return;
 
-                tbody.innerHTML = '';
+                container.innerHTML = '';
 
                 if (veiculos.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-gray-500">Nenhum veículo em curso</td></tr>';
+                    container.innerHTML = '<div class="text-center py-8 text-gray-500">Nenhum veículo em curso</div>';
                     return;
                 }
 
@@ -632,7 +650,6 @@
                 
                 veiculos.forEach(v => {
                     let cat = v.categoria || 'Outros';
-                    // Mescla 'Van' em 'Vans'
                     if (cat === 'Van') cat = 'Vans';
                     
                     if (categorias[cat]) {
@@ -642,20 +659,22 @@
                     }
                 });
 
+                console.log('🎨 Container encontrado:', container);
+                console.log('📦 Container width:', container.offsetWidth);
+                
                 let index = 0;
                 for (const [categoria, veiculosCategoria] of Object.entries(categorias)) {
-                    // Sempre mostra header, mesmo se vazio
-                    const headerTr = document.createElement('tr');
-                    headerTr.className = 'bg-gradient-to-r from-indigo-100 to-purple-100';
-                    headerTr.innerHTML = `<td colspan="5" class="py-2 px-4 font-bold text-gray-700">📍 ${categoria} (${veiculosCategoria.length})</td>`;
-                    tbody.appendChild(headerTr);
+                    // Header de categoria
+                    const headerDiv = document.createElement('div');
+                    headerDiv.className = 'bg-gradient-to-r from-indigo-100 to-purple-100 rounded-lg py-2 px-4 font-bold text-gray-700 text-sm md:text-base mb-3 mt-4 first:mt-0';
+                    headerDiv.style.width = '100%';
+                    headerDiv.style.textAlign = 'left';
+                    headerDiv.innerHTML = `📍 ${categoria} (${veiculosCategoria.length})`;
+                    container.appendChild(headerDiv);
                     
                     if (veiculosCategoria.length === 0) continue;
                     
                     veiculosCategoria.forEach((v) => {
-                        const tr = document.createElement('tr');
-                        tr.id = `veiculo-row-${index}`;
-                        tr.className = 'border-b border-gray-100 hover:bg-blue-50 transition-colors';
                         const inputId = `horario-chegada-${index}`;
                         
                         const veiculoDataStr = JSON.stringify({
@@ -666,43 +685,65 @@
                             horarioSaida: v.horarioSaida || 'Não informado'
                         }).replace(/"/g, '&quot;');
                         
-                        tr.innerHTML = `
-                            <td class="py-3 px-4 font-semibold text-lg">${v.veiculo}</td>
-                            <td class="py-3 px-4 text-lg"><strong>${v.motorista}</strong></td>
-                            <td class="py-3 px-4">${v.horarioSaida || '-'}</td>
-                            <td class="py-3 px-4">
-                                <input type="time" id="${inputId}" 
-                                       class="px-3 py-1 rounded-lg border-2 border-gray-300 focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-all"
-                                       placeholder="HH:MM">
-                            </td>
-                            <td class="py-3 px-4">
+                        // Card responsivo
+                        const card = document.createElement('div');
+                        card.id = `veiculo-row-${index}`;
+                        card.className = 'bg-white border border-gray-200 rounded-xl p-4 mb-3 hover:shadow-lg transition-all';
+                        card.style.width = '100%';
+                        card.style.maxWidth = '100%';
+                        card.style.textAlign = 'left';
+                        card.innerHTML = `
+                            <div class="space-y-3">
+                                <!-- Placa e Motorista -->
+                                <div class="flex justify-between items-start flex-wrap gap-2">
+                                    <div>
+                                        <div class="text-lg font-bold text-gray-800">🚗 ${v.veiculo}</div>
+                                        <div class="text-base text-gray-600">👤 <strong>${v.motorista}</strong></div>
+                                    </div>
+                                    <div class="text-sm text-gray-500">
+                                        🕐 Saída: <strong>${v.horarioSaida || '-'}</strong>
+                                    </div>
+                                </div>
+                                
+                                <!-- Horário de Chegada -->
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-600 mb-2">🕑 Horário de Chegada:</label>
+                                    <input type="time" id="${inputId}" 
+                                           class="w-full px-4 py-3 rounded-lg border-2 border-gray-300 focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-all text-base font-semibold"
+                                           placeholder="HH:MM">
+                                </div>
+                                
+                                <!-- Botões de Ação -->
                                 <div class="flex gap-2 flex-wrap">
                                     <button onclick='editarSaidaEmCurso("${v.id}", ${veiculoDataStr})' 
-                                            class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-semibold transition-all"
+                                            class="flex-1 min-w-[100px] px-4 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-bold transition-all shadow-md"
                                             title="Editar trajeto/solicitante">
                                         ✏️ Editar
                                     </button>
                                     <button onclick='destacarERegistrarChegada(${index}, "${v.veiculo}", "${inputId}", ${veiculoDataStr})' 
-                                            class="px-3 py-1 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-semibold transition-all">
+                                            class="flex-1 min-w-[100px] px-4 py-3 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-bold transition-all shadow-md">
                                         ✅ Chegada
                                     </button>
                                     <button onclick="cancelarViagem('${v.veiculo}')" 
-                                            class="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-semibold transition-all">
+                                            class="flex-1 min-w-[100px] px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-bold transition-all shadow-md">
                                         ❌ Cancelar
                                     </button>
                                 </div>
-                            </td>
+                            </div>
                         `;
-                        tbody.appendChild(tr);
+                        container.appendChild(card);
                         index++;
                     });
                 }
 
                 console.log(`✅ ${veiculos.length} veículos em curso carregados`);
+                console.log('✨ VERSÃO 4.0 - Cards renderizados com sucesso');
             } catch (error) {
                 console.error('❌ Erro ao buscar veículos em curso:', error);
             }
         }
+        
+        console.log('✅ Funções de veículos em curso carregadas (v4.0)');
 
         // Função para destacar linha e registrar chegada
         async function destacarERegistrarChegada(rowIndex, placa, inputId, veiculoData) {
@@ -884,22 +925,49 @@
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js').then(registration => {
-                    console.log('[SW v7] Registrado com sucesso:', registration.scope);
+                    console.log('[SW v9] Registrado com sucesso:', registration.scope);
                     
-                    // Força atualização se houver nova versão
+                    // Detecta atualização do Service Worker
                     registration.addEventListener('updatefound', () => {
                         const newWorker = registration.installing;
                         newWorker.addEventListener('statechange', () => {
-                            if (newWorker.state === 'activated') {
-                                console.log('[SW v7] Nova versão ativada - recarregando página');
-                                window.location.reload();
+                            if (newWorker.state === 'activated' && navigator.serviceWorker.controller) {
+                                console.log('[SW v9] 🔄 Nova versão detectada!');
+                                showUpdateToast();
                             }
                         });
                     });
                 }, err => {
-                    console.warn('[SW v7] Falha no registro:', err);
+                    console.warn('[SW v9] Falha no registro:', err);
                 });
             });
+        }
+        
+        // Toast de atualização disponível
+        function showUpdateToast() {
+            const toast = document.createElement('div');
+            toast.id = 'update-toast';
+            toast.className = 'fixed bottom-4 right-4 bg-gradient-to-r from-green-500 to-emerald-500 text-white px-6 py-4 rounded-xl shadow-2xl z-50';
+            toast.style.animation = 'bounce 1s infinite';
+            toast.innerHTML = `
+                <div class="flex items-center gap-3">
+                    <div class="text-2xl">🔄</div>
+                    <div>
+                        <div class="font-bold text-lg">Nova versão disponível!</div>
+                        <div class="text-sm opacity-90">Toque para atualizar</div>
+                    </div>
+                </div>
+            `;
+            toast.style.cursor = 'pointer';
+            toast.onclick = () => {
+                window.location.reload(true);
+            };
+            document.body.appendChild(toast);
+            
+            // Auto-reload após 8 segundos
+            setTimeout(() => {
+                window.location.reload(true);
+            }, 8000);
         }
     </script>
     
