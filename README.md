@@ -1,8 +1,8 @@
-# 🚗 Sistema de Gestão de Frota - Sanemar# 🚗 Sistema de Controle de Frota - Sanemar
+# 🚗 Sistema de Gestão de Frota - Sanemar
 
 
 
-Sistema completo de gerenciamento de frota de veículos com controle de saídas/chegadas, motoristas, documentação, abastecimentos, revisões e relatórios em tempo real.> Sistema completo de gestão de frota com controle de saídas, chegadas, abastecimentos, motoristas e veículos em tempo real.
+Sistema completo de gerenciamento de frota de veículos com controle de saídas/chegadas, motoristas, documentação, abastecimentos, revisões e relatórios em tempo real.
 
 
 
@@ -980,7 +980,7 @@ Para dúvidas ou problemas:
 ---
 
 <div align="center">
-  <strong>🚗 Desenvolvido por Cauan Ferreira de Almeida para Sanemar</strong>
+  <strong>🚗 Desenvolvido por Cauan Ferreira de Almeida</strong>
   <br>
   <sub>Sistema de Controle de Frota - 2024-2025</sub>
 </div>
