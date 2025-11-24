@@ -21,6 +21,7 @@ function waitForFirebase() {
 
 // Variáveis globais para unsubscribe
 let unsubscribeSaidas = null;
+let unsubscribeHistorico = null;
 let unsubscribeMotoristas = null;
 let unsubscribeVeiculos = null;
 
@@ -79,11 +80,11 @@ async function initRealtimeListeners() {
             if (houveNovaOuChegada) {
                 console.log('🔄 Atualizando dashboard automaticamente...');
                 
-                // Limpa o cache no backend
                 try {
+                    // Limpa o cache no backend
                     await fetch('/api/dashboard_cache/clear', { method: 'POST' });
                     
-                    // Recarrega os dados do dashboard
+                    // Recarrega os dados do dashboard (gráficos e cards)
                     if (window.viagensChartsInitialized && typeof loadDashboardData === 'function') {
                         await loadDashboardData(
                             window.viagensPorVeiculoChartInstance,
@@ -92,12 +93,6 @@ async function initRealtimeListeners() {
                             window.viagensPorMotoristaChartTotalInstance
                         );
                     }
-                    
-                    // DESABILITADO: Recarregar histórico causa bugs nas tabs
-                    // O histórico já é carregado no DOMContentLoaded
-                    // if (typeof loadHistoricoData === 'function') {
-                    //     await loadHistoricoData();
-                    // }
                     
                     console.log('✅ Dashboard atualizado automaticamente!');
                 } catch (error) {
@@ -115,10 +110,65 @@ async function initRealtimeListeners() {
         console.error('❌ Erro ao criar listener de saidas:', error);
     }
 
-    // 2. DESABILITADO: Listener para HISTÓRICO (causava loop infinito de recálculos)
-    // O histórico é carregado manualmente via /api/historico quando necessário
-    // Atualizar em tempo real aqui forçava recálculo constante do dashboard
-    console.log('ℹ️ Listener de histórico desabilitado (otimização - evita loop)');
+    // 2. Listener para HISTÓRICO RECENTE (últimas 50 viagens)
+    try {
+        const historicoQuery = query(
+            collection(db, 'saidas'),
+            orderBy('horarioSaida', 'desc'),
+            limit(50)
+        );
+
+        let isFirstHistoricoSnapshot = true;
+
+        unsubscribeHistorico = onSnapshot(historicoQuery, async (snapshot) => {
+            const changes = snapshot.docChanges();
+            console.log(`📋 [HISTÓRICO] ${changes.length} mudanças detectadas`);
+            
+            // Ignora o snapshot inicial (primeira carga)
+            if (isFirstHistoricoSnapshot) {
+                isFirstHistoricoSnapshot = false;
+                console.log(`📊 Histórico inicial: ${snapshot.size} registros`);
+                return;
+            }
+
+            // Log detalhado
+            let houveAlteracao = false;
+            changes.forEach(change => {
+                const veiculo = change.doc.data().veiculo;
+                if (change.type === 'added') {
+                    console.log(`➕ Nova saída: ${veiculo}`);
+                    houveAlteracao = true;
+                } else if (change.type === 'modified') {
+                    console.log(`✏️ Editado: ${veiculo}`);
+                    houveAlteracao = true;
+                } else if (change.type === 'removed') {
+                    console.log(`🗑️ Removido: ${veiculo}`);
+                    houveAlteracao = true;
+                }
+            });
+
+            // Recarrega histórico
+            if (houveAlteracao) {
+                console.log('🔄 Recarregando histórico...');
+                if (typeof loadHistoricoData === 'function') {
+                    try {
+                        await loadHistoricoData();
+                        console.log('✅ Histórico atualizado!');
+                    } catch (err) {
+                        console.error('❌ Erro loadHistoricoData:', err);
+                    }
+                } else {
+                    console.error('❌ loadHistoricoData NÃO EXISTE!');
+                }
+            }
+        }, (error) => {
+            console.error('❌ Erro listener histórico:', error);
+        });
+
+        console.log('✅ Listener de histórico ATIVO');
+    } catch (error) {
+        console.error('❌ Erro ao criar listener de histórico:', error);
+    }
 
     // 3. DESABILITADO: Listener de HOJE (causava queries desnecessárias no Firestore)
     // O card HOJE é atualizado automaticamente quando o cache expira (5 min)
@@ -145,6 +195,11 @@ function stopRealtimeListeners() {
         unsubscribeSaidas();
         unsubscribeSaidas = null;
         console.log('🔴 Listener de saídas desativado');
+    }
+    if (unsubscribeHistorico) {
+        unsubscribeHistorico();
+        unsubscribeHistorico = null;
+        console.log('🔴 Listener de histórico desativado');
     }
     if (unsubscribeMotoristas) {
         unsubscribeMotoristas();
