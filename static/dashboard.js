@@ -800,13 +800,11 @@ function updateStatCards(stats) {
     console.log('📊 viagens_em_curso =', stats.viagens_em_curso);
     
     // Proteção: só atualiza se os elementos existirem
-    const emCursoEl = document.getElementById('stat-viagens-em-curso');
+    // ⚠️ NÃO atualiza "em curso" aqui - é atualizado pelo listener realtime
     const hojeEl = document.getElementById('stat-viagens-hoje');
     const horasEl = document.getElementById('stat-total-horas-na-rua');
     const motoristaDoMesEl = document.getElementById('stat-motorista-do-mes');
     const veiculoDoMesEl = document.getElementById('stat-veiculo-do-mes');
-    
-    if (emCursoEl) emCursoEl.textContent = stats.viagens_em_curso || '0';
     if (hojeEl) {
         hojeEl.textContent = stats.viagens_hoje || '0';
         console.log('✅ Card HOJE atualizado para:', hojeEl.textContent);

@@ -49,10 +49,13 @@ async function initRealtimeListeners() {
         unsubscribeSaidas = onSnapshot(saidasQuery, async (snapshot) => {
             console.log('📊 Atualização em veículos EM CURSO:', snapshot.docChanges().length, 'mudanças');
             
-            // Atualiza contador de veículos em curso
+            // ✅ SEMPRE atualiza o contador (mesmo no primeiro snapshot)
             const statEmCurso = document.getElementById('stat-viagens-em-curso');
             if (statEmCurso) {
                 statEmCurso.textContent = snapshot.size;
+                console.log(`✅ Contador EM CURSO atualizado: ${snapshot.size}`);
+            } else {
+                console.error('❌ Elemento stat-viagens-em-curso não encontrado!');
             }
 
             // Verifica se houve MUDANÇAS (não apenas leitura inicial)

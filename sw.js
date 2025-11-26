@@ -1,5 +1,5 @@
 // ⚠️ AUMENTE ESTE NÚMERO SEMPRE QUE FIZER MUDANÇAS NO CÓDIGO
-const APP_VERSION = 'v9.2'; // Fix: Listener histórico com logs debug - 24/11/2025
+const APP_VERSION = 'v9.3'; // Fix: Card EM CURSO atualiza corretamente - 26/11/2025
 const CACHE_NAME = `frota-sanemar-cache-${APP_VERSION}`;
 const OLD_CACHES = [
   'frota-sanemar-cache-v3',
