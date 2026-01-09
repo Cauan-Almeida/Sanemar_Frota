@@ -369,8 +369,11 @@ function adicionarValidacoesDuplicidade() {
                 exibirMensagem('✅ ' + result.message, 'success');
                 formSaida.reset();
                 
-                // Firebase real-time vai atualizar automaticamente
-                console.log('✅ Saída registrada - Firebase irá atualizar a lista');
+                // Atualiza a lista imediatamente + Firebase real-time também vai atualizar
+                if (typeof fetchVeiculosEmCurso === 'function') {
+                    fetchVeiculosEmCurso();
+                }
+                console.log('✅ Saída registrada - Lista atualizada');
             } else {
                 exibirMensagem('❌ ' + (result.error || 'Erro ao registrar saída'), 'error');
             }
@@ -465,8 +468,33 @@ function adicionarContadorVisuais() {
     
     header.appendChild(contador);
     
-    // Atualiza periodicamente
+    // Atualiza periodicamente APENAS se usuário ativo
+    let lastUserActivity = Date.now();
+    let pollingActive = true;
+    
+    // Monitora atividade (incluindo focus em inputs)
+    ['mousedown', 'keypress', 'click', 'focus', 'input'].forEach(event => {
+        document.addEventListener(event, () => {
+            lastUserActivity = Date.now();
+            if (!pollingActive) {
+                pollingActive = true;
+                console.log('🔄 Reativando polling');
+            }
+        }, event === 'focus' || event === 'input' ? true : { passive: true });
+    });
+    
     setInterval(async () => {
+        // Para polling após 5min de inatividade
+        if (Date.now() - lastUserActivity > 5 * 60 * 1000) {
+            if (pollingActive) {
+                pollingActive = false;
+                console.warn('⚠️ Polling desligado por inatividade');
+            }
+            return;
+        }
+        
+        if (!pollingActive) return;
+        
         try {
             const resp = await fetch('/api/veiculos_em_curso');
             if (!resp.ok) return;
@@ -478,7 +506,7 @@ function adicionarContadorVisuais() {
         } catch (error) {
             console.error('Erro ao atualizar contador:', error);
         }
-    }, 5000); // Atualiza a cada 5 segundos
+    }, 30000); // Aumentado para 30 segundos (era 5)
 }
 
 // ============================================================================

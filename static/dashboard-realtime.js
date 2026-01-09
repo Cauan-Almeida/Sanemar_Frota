@@ -1,7 +1,69 @@
 /**
  * Dashboard Real-Time Updates usando Firebase onSnapshot
  * Atualiza automaticamente quando há mudanças no Firestore
+ * ⚠️ PROTEÇÃO: Desliga listeners após 5min de inatividade para economizar quota
  */
+
+// Controle de inatividade
+let lastActivityTime = Date.now();
+let inactivityCheckInterval = null;
+const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutos
+let listenersActive = false;
+
+// Atualiza timestamp de atividade
+function updateActivity() {
+    lastActivityTime = Date.now();
+    if (!listenersActive) {
+        console.log('🔄 Usuário ativo - reativando listeners...');
+        initRealtimeListeners();
+    }
+}
+
+// Monitora atividade do usuário
+function startActivityMonitor() {
+    // Eventos gerais
+    ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'].forEach(event => {
+        document.addEventListener(event, updateActivity, { passive: true });
+    });
+    
+    // ✅ Eventos específicos para formulários (reativa instantâneo ao focar input)
+    ['focus', 'input', 'change'].forEach(event => {
+        document.addEventListener(event, updateActivity, true); // useCapture=true para pegar em inputs
+    });
+    
+    console.log('👁️ Monitor de atividade iniciado');
+}
+
+// Verifica inatividade a cada 1 minuto
+function checkInactivity() {
+    const inactiveTime = Date.now() - lastActivityTime;
+    if (inactiveTime > INACTIVITY_TIMEOUT && listenersActive) {
+        console.warn('⚠️ Inatividade detectada - desligando listeners Firebase para economizar quota');
+        stopRealtimeListeners();
+    }
+}
+
+// Para todos os listeners
+function stopRealtimeListeners() {
+    if (unsubscribeSaidas) {
+        unsubscribeSaidas();
+        unsubscribeSaidas = null;
+    }
+    if (unsubscribeHistorico) {
+        unsubscribeHistorico();
+        unsubscribeHistorico = null;
+    }
+    if (unsubscribeMotoristas) {
+        unsubscribeMotoristas();
+        unsubscribeMotoristas = null;
+    }
+    if (unsubscribeVeiculos) {
+        unsubscribeVeiculos();
+        unsubscribeVeiculos = null;
+    }
+    listenersActive = false;
+    console.log('🔴 Listeners desligados');
+}
 
 // Aguarda o Firebase estar pronto
 function waitForFirebase() {
@@ -34,7 +96,14 @@ async function initRealtimeListeners() {
     const db = window.firestoreDb;
     const { collection, onSnapshot, query, orderBy, limit, where } = window.firestoreModules;
 
+    // Se já estão ativos, não recria
+    if (listenersActive) {
+        console.log('➡️ Listeners já estão ativos');
+        return;
+    }
+
     console.log('🔴 Iniciando listeners em tempo real...');
+    listenersActive = true;
 
     // 1. Listener APENAS para Veículos EM CURSO (otimizado - 5-10 docs)
     // ✅ AGORA TAMBÉM ATUALIZA O DASHBOARD automaticamente quando há mudanças
@@ -68,13 +137,13 @@ async function initRealtimeListeners() {
                     // Nova saída registrada
                     houveNovaOuChegada = true;
                     if (window.showToast) {
-                        showToast('info', `Nova saída: ${data.veiculo} - ${data.motorista}`, 3000);
+                        showToast('info', `Nova saída: ${data.veiculo} - ${data.motorista}`);
                     }
                 } else if (change.type === 'removed') {
                     // Chegada registrada (removido de em_curso)
                     houveNovaOuChegada = true;
                     if (window.showToast) {
-                        showToast('success', `Chegada registrada: ${data.veiculo}`, 3000);
+                        showToast('success', `Chegada registrada: ${data.veiculo}`);
                     }
                 }
             });
@@ -84,8 +153,11 @@ async function initRealtimeListeners() {
                 console.log('🔄 Atualizando dashboard automaticamente...');
                 
                 try {
-                    // Limpa o cache no backend
+                    // ✅ LIMPA O CACHE IMEDIATAMENTE (força atualização)
                     await fetch('/api/dashboard_cache/clear', { method: 'POST' });
+                    
+                    // ✅ PEQUENO DELAY para dar tempo do backend processar
+                    await new Promise(resolve => setTimeout(resolve, 500));
                     
                     // Recarrega os dados do dashboard (gráficos e cards)
                     if (window.viagensChartsInitialized && typeof loadDashboardData === 'function') {
@@ -113,62 +185,93 @@ async function initRealtimeListeners() {
         console.error('❌ Erro ao criar listener de saidas:', error);
     }
 
-    // 2. Listener para HISTÓRICO RECENTE (últimas 50 viagens)
+    // 2. Listener para HISTÓRICO (APENAS do mês visível na tela)
     try {
-        const historicoQuery = query(
-            collection(db, 'saidas'),
-            orderBy('horarioSaida', 'desc'),
-            limit(50)
-        );
-
-        let isFirstHistoricoSnapshot = true;
-
-        unsubscribeHistorico = onSnapshot(historicoQuery, async (snapshot) => {
-            const changes = snapshot.docChanges();
-            console.log(`📋 [HISTÓRICO] ${changes.length} mudanças detectadas`);
+        // ✅ Listener dinâmico - recria quando o mês muda
+        window.recriarListenerHistorico = () => {
+            // Limpa listener antigo
+            if (unsubscribeHistorico) {
+                unsubscribeHistorico();
+            }
             
-            // Ignora o snapshot inicial (primeira carga)
-            if (isFirstHistoricoSnapshot) {
-                isFirstHistoricoSnapshot = false;
-                console.log(`📊 Histórico inicial: ${snapshot.size} registros`);
+            // Pega mês/ano visíveis na tela
+            const dashboardFiltroMes = document.getElementById('dashboard-filtro-mes');
+            const dashboardFiltroAno = document.getElementById('dashboard-filtro-ano');
+            
+            if (!dashboardFiltroMes || !dashboardFiltroAno) {
+                console.log('⚠️ Filtros de mês não encontrados, listener de histórico não criado');
                 return;
             }
+            
+            const mes = parseInt(dashboardFiltroMes.value) || new Date().getMonth() + 1;
+            const ano = parseInt(dashboardFiltroAno.value) || new Date().getFullYear();
+            
+            // Calcula período do mês
+            const startDate = new Date(ano, mes - 1, 1); // Primeiro dia do mês
+            const endDate = new Date(ano, mes, 0, 23, 59, 59); // Último dia do mês
+            
+            console.log(`🔍 Criando listener para histórico de ${mes}/${ano}`);
+            
+            const historicoQuery = query(
+                collection(db, 'saidas'),
+                where('timestampSaida', '>=', startDate),
+                where('timestampSaida', '<=', endDate),
+                orderBy('timestampSaida', 'desc')
+            );
 
-            // Log detalhado
-            let houveAlteracao = false;
-            changes.forEach(change => {
-                const veiculo = change.doc.data().veiculo;
-                if (change.type === 'added') {
-                    console.log(`➕ Nova saída: ${veiculo}`);
-                    houveAlteracao = true;
-                } else if (change.type === 'modified') {
-                    console.log(`✏️ Editado: ${veiculo}`);
-                    houveAlteracao = true;
-                } else if (change.type === 'removed') {
-                    console.log(`🗑️ Removido: ${veiculo}`);
-                    houveAlteracao = true;
+            let isFirstHistoricoSnapshot = true;
+
+            unsubscribeHistorico = onSnapshot(historicoQuery, async (snapshot) => {
+                const changes = snapshot.docChanges();
+                console.log(`📋 [HISTÓRICO ${mes}/${ano}] ${changes.length} mudanças detectadas`);
+                
+                // Ignora o snapshot inicial (primeira carga)
+                if (isFirstHistoricoSnapshot) {
+                    isFirstHistoricoSnapshot = false;
+                    console.log(`📊 Histórico inicial: ${snapshot.size} registros`);
+                    return;
                 }
+
+                // Log detalhado
+                let houveAlteracao = false;
+                changes.forEach(change => {
+                    const veiculo = change.doc.data().veiculo;
+                    if (change.type === 'added') {
+                        console.log(`➕ Nova saída (${mes}/${ano}): ${veiculo}`);
+                        houveAlteracao = true;
+                    } else if (change.type === 'modified') {
+                        console.log(`✏️ Editado (${mes}/${ano}): ${veiculo}`);
+                        houveAlteracao = true;
+                    } else if (change.type === 'removed') {
+                        console.log(`🗑️ Removido (${mes}/${ano}): ${veiculo}`);
+                        houveAlteracao = true;
+                    }
+                });
+
+                // Recarrega histórico
+                if (houveAlteracao) {
+                    console.log('🔄 Recarregando histórico...');
+                    if (typeof loadHistoricoData === 'function') {
+                        try {
+                            await loadHistoricoData();
+                            console.log('✅ Histórico atualizado!');
+                        } catch (err) {
+                            console.error('❌ Erro loadHistoricoData:', err);
+                        }
+                    } else {
+                        console.error('❌ loadHistoricoData NÃO EXISTE!');
+                    }
+                }
+            }, (error) => {
+                console.error('❌ Erro listener histórico:', error);
             });
 
-            // Recarrega histórico
-            if (houveAlteracao) {
-                console.log('🔄 Recarregando histórico...');
-                if (typeof loadHistoricoData === 'function') {
-                    try {
-                        await loadHistoricoData();
-                        console.log('✅ Histórico atualizado!');
-                    } catch (err) {
-                        console.error('❌ Erro loadHistoricoData:', err);
-                    }
-                } else {
-                    console.error('❌ loadHistoricoData NÃO EXISTE!');
-                }
-            }
-        }, (error) => {
-            console.error('❌ Erro listener histórico:', error);
-        });
-
-        console.log('✅ Listener de histórico ATIVO');
+            console.log(`✅ Listener de histórico ATIVO (${mes}/${ano})`);
+        };
+        
+        // Cria o listener inicial
+        window.recriarListenerHistorico();
+        
     } catch (error) {
         console.error('❌ Erro ao criar listener de histórico:', error);
     }
@@ -188,6 +291,13 @@ async function initRealtimeListeners() {
 
     // Indicador visual de que o tempo real está ativo
     createRealtimeIndicator();
+    
+    // ⚠️ Inicia monitoramento de inatividade
+    if (!inactivityCheckInterval) {
+        startActivityMonitor();
+        inactivityCheckInterval = setInterval(checkInactivity, 60000); // Verifica a cada 1 minuto
+        console.log('👁️ Monitor de inatividade ativado (5min timeout)');
+    }
 }
 
 /**

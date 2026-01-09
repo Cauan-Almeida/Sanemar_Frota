@@ -303,24 +303,63 @@
                             <h2 class="text-xl font-bold flex items-center gap-2">
                                 <span>📋</span> Histórico Recente
                             </h2>
-                            <a href="/pdf/saidas" target="_blank" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl font-semibold text-sm shadow-lg transition-all">
+                            <button onclick="gerarPDFHistorico()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl font-semibold text-sm shadow-lg transition-all">
                                 📄 Gerar PDF
-                            </a>
+                            </button>
                         </div>
                         
                         <!-- Filtros de Busca -->
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                            <input type="text" id="filtro-data" placeholder="Data (DD/MM/AAAA)" 
-                                   class="px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all">
-                            <input type="text" id="filtro-placa" placeholder="Placa" 
-                                   class="px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all">
-                            <input type="text" id="filtro-motorista" placeholder="Motorista" 
-                                   class="px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all">
-                            <div class="flex gap-2">
-                                <input type="month" id="filtro-mes" 
-                                       class="flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all">
-                                <button id="limpar-mes" class="px-4 py-3 bg-gray-200 hover:bg-gray-300 rounded-xl font-semibold transition-all">🔄</button>
+                        <div class="mb-6 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border-2 border-indigo-200">
+                            <label class="block text-sm font-semibold text-gray-700 mb-3">📅 Navegação de Mês (afeta gráficos e histórico)</label>
+                            <div class="flex gap-3 items-center flex-wrap mb-4">
+                                <button type="button" id="dashboard-mes-anterior" 
+                                        class="px-4 py-2 bg-white hover:bg-indigo-100 border-2 border-indigo-300 rounded-lg font-bold text-indigo-700 transition-all transform hover:scale-105">
+                                    ◀ Mês Anterior
+                                </button>
+                                <div class="flex gap-2 items-center">
+                                    <select id="dashboard-filtro-mes" 
+                                            class="px-4 py-2 rounded-lg border-2 border-indigo-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all font-semibold">
+                                        <option value="1">Janeiro</option>
+                                        <option value="2">Fevereiro</option>
+                                        <option value="3">Março</option>
+                                        <option value="4">Abril</option>
+                                        <option value="5">Maio</option>
+                                        <option value="6">Junho</option>
+                                        <option value="7">Julho</option>
+                                        <option value="8">Agosto</option>
+                                        <option value="9">Setembro</option>
+                                        <option value="10">Outubro</option>
+                                        <option value="11">Novembro</option>
+                                        <option value="12">Dezembro</option>
+                                    </select>
+                                    <select id="dashboard-filtro-ano" 
+                                            class="px-4 py-2 rounded-lg border-2 border-indigo-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all font-semibold">
+                                        <option value="2024">2024</option>
+                                        <option value="2025">2025</option>
+                                        <option value="2026">2026</option>
+                                        <option value="2027">2027</option>
+                                    </select>
+                                </div>
+                                <button type="button" id="dashboard-mes-proximo" 
+                                        class="px-4 py-2 bg-white hover:bg-indigo-100 border-2 border-indigo-300 rounded-lg font-bold text-indigo-700 transition-all transform hover:scale-105">
+                                    Próximo Mês ▶
+                                </button>
+                                <button type="button" id="dashboard-mes-atual" 
+                                        class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold transition-all transform hover:scale-105">
+                                    📅 Mês Atual
+                                </button>
                             </div>
+                        </div>
+                        
+                        <!-- Filtros Adicionais de Busca -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                            <input type="text" id="filtro-data" placeholder="Dia (ex: 15)" 
+                                   class="px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
+                                   maxlength="2">
+                            <input type="text" id="filtro-placa" placeholder="Buscar por Placa" 
+                                   class="px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all">
+                            <input type="text" id="filtro-motorista" placeholder="Buscar por Motorista" 
+                                   class="px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all">
                         </div>
 
                         <!-- Tabs de Categorias -->
@@ -368,6 +407,16 @@
                                     <!-- Linhas serão inseridas aqui via JS -->
                                 </tbody>
                             </table>
+                        </div>
+                        
+                        <!-- Paginação -->
+                        <div id="pagination-historico" class="flex items-center justify-between mt-4 px-4">
+                            <div class="text-sm text-gray-600">
+                                Mostrando <span id="historico-range-start">0</span> a <span id="historico-range-end">0</span> de <span id="historico-total">0</span> registros
+                            </div>
+                            <div class="flex gap-2" id="historico-pagination-buttons">
+                                <!-- Botões gerados dinamicamente -->
+                            </div>
                         </div>
                     </div>
 
@@ -1546,9 +1595,9 @@
         console.log('✅ Cache global iniciado IMEDIATAMENTE');
     </script>
 
-    <script src="/static/toast.js?v=1.1"></script>
-    <script src="/static/dashboard.js?v=2.1"></script>
-    <script src="/static/dashboard-realtime.js?v=1.0"></script>
+    <script src="/static/toast.js?v=13.0"></script>
+    <script src="/static/dashboard.js?v=13.0"></script>
+    <script src="/static/dashboard-realtime.js?v=13.0"></script>
     <script src="/static/km-multas.js?v=1.0"></script>
     <script src="/static/revisoes-tab.js?v=1.0"></script>
     <script src="/static/veiculos-tab.js?v=1.6"></script>
@@ -1620,7 +1669,7 @@
                 
                 // Mostra sucesso
                 if (window.showToast) {
-                    showToast('success', '✅ Dashboard atualizado!', 2000);
+                    showToast('success', '✅ Dashboard atualizado!');
                 }
                 
                 // Restaura botão após 2s
@@ -1818,12 +1867,25 @@
             const filtroData = document.getElementById('filtro-data');
             const filtroPlaca = document.getElementById('filtro-placa');
             const filtroMotorista = document.getElementById('filtro-motorista');
-            const filtroMes = document.getElementById('filtro-mes');
-            const limparMesBtn = document.getElementById('limpar-mes');
             
             if (filtroData && filtroPlaca && filtroMotorista) {
-                // Adiciona evento de input para busca em tempo real
-                filtroData.addEventListener('input', () => {
+                // Permite apenas números no campo de dia
+                filtroData.addEventListener('input', (e) => {
+                    // Remove qualquer coisa que não seja número
+                    e.target.value = e.target.value.replace(/\D/g, '');
+                    
+                    // Limita a 2 dígitos
+                    if (e.target.value.length > 2) {
+                        e.target.value = e.target.value.slice(0, 2);
+                    }
+                    
+                    // Valida dia (1-31)
+                    const dia = parseInt(e.target.value);
+                    if (dia > 31) {
+                        e.target.value = '31';
+                    }
+                    
+                    // Busca automaticamente
                     if (typeof loadHistoricoData === 'function') {
                         loadHistoricoData();
                     }
@@ -1840,26 +1902,108 @@
                         loadHistoricoData();
                     }
                 });
+            }
+            
+            // ✅ NAVEGAÇÃO DE MÊS NO DASHBOARD (afeta gráficos e histórico)
+            const dashboardFiltroMes = document.getElementById('dashboard-filtro-mes');
+            const dashboardFiltroAno = document.getElementById('dashboard-filtro-ano');
+            const dashboardMesAnterior = document.getElementById('dashboard-mes-anterior');
+            const dashboardMesProximo = document.getElementById('dashboard-mes-proximo');
+            const dashboardMesAtual = document.getElementById('dashboard-mes-atual');
+            
+            // Inicializa com mês/ano atual
+            function inicializarDashboardMesAno() {
+                const hoje = new Date();
+                if (dashboardFiltroMes) dashboardFiltroMes.value = hoje.getMonth() + 1;
+                if (dashboardFiltroAno) dashboardFiltroAno.value = hoje.getFullYear();
+            }
+            
+            // Recarrega dashboard e histórico com o mês/ano selecionado
+            async function atualizarDashboardPorMes() {
+                const mes = dashboardFiltroMes.value;
+                const ano = dashboardFiltroAno.value;
+                const mesFormatado = `${ano}-${String(mes).padStart(2, '0')}`; // YYYY-MM
                 
-                // Filtro por mês
-                if (filtroMes) {
-                    filtroMes.addEventListener('change', () => {
-                        if (typeof loadHistoricoDataByMonth === 'function') {
-                            loadHistoricoDataByMonth();
+                console.log(`📅 Atualizando dashboard para ${mesFormatado}`);
+                
+                // Limpa cache
+                await fetch('/api/dashboard_cache/clear', { method: 'POST' });
+                
+                // Recarrega gráficos
+                if (window.viagensChartsInitialized && typeof loadDashboardData === 'function') {
+                    await loadDashboardData(
+                        window.viagensPorVeiculoChartInstance,
+                        window.viagensPorMotoristaChartInstance,
+                        window.viagensPorVeiculoChartTotalInstance,
+                        window.viagensPorMotoristaChartTotalInstance
+                    );
+                }
+                
+                // Recarrega histórico
+                if (typeof loadHistoricoData === 'function') {
+                    await loadHistoricoData();
+                }
+                
+                // ✅ Recria o listener de histórico para o novo mês
+                if (window.recriarListenerHistorico) {
+                    window.recriarListenerHistorico();
+                    console.log(`🔄 Listener de histórico recriado para ${mes}/${ano}`);
+                }
+                
+                if (window.showToast) {
+                    const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                                  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+                    showToast('success', `📅 ${meses[mes - 1]}/${ano} carregado`);
+                }
+            }
+            
+            // Event listeners para navegação
+            if (dashboardFiltroMes && dashboardFiltroAno) {
+                inicializarDashboardMesAno();
+                
+                dashboardFiltroMes.addEventListener('change', atualizarDashboardPorMes);
+                dashboardFiltroAno.addEventListener('change', atualizarDashboardPorMes);
+                
+                if (dashboardMesAnterior) {
+                    dashboardMesAnterior.addEventListener('click', () => {
+                        let mes = parseInt(dashboardFiltroMes.value);
+                        let ano = parseInt(dashboardFiltroAno.value);
+                        
+                        mes--;
+                        if (mes < 1) {
+                            mes = 12;
+                            ano--;
                         }
+                        
+                        dashboardFiltroMes.value = mes;
+                        dashboardFiltroAno.value = ano;
+                        atualizarDashboardPorMes();
                     });
                 }
                 
-                // Botão limpar mês
-                if (limparMesBtn) {
-                    limparMesBtn.addEventListener('click', () => {
-                        if (filtroMes) {
-                            filtroMes.value = '';
-                            // Recarrega histórico sem filtro de mês
-                            if (typeof loadHistoricoData === 'function') {
-                                loadHistoricoData();
-                            }
+                if (dashboardMesProximo) {
+                    dashboardMesProximo.addEventListener('click', () => {
+                        let mes = parseInt(dashboardFiltroMes.value);
+                        let ano = parseInt(dashboardFiltroAno.value);
+                        
+                        mes++;
+                        if (mes > 12) {
+                            mes = 1;
+                            ano++;
                         }
+                        
+                        dashboardFiltroMes.value = mes;
+                        dashboardFiltroAno.value = ano;
+                        atualizarDashboardPorMes();
+                    });
+                }
+                
+                if (dashboardMesAtual) {
+                    dashboardMesAtual.addEventListener('click', () => {
+                        const hoje = new Date();
+                        dashboardFiltroMes.value = hoje.getMonth() + 1;
+                        dashboardFiltroAno.value = hoje.getFullYear();
+                        atualizarDashboardPorMes();
                     });
                 }
             }
@@ -1886,30 +2030,119 @@
             });
         }
         
-        // Toast de atualização disponível
-        function showUpdateToast() {
-            const toast = document.createElement('div');
-            toast.id = 'update-toast';
-            toast.className = 'fixed bottom-4 right-4 bg-gradient-to-r from-green-500 to-emerald-500 text-white px-6 py-4 rounded-xl shadow-2xl z-50 animate-bounce';
-            toast.innerHTML = `
-                <div class="flex items-center gap-3">
-                    <div class="text-2xl">🔄</div>
-                    <div>
-                        <div class="font-bold">Nova versão disponível!</div>
-                        <div class="text-sm opacity-90">Clique para atualizar</div>
-                    </div>
-                </div>
+        // Modal de atualização OBRIGATÓRIA
+        function showUpdateModal() {
+            // Remove toast antigo se existir
+            const oldToast = document.getElementById('update-toast');
+            if (oldToast) oldToast.remove();
+            
+            // Cria overlay que bloqueia TUDO
+            const overlay = document.createElement('div');
+            overlay.id = 'update-modal-overlay';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                background: rgba(0, 0, 0, 0.95);
+                z-index: 999999;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                backdrop-filter: blur(10px);
             `;
-            toast.style.cursor = 'pointer';
-            toast.onclick = () => {
+            
+            // Modal estilizado
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                padding: 40px;
+                border-radius: 24px;
+                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+                max-width: 500px;
+                width: 90%;
+                text-align: center;
+                animation: modalBounce 0.5s ease-out;
+            `;
+            
+            modal.innerHTML = `
+                <div style="font-size: 80px; animation: spin 2s linear infinite;">🔄</div>
+                <h2 style="color: white; font-size: 28px; font-weight: bold; margin: 20px 0 10px 0;">
+                    Atualização Disponível!
+                </h2>
+                <p style="color: rgba(255,255,255,0.9); font-size: 16px; margin-bottom: 30px; line-height: 1.6;">
+                    Uma nova versão do sistema foi instalada com melhorias e correções.<br>
+                    <strong>É necessário atualizar para continuar usando.</strong>
+                </p>
+                <button id="btn-atualizar" style="
+                    background: white;
+                    color: #667eea;
+                    border: none;
+                    padding: 16px 48px;
+                    border-radius: 12px;
+                    font-size: 18px;
+                    font-weight: bold;
+                    cursor: pointer;
+                    transition: all 0.3s;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                    ✅ Atualizar Agora
+                </button>
+                <p style="color: rgba(255,255,255,0.7); font-size: 14px; margin-top: 20px;">
+                    Atualização automática em <span id="countdown">10</span> segundos...
+                </p>
+            `;
+            
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+            
+            // Adiciona animações
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes modalBounce {
+                    0% { transform: scale(0.3) rotate(-10deg); opacity: 0; }
+                    50% { transform: scale(1.05) rotate(2deg); }
+                    100% { transform: scale(1) rotate(0); opacity: 1; }
+                }
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+            `;
+            document.head.appendChild(style);
+            
+            // Botão de atualizar
+            document.getElementById('btn-atualizar').onclick = () => {
                 window.location.reload(true);
             };
-            document.body.appendChild(toast);
             
-            // Auto-reload após 10 segundos
-            setTimeout(() => {
-                window.location.reload(true);
-            }, 10000);
+            // Countdown e auto-reload
+            let seconds = 10;
+            const countdownEl = document.getElementById('countdown');
+            const interval = setInterval(() => {
+                seconds--;
+                if (countdownEl) countdownEl.textContent = seconds;
+                if (seconds <= 0) {
+                    clearInterval(interval);
+                    window.location.reload(true);
+                }
+            }, 1000);
+            
+            // Bloqueia todos os cliques fora do modal
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    // Anima o modal para chamar atenção
+                    modal.style.animation = 'modalBounce 0.3s ease-out';
+                }
+            });
+        }
+        
+        // Toast de atualização disponível (REMOVIDO - agora usa modal obrigatório)
+        function showUpdateToast() {
+            showUpdateModal(); // Chama o modal obrigatório
         }
     </script>
 

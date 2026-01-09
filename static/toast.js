@@ -3,6 +3,9 @@
  * Tipos: success, error, info, warning
  */
 
+// Armazena toasts ativos para evitar duplicação
+const activeToasts = new Map();
+
 // Cria o container de toasts se não existir
 function createToastContainer() {
     let container = document.getElementById('toast-container');
@@ -28,14 +31,20 @@ function createToastContainer() {
  * Exibe um toast na tela
  * @param {string} type - Tipo do toast: 'success', 'error', 'info', 'warning'
  * @param {string} message - Mensagem a ser exibida
- * @param {number} duration - Duração em milissegundos (padrão: 4000)
+ * @param {number} duration - Duração em milissegundos (padrão: 8000)
  */
-function showToast(type, message, duration = 4000) {
+function showToast(type, message, duration = 8000) {
+    // Previne duplicação de toasts idênticos
+    const toastKey = `${type}:${message}`;
+    if (activeToasts.has(toastKey)) {
+        return activeToasts.get(toastKey);
+    }
+    
     const container = createToastContainer();
     
     // Cria o elemento do toast
     const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
+    toast.className = `toast toast-${type} show`; // Adiciona classe 'show' para opacity: 1
     
     // Define as cores baseado no tipo
     const colors = {
@@ -58,9 +67,10 @@ function showToast(type, message, duration = 4000) {
         gap: 10px;
         max-width: 400px;
         pointer-events: auto;
-        animation: slideIn 0.3s ease-out;
         font-size: 14px;
         font-weight: 500;
+        transform: translateX(0);
+        transition: all 0.3s ease-out;
     `;
     
     // Adiciona o ícone
@@ -80,6 +90,9 @@ function showToast(type, message, duration = 4000) {
         word-break: break-word;
     `;
     
+    // Variável para armazenar o timeout
+    let timeoutId = null;
+    
     // Botão de fechar
     const closeBtn = document.createElement('button');
     closeBtn.textContent = '×';
@@ -98,7 +111,14 @@ function showToast(type, message, duration = 4000) {
     `;
     closeBtn.onmouseover = () => closeBtn.style.opacity = '1';
     closeBtn.onmouseout = () => closeBtn.style.opacity = '0.8';
-    closeBtn.onclick = () => removeToast(toast);
+    
+    closeBtn.onclick = () => {
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+        }
+        activeToasts.delete(toastKey);
+        removeToast(toast);
+    };
     
     toast.appendChild(icon);
     toast.appendChild(messageSpan);
@@ -108,14 +128,13 @@ function showToast(type, message, duration = 4000) {
     container.appendChild(toast);
     
     // Remove automaticamente após a duração especificada
-    const timeout = setTimeout(() => removeToast(toast), duration);
+    timeoutId = setTimeout(() => {
+        activeToasts.delete(toastKey);
+        removeToast(toast);
+    }, duration);
     
-    // Permite pausar o timer ao passar o mouse
-    toast.onmouseenter = () => clearTimeout(timeout);
-    toast.onmouseleave = () => {
-        const newTimeout = setTimeout(() => removeToast(toast), 1000);
-        toast.dataset.timeout = newTimeout;
-    };
+    // Registra o toast ativo
+    activeToasts.set(toastKey, toast);
     
     return toast;
 }
@@ -125,6 +144,10 @@ function showToast(type, message, duration = 4000) {
  */
 function removeToast(toast) {
     if (!toast || !toast.parentNode) return;
+    
+    // Previne múltiplas chamadas
+    if (toast.dataset.removing === 'true') return;
+    toast.dataset.removing = 'true';
     
     toast.style.animation = 'slideOut 0.3s ease-in';
     setTimeout(() => {

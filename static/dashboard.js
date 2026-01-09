@@ -4,6 +4,12 @@ if (!window.historicoCache) {
     console.log('✅ Cache global inicializado no dashboard.js');
 }
 
+console.log('📊 Dashboard.js carregado - aguardando DOM...');
+// 📄 Variáveis de paginação
+window.historicoCurrentPage = 1;
+window.historicoItemsPerPage = 500;
+window.historicoTotalItems = 0;
+
 document.addEventListener('DOMContentLoaded', () => {
     // Inicializa os gráficos com um estado vazio
     const viagensPorVeiculoChart = renderChart('viagensPorVeiculoChart', 'bar', 'Nº de Viagens por Veículo', '#4F46E5');
@@ -188,9 +194,23 @@ async function loadDashboardData(viagensPorVeiculoChart, viagensPorMotoristaChar
     try {
         // Primeiro gráfico: SEMPRE usa filtro de mês
         const filtroMesEl = document.getElementById('filtro-mes');
-        const mesAtual = new Date().toISOString().slice(0, 7); // YYYY-MM
-        const mesFiltro = (filtroMesEl && filtroMesEl.value) ? filtroMesEl.value : mesAtual;
-        console.log('📅 Mês filtrado:', mesFiltro);
+        const dashboardFiltroMes = document.getElementById('dashboard-filtro-mes');
+        const dashboardFiltroAno = document.getElementById('dashboard-filtro-ano');
+        
+        // Prioriza navegação de mês do dashboard (dashboard-filtro-mes/ano)
+        let mesFiltro;
+        if (dashboardFiltroMes && dashboardFiltroAno && dashboardFiltroMes.value && dashboardFiltroAno.value) {
+            const mes = String(dashboardFiltroMes.value).padStart(2, '0');
+            const ano = dashboardFiltroAno.value;
+            mesFiltro = `${ano}-${mes}`; // YYYY-MM
+            console.log('📅 Usando navegação de mês do dashboard:', mesFiltro);
+        } else {
+            const mesAtual = new Date().toISOString().slice(0, 7); // YYYY-MM
+            mesFiltro = (filtroMesEl && filtroMesEl.value) ? filtroMesEl.value : mesAtual;
+            console.log('📅 Usando filtro-mes tradicional:', mesFiltro);
+        }
+        
+        console.log('📅 Mês final aplicado:', mesFiltro);
         
         // Busca dados do mês (para os 2 primeiros gráficos)
         const urlMes = `/api/dashboard_stats?month=${mesFiltro}`;
@@ -340,25 +360,68 @@ async function loadHistoricoDataByMonth() {
     }
 }
 
-async function loadHistoricoData() {
+async function loadHistoricoData(page = 1) {
+    console.log(`🔄 loadHistoricoData chamada - página ${page}`);
     const dataEl = document.getElementById('filtro-data');
     const placaEl = document.getElementById('filtro-placa');
     const motoristaEl = document.getElementById('filtro-motorista');
     
-    const data = dataEl ? dataEl.value : '';
+    let data = dataEl ? dataEl.value.trim() : '';
     const placa = placaEl ? placaEl.value : '';
     const motorista = motoristaEl ? motoristaEl.value : '';
+    
+    // ✅ Se digitou apenas o dia (1-31), completa com mês/ano selecionado
+    if (data && /^\d{1,2}$/.test(data)) {
+        const dashboardFiltroMes = document.getElementById('dashboard-filtro-mes');
+        const dashboardFiltroAno = document.getElementById('dashboard-filtro-ano');
+        if (dashboardFiltroMes && dashboardFiltroAno) {
+            const mes = dashboardFiltroMes.value || String(new Date().getMonth() + 1);
+            const ano = dashboardFiltroAno.value || String(new Date().getFullYear());
+            const dia = data.padStart(2, '0');
+            data = `${dia}/${mes.padStart(2, '0')}/${ano}`;
+            console.log(`📅 Dia convertido: ${dataEl.value} → ${data}`);
+        }
+    }
 
     const params = new URLSearchParams({ data, placa, motorista });
+    
+    // ✅ SEMPRE adiciona filtro de mês/ano (navegação de mês no dashboard)
+    const dashboardFiltroMes = document.getElementById('dashboard-filtro-mes');
+    const dashboardFiltroAno = document.getElementById('dashboard-filtro-ano');
+    if (dashboardFiltroMes && dashboardFiltroAno) {
+        const mes = dashboardFiltroMes.value || String(new Date().getMonth() + 1);
+        const ano = dashboardFiltroAno.value || String(new Date().getFullYear());
+        params.append('mes_filtro', mes);
+        params.append('ano_filtro', ano);
+        console.log(`📅 Enviando filtro de mês: ${mes}/${ano}`);
+    }
+    
+    // ✅ PAGINAÇÃO SERVER-SIDE para economizar quota
+    params.append('page', page);
+    params.append('limit', window.historicoItemsPerPage);
+    
+    // ✅ Adiciona timestamp para evitar cache do navegador
+    params.append('_t', Date.now());
 
     try {
-        console.log('🔄 Carregando histórico da API...');
+        console.log(`🔄 Carregando página ${page} do histórico...`);
         const response = await fetch(`/api/historico?${params.toString()}`, {
-            cache: 'no-cache'
+            cache: 'no-store',
+            headers: {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            }
         });
-        const historico = await response.json();
+        const data = await response.json();
         
-        console.log('✅ API retornou', historico.length, 'registros');
+        // Compatibilidade: novo formato tem {historico, total, page, limit}
+        const historico = data.historico || data;
+        const total = data.total || historico.length;
+        
+        console.log(`✅ API retornou página ${page}:`, historico.length, 'registros');
+        console.log(`📊 Total no sistema:`, total, 'registros');
+        console.log(`🔍 Objeto data completo:`, data);
         
         // DEBUG: mostra primeiros 5 registros com categorias
         console.log('🔍 Primeiros 5 registros da API:');
@@ -366,8 +429,11 @@ async function loadHistoricoData() {
             console.log(`  📋 [${i}] ${item.veiculo} → Categoria: "${item.categoria || 'VAZIO'}"`);
         });
         
+        // Guarda dados da página atual
         window.historicoCache = historico;
-        console.log('✅ Cache atualizado');
+        window.historicoTotalItems = total;
+        window.historicoCurrentPage = page;
+        console.log('✅ Página carregada:', historico.length, 'registros | Total no sistema:', total);
         
         populateHistoryTable(historico);
         
@@ -872,7 +938,8 @@ function populateHistoryTable(historico) {
     });
 
     // Atualiza contadores nos botões das tabs (com verificação se existem)
-    const totalItems = historico.length;
+    // ✅ USA O TOTAL GLOBAL do servidor, não o length dos dados da página
+    const totalItems = window.historicoTotalItems || historico.length;
     const updateBadge = (category, count) => {
         const badge = document.querySelector(`[data-category="${category}"] .count-badge`);
         if (badge) {
@@ -884,7 +951,7 @@ function populateHistoryTable(historico) {
     };
     
     console.log('📊 Atualizando badges com contadores:');
-    console.log('  Total:', totalItems);
+    console.log('  Total GLOBAL:', totalItems, '(do servidor)');
     console.log('  Itaipuaçu:', categorias['Base de Itaipuaçu'].length);
     console.log('  Araçatiba:', categorias['Base ETE de Araçatiba'].length);
     console.log('  Sede:', categorias['Sede Sanemar'].length);
@@ -910,11 +977,15 @@ function populateHistoryTable(historico) {
 
     if (itemsParaMostrar.length === 0) {
         tabelaBody.innerHTML = '<tr><td colspan="8" class="text-center p-4">Nenhum registro encontrado nesta categoria.</td></tr>';
+        renderHistoricoPagination([]);
         return;
     }
 
-    // Renderiza os itens filtrados (sem headers de categoria)
-    itemsParaMostrar.forEach(item => {
+    // ✅ Dados já vêm paginados do backend (50 por página)
+    const itensPaginados = itemsParaMostrar;
+
+    // Renderiza os itens paginados
+    itensPaginados.forEach(item => {
         if (!item.id) {
             console.warn('⚠️ Registro SEM ID:', item);
         }
@@ -1022,6 +1093,9 @@ function populateHistoryTable(historico) {
 
         tabelaBody.appendChild(tr);
     });  // Fecha forEach de items
+    
+    // 📄 Renderiza paginação
+    renderHistoricoPagination(itemsParaMostrar);
 }
 
 function renderChart(canvasId, type, label, colors) {
@@ -1066,6 +1140,139 @@ function updateChartData(chart, chartData) {
 }
 
 // ==========================================
+// 📄 SISTEMA DE PAGINAÇÃO
+// ==========================================
+
+function renderHistoricoPagination(items) {
+    // ✅ USA TOTAL GLOBAL do servidor para paginação correta
+    const totalItems = window.historicoTotalItems || items.length;
+    const totalPages = Math.ceil(totalItems / window.historicoItemsPerPage);
+    
+    console.log('🔢 Renderizando paginação:', { totalItems, totalPages, currentPage: window.historicoCurrentPage });
+    
+    // Atualiza contador
+    const start = (window.historicoCurrentPage - 1) * window.historicoItemsPerPage + 1;
+    const end = Math.min(window.historicoCurrentPage * window.historicoItemsPerPage, totalItems);
+    
+    document.getElementById('historico-range-start').textContent = totalItems > 0 ? start : 0;
+    document.getElementById('historico-range-end').textContent = end;
+    document.getElementById('historico-total').textContent = totalItems;
+    
+    // Renderiza botões
+    const container = document.getElementById('historico-pagination-buttons');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    if (totalPages <= 1) return; // Sem paginação necessária
+    
+    // Botão Anterior
+    if (window.historicoCurrentPage > 1) {
+        const prevBtn = createPaginationButton('← Anterior', window.historicoCurrentPage - 1);
+        container.appendChild(prevBtn);
+    }
+    
+    // Botões numéricos (máximo 7 botões)
+    const maxButtons = 7;
+    let startPage = Math.max(1, window.historicoCurrentPage - 3);
+    let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+    
+    if (endPage - startPage < maxButtons - 1) {
+        startPage = Math.max(1, endPage - maxButtons + 1);
+    }
+    
+    if (startPage > 1) {
+        container.appendChild(createPaginationButton('1', 1));
+        if (startPage > 2) {
+            container.appendChild(createPaginationDots());
+        }
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        const btn = createPaginationButton(i, i, i === window.historicoCurrentPage);
+        container.appendChild(btn);
+    }
+    
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) {
+            container.appendChild(createPaginationDots());
+        }
+        container.appendChild(createPaginationButton(totalPages, totalPages));
+    }
+    
+    // Botão Próximo
+    if (window.historicoCurrentPage < totalPages) {
+        const nextBtn = createPaginationButton('Próximo →', window.historicoCurrentPage + 1);
+        container.appendChild(nextBtn);
+    }
+}
+
+function createPaginationButton(text, page, active = false) {
+    const btn = document.createElement('button');
+    btn.textContent = text;
+    btn.className = active 
+        ? 'px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold'
+        : 'px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50';
+    btn.onclick = () => goToHistoricoPage(page);
+    return btn;
+}
+
+function createPaginationDots() {
+    const dots = document.createElement('span');
+    dots.textContent = '...';
+    dots.className = 'px-2 text-gray-500';
+    return dots;
+}
+
+async function goToHistoricoPage(page) {
+    if (page < 1) return;
+    
+    const totalPages = Math.ceil(window.historicoTotalItems / window.historicoItemsPerPage);
+    if (page > totalPages) return;
+    
+    // 🚀 Sempre busca do servidor (economiza quota - só 50 leituras por vez)
+    await loadHistoricoData(page);
+}
+
+// ==========================================
+// 📄 GERAÇÃO DE PDF COM FILTROS
+// ==========================================
+
+function gerarPDFHistorico() {
+    const params = new URLSearchParams();
+    
+    // 📅 Pega o MÊS E ANO selecionados nos dropdowns (não os filtros de busca!)
+    const mesSelect = document.getElementById('dashboard-filtro-mes');
+    const anoSelect = document.getElementById('dashboard-filtro-ano');
+    
+    const mes = mesSelect?.value || new Date().getMonth() + 1;
+    const ano = anoSelect?.value || new Date().getFullYear();
+    
+    // Calcula primeiro e último dia do mês selecionado
+    const dataInicio = `${ano}-${String(mes).padStart(2, '0')}-01T00:00:00`;
+    
+    // Último dia do mês
+    const ultimoDia = new Date(ano, mes, 0).getDate();
+    const dataFim = `${ano}-${String(mes).padStart(2, '0')}-${ultimoDia}T23:59:59`;
+    
+    params.append('data_inicio', dataInicio);
+    params.append('data_fim', dataFim);
+    params.append('mes', mes);
+    params.append('ano', ano);
+    
+    const queryString = params.toString();
+    const url = `/pdf/saidas${queryString ? '?' + queryString : ''}`;
+    
+    const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
+                   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    
+    console.log(`📝 Gerando PDF do histórico: ${meses[mes-1]}/${ano}`);
+    
+    // Abre o PDF em nova aba
+    window.open(url, '_blank');
+}
+
+// ==========================================
 // 🏷️ GERENCIAMENTO DE TABS DE CATEGORIA
 // ==========================================
 
@@ -1075,6 +1282,9 @@ function trocarCategoria(categoria) {
     
     // Atualiza categoria ativa
     window.categoriaAtiva = categoria;
+    
+    // 📄 Reseta para página 1 ao trocar categoria
+    window.historicoCurrentPage = 1;
     
     // Remove active de todas as tabs
     document.querySelectorAll('.historico-category-tab').forEach(t => t.classList.remove('active'));

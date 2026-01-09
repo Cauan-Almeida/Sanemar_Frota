@@ -30,6 +30,10 @@
         .card-hover:hover { transform: translateY(-2px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in { animation: fadeIn 0.5s ease-out; }
+        @keyframes pulse { 
+            0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            50% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+        }
         .gradient-btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); transition: all 0.3s; }
         .gradient-btn:hover { transform: scale(1.02); box-shadow: 0 10px 25px -5px rgba(102, 126, 234, 0.5); }
         
@@ -97,6 +101,13 @@
                 📊 Dashboard
             </a>
         </div>
+    </div>
+
+    <!-- Indicador de Conexão (só aparece quando offline) -->
+    <div id="connection-status" class="fixed top-4 right-4 z-50 rounded-lg shadow-lg font-semibold text-sm flex items-center gap-2 transition-all duration-500"
+         style="background: #ef4444; color: white; padding: 12px 20px; display: none;">
+        <span id="connection-icon" style="font-size: 16px;">🔴</span>
+        <span id="connection-text">Sem conexão</span>
     </div>
 
     <div class="max-w-7xl mx-auto space-y-6">
@@ -345,7 +356,7 @@
         // showResponseMessage é usada pelo app-melhorado.js
         function showResponseMessage(message, type) {
             if (typeof showToast === 'function') {
-                showToast(message, type);
+                showToast(type, message);
             } else {
                 console.log(`[${type}] ${message}`);
             }
@@ -526,7 +537,7 @@
                     if (categoriaSelect) {
                         if (categoriaSelect.value === '__NOVA__') {
                             if (!categoriaCustomInput || !categoriaCustomInput.value.trim()) {
-                                showToast('error', '⚠️ Digite o nome da nova categoria', 5000);
+                                showToast('error', '⚠️ Digite o nome da nova categoria');
                                 if (categoriaCustomInput) categoriaCustomInput.focus();
                                 return;
                             }
@@ -537,7 +548,7 @@
                     }
                     
                     if (!placa || !motorista || !litros) {
-                        showToast('error', '⚠️ Preencha placa, motorista e litros', 5000);
+                        showToast('error', '⚠️ Preencha placa, motorista e litros');
                         return;
                     }
                     
@@ -549,7 +560,7 @@
                     );
                     
                     if (!confirmed) {
-                        showToast('info', 'ℹ️ Abastecimento cancelado', 3000);
+                        showToast('info', 'ℹ️ Abastecimento cancelado');
                         return;
                     }
                     
@@ -563,7 +574,7 @@
                         const result = await response.json();
                         
                         if (response.ok) {
-                            showToast('success', '✅ ' + (result.message || 'Abastecimento registrado!'), 3000);
+                            showToast('success', '✅ ' + (result.message || 'Abastecimento registrado!'), 5000);
                             // Reseta campos
                             const placaSelect = document.getElementById('quick-refuel-placa') || document.getElementById('quick-refuel-placa-select-hidden');
                             const motoristaSelect = document.getElementById('quick-refuel-motorista') || document.getElementById('quick-refuel-motorista-select-hidden');
@@ -605,7 +616,7 @@
                         }
                     } catch (error) {
                         console.error('Erro:', error);
-                        showToast('error', '❌ Erro de conexão', 5000);
+                        showToast('error', '❌ Erro de conexão');
                     }
                 });
             }
@@ -623,11 +634,22 @@
         
         // Função para buscar e exibir veículos em curso
         async function fetchVeiculosEmCurso() {
+            console.log('🔄 fetchVeiculosEmCurso chamada');
             try {
-                const response = await fetch('/api/veiculos_em_curso');
+                // Adiciona timestamp para evitar cache + configuração no-cache
+                const timestamp = new Date().getTime();
+                const response = await fetch(`/api/veiculos_em_curso?t=${timestamp}`, {
+                    cache: 'no-store',
+                    headers: {
+                        'Cache-Control': 'no-cache, no-store, must-revalidate',
+                        'Pragma': 'no-cache',
+                        'Expires': '0'
+                    }
+                });
                 if (!response.ok) throw new Error('Erro ao buscar veículos');
                 
                 const veiculos = await response.json();
+                console.log(`📋 Recebidos ${veiculos.length} veículos em curso`);
                 const container = document.getElementById('veiculos-em-curso-container');
                 if (!container) return;
 
@@ -812,18 +834,18 @@
                 if (response.ok) {
                     if (window.showToast) {
                         const msg = horario ? `Chegada registrada: ${placa} às ${horario}` : `Chegada registrada: ${placa}`;
-                        showToast('success', msg, 3000);
+                        showToast('success', msg);
                     }
                     fetchVeiculosEmCurso(); // Atualiza a lista
                 } else {
                     if (window.showToast) {
-                        showToast('error', result.error || 'Erro ao registrar chegada', 5000);
+                        showToast('error', result.error || 'Erro ao registrar chegada');
                     }
                 }
             } catch (error) {
                 console.error('Erro:', error);
                 if (window.showToast) {
-                    showToast('error', 'Erro ao registrar chegada', 5000);
+                    showToast('error', 'Erro ao registrar chegada');
                 }
             }
         }
@@ -849,21 +871,26 @@
                 
                 if (response.ok) {
                     if (window.showToast) {
-                        showToast('success', `Viagem cancelada: ${placa}`, 3000);
+                        showToast('success', `Viagem cancelada: ${placa}`);
                     }
-                    fetchVeiculosEmCurso(); // Atualiza a lista
+                    // Força atualização imediata
+                    fetchVeiculosEmCurso();
                 } else {
                     if (window.showToast) {
-                        showToast('error', result.error || 'Erro ao cancelar viagem', 5000);
+                        showToast('error', result.error || 'Erro ao cancelar viagem');
                     }
                 }
             } catch (error) {
                 console.error('Erro:', error);
                 if (window.showToast) {
-                    showToast('error', 'Erro ao cancelar viagem', 5000);
+                    showToast('error', 'Erro ao cancelar viagem');
                 }
             }
         }
+
+        // Torna as funções globais para acesso de outros scripts
+        window.fetchVeiculosEmCurso = fetchVeiculosEmCurso;
+        window.cancelarViagem = cancelarViagem;
 
         console.log('✅ Funções de veículos em curso carregadas');
     </script>
@@ -894,20 +921,21 @@
         onSnapshot(saidasQuery, (snapshot) => {
             console.log('📊 Atualização detectada: veículos em curso');
             
-            // Atualiza a tabela de veículos em curso (função global)
+            // SEMPRE atualiza a lista quando há mudanças
             if (typeof fetchVeiculosEmCurso === 'function') {
                 fetchVeiculosEmCurso();
             }
 
-            // Notificações
+            // Notificações apenas para NOVAS saídas (não para remoções)
+            // As remoções (chegadas/cancelamentos) já têm toasts manuais
             snapshot.docChanges().forEach((change) => {
                 const data = change.doc.data();
                 
                 if (change.type === 'added' && window.showToast) {
-                    showToast('info', `Nova saída: ${data.veiculo} - ${data.motorista}`, 3000);
-                } else if (change.type === 'removed' && window.showToast) {
-                    showToast('success', `Chegada registrada: ${data.veiculo}`, 3000);
+                    // Só mostra toast para novas saídas
+                    showToast('info', `Nova saída: ${data.veiculo} - ${data.motorista}`);
                 }
+                // Removido: toasts para 'removed' pois já mostramos manualmente no cancelar/chegada
             });
         }, (error) => {
             console.error('❌ Erro no listener:', error);
@@ -943,31 +971,119 @@
             });
         }
         
-        // Toast de atualização disponível
-        function showUpdateToast() {
-            const toast = document.createElement('div');
-            toast.id = 'update-toast';
-            toast.className = 'fixed bottom-4 right-4 bg-gradient-to-r from-green-500 to-emerald-500 text-white px-6 py-4 rounded-xl shadow-2xl z-50';
-            toast.style.animation = 'bounce 1s infinite';
-            toast.innerHTML = `
-                <div class="flex items-center gap-3">
-                    <div class="text-2xl">🔄</div>
-                    <div>
-                        <div class="font-bold text-lg">Nova versão disponível!</div>
-                        <div class="text-sm opacity-90">Toque para atualizar</div>
-                    </div>
-                </div>
+        // Modal de atualização OBRIGATÓRIA
+        function showUpdateModal() {
+            // Remove toast antigo se existir
+            const oldToast = document.getElementById('update-toast');
+            if (oldToast) oldToast.remove();
+            
+            // Cria overlay que bloqueia TUDO
+            const overlay = document.createElement('div');
+            overlay.id = 'update-modal-overlay';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                background: rgba(0, 0, 0, 0.95);
+                z-index: 999999;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                backdrop-filter: blur(10px);
             `;
-            toast.style.cursor = 'pointer';
-            toast.onclick = () => {
+            
+            // Modal estilizado
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                padding: 40px;
+                border-radius: 24px;
+                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+                max-width: 500px;
+                width: 90%;
+                text-align: center;
+                animation: modalBounce 0.5s ease-out;
+            `;
+            
+            modal.innerHTML = `
+                <div style="font-size: 80px; animation: spin 2s linear infinite;">🔄</div>
+                <h2 style="color: white; font-size: 28px; font-weight: bold; margin: 20px 0 10px 0;">
+                    Atualização Disponível!
+                </h2>
+                <p style="color: rgba(255,255,255,0.9); font-size: 16px; margin-bottom: 30px; line-height: 1.6;">
+                    Uma nova versão do sistema foi instalada com melhorias e correções.<br>
+                    <strong>É necessário atualizar para continuar usando.</strong>
+                </p>
+                <button id="btn-atualizar" style="
+                    background: white;
+                    color: #667eea;
+                    border: none;
+                    padding: 16px 48px;
+                    border-radius: 12px;
+                    font-size: 18px;
+                    font-weight: bold;
+                    cursor: pointer;
+                    transition: all 0.3s;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                    ✅ Atualizar Agora
+                </button>
+                <p style="color: rgba(255,255,255,0.7); font-size: 14px; margin-top: 20px;">
+                    Atualização automática em <span id="countdown">10</span> segundos...
+                </p>
+            `;
+            
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+            
+            // Adiciona animações
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes modalBounce {
+                    0% { transform: scale(0.3) rotate(-10deg); opacity: 0; }
+                    50% { transform: scale(1.05) rotate(2deg); }
+                    100% { transform: scale(1) rotate(0); opacity: 1; }
+                }
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+            `;
+            document.head.appendChild(style);
+            
+            // Botão de atualizar
+            document.getElementById('btn-atualizar').onclick = () => {
                 window.location.reload(true);
             };
-            document.body.appendChild(toast);
             
-            // Auto-reload após 8 segundos
-            setTimeout(() => {
-                window.location.reload(true);
-            }, 8000);
+            // Countdown e auto-reload
+            let seconds = 10;
+            const countdownEl = document.getElementById('countdown');
+            const interval = setInterval(() => {
+                seconds--;
+                if (countdownEl) countdownEl.textContent = seconds;
+                if (seconds <= 0) {
+                    clearInterval(interval);
+                    window.location.reload(true);
+                }
+            }, 1000);
+            
+            // Bloqueia todos os cliques fora do modal
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    // Anima o modal para chamar atenção
+                    modal.style.animation = 'modalBounce 0.3s ease-out';
+                }
+            });
+        }
+        
+        // Toast de atualização disponível (REMOVIDO - agora usa modal obrigatório)
+        function showUpdateToast() {
+            showUpdateModal(); // Chama o modal obrigatório
         }
     </script>
     
@@ -1302,6 +1418,115 @@
                 }
             }
         });
+
+        // ====================================
+        // 🌐 MONITORAMENTO DE CONEXÃO
+        // ====================================
+        const connectionStatus = document.getElementById('connection-status');
+        const connectionIcon = document.getElementById('connection-icon');
+        const connectionText = document.getElementById('connection-text');
+        
+        // Botões que dependem de internet
+        const botoesOnline = [
+            document.getElementById('btn-registrar-saida'),
+            document.getElementById('btn-registrar-chegada'),
+            document.getElementById('btn-abastecimento'),
+            document.getElementById('btn-cancelar')
+        ];
+
+        function atualizarStatusConexao() {
+            const online = navigator.onLine;
+            
+            if (online) {
+                // ONLINE - Esconde completamente o indicador
+                connectionStatus.style.display = 'none';
+                
+                // Habilita todos os botões
+                botoesOnline.forEach(btn => {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.style.opacity = '1';
+                        btn.style.cursor = 'pointer';
+                    }
+                });
+                
+                console.log('✅ Conexão online');
+            } else {
+                // OFFLINE - Mostra o indicador vermelho pulsando
+                connectionStatus.style.display = 'flex';
+                connectionStatus.style.animation = 'pulse 2s ease-in-out infinite';
+                
+                // Desabilita todos os botões
+                botoesOnline.forEach(btn => {
+                    if (btn) {
+                        btn.disabled = true;
+                        btn.style.opacity = '0.5';
+                        btn.style.cursor = 'not-allowed';
+                    }
+                });
+                
+                if (typeof showToast === 'function') {
+                    showToast('error', '⚠️ Sem conexão! Conecte-se à internet para registrar.');
+                }
+                
+                console.warn('⚠️ Sem conexão com a internet');
+            }
+        }
+
+        // Debounce para evitar múltiplos toasts
+        let conexaoToastTimeout = null;
+        let ultimoToastOnline = 0;
+        
+        // Monitora mudanças de conexão
+        window.addEventListener('online', () => {
+            atualizarStatusConexao();
+            
+            // Previne múltiplos toasts em menos de 3 segundos
+            const agora = Date.now();
+            if (agora - ultimoToastOnline < 3000) {
+                console.log('⏭️ [TOAST DEBUG] Ignorando evento online duplicado (< 3s)');
+                return;
+            }
+            ultimoToastOnline = agora;
+            
+            // Debounce: só mostra toast após 1 segundo de estabilidade
+            if (conexaoToastTimeout) clearTimeout(conexaoToastTimeout);
+            conexaoToastTimeout = setTimeout(() => {
+                if (typeof showToast === 'function') {
+                    showToast('success', '✅ Conexão restaurada!');
+                }
+                conexaoToastTimeout = null;
+            }, 1000);
+        });
+
+        window.addEventListener('offline', () => {
+            atualizarStatusConexao();
+        });
+
+        // Verifica status inicial
+        atualizarStatusConexao();
+
+        // Adiciona validação nos formulários
+        const forms = ['form-saida', 'form-chegada', 'form-abastecimento'];
+        forms.forEach(formId => {
+            const form = document.getElementById(formId);
+            if (form) {
+                form.addEventListener('submit', (e) => {
+                    if (!navigator.onLine) {
+                        e.preventDefault();
+                        e.stopImmediatePropagation();
+                        if (typeof showToast === 'function') {
+                            showToast('error', '⚠️ Sem conexão! Conecte-se à internet primeiro.');
+                        } else {
+                            alert('⚠️ Sem conexão! Conecte-se à internet primeiro.');
+                        }
+                        return false;
+                    }
+                });
+            }
+        });
+        
+        console.log('🌐 Monitor de conexão ativado');
     </script>
     </body>
     </html>

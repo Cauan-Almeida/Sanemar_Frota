@@ -35,6 +35,13 @@ def normalize_plate(plate: str) -> str:
 # Define o fuso horário local
 LOCAL_TZ = ZoneInfo("America/Sao_Paulo")
 
+# Função para invalidar cache do histórico (chamada em saídas/chegadas/cancelamentos)
+def invalidate_historico_cache():
+    """Limpa todo o cache do histórico quando há mudanças"""
+    global historico_cache
+    historico_cache.clear()
+    print('🗑️ Cache do histórico invalidado (saída/chegada/cancelamento)')
+
 # Carrega as variáveis de ambiente do arquivo .env
 load_dotenv()
 
@@ -572,6 +579,10 @@ def api_cancelar():
         viagem_doc = viagens_filtradas[0][0]
         # Delete the document as requested by the user (cancel should remove the viagem)
         viagem_doc.reference.delete()
+        
+        # Invalida cache do histórico após cancelamento
+        invalidate_historico_cache()
+        
         return jsonify({"message": "Viagem cancelada."}), 200
     except Exception as e:
         print(f"Erro ao cancelar viagem: {e}")
@@ -697,6 +708,10 @@ def api_chegada():
         return jsonify({"error": "O campo veículo é obrigatório."}), 400
 
     response_message = handle_chegada(veiculo, horario, litros=litros, odometro=odometro)
+    
+    # Invalida cache do histórico se foi sucesso
+    if "sucesso" in response_message:
+        invalidate_historico_cache()
 
     if "sucesso" in response_message:
         return jsonify({"message": response_message}), 200
@@ -1031,8 +1046,8 @@ def get_audit_logs():
         print(f"Erro ao buscar logs de auditoria: {e}")
         return jsonify({"error": str(e)}), 500
 
-# Cache para histórico (5 minutos)
-historico_cache = {'data': None, 'expires': 0}
+# Cache para histórico (5 minutos) - um cache para cada combinação de filtros
+historico_cache = {}  # Dicionário de caches por chave (mes_ano_placa_motorista_page)
 
 @app.route('/api/historico', methods=['GET'])
 def get_historico():
@@ -1041,16 +1056,33 @@ def get_historico():
     
     try:
         data_filtro = request.args.get('data')       # ex: 17/10/2025
+        mes_filtro = request.args.get('mes_filtro') or request.args.get('mes')  # ex: 10 (outubro)
+        ano_filtro = request.args.get('ano_filtro') or request.args.get('ano')  # ex: 2025
         placa_filtro = request.args.get('placa', '').strip()
         motorista_filtro = request.args.get('motorista', '').strip()
+        
+        # ✅ PAGINAÇÃO SERVER-SIDE para economizar quota
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 500))  # ✅ AUMENTADO DE 50 PARA 500
 
-        # ✅ CACHE: Se não tem filtros, usa cache de 5 minutos
+        # ✅ SE NÃO TEM FILTROS, BUSCA DO MÊS ATUAL
+        if not data_filtro and not mes_filtro and not ano_filtro:
+            now_local = datetime.now(LOCAL_TZ)
+            mes_filtro = str(now_local.month)
+            ano_filtro = str(now_local.year)
+            print(f'📅 Sem filtro de data: buscando mês atual {mes_filtro}/{ano_filtro}')
+
+        # ✅ CACHE de 5 minutos - invalidado automaticamente em saídas/chegadas/cancelamentos
         now = time.time()
-        if not data_filtro and not placa_filtro and not motorista_filtro:
-            if historico_cache['expires'] > now and historico_cache['data']:
-                print(f'✅ Histórico do CACHE - economia ~100 leituras')
-                return jsonify(historico_cache['data']), 200
-            print(f'🔄 Recalculando histórico (cache expirado)')
+        cache_key = f"{mes_filtro}_{ano_filtro}_{placa_filtro}_{motorista_filtro}_{page}"
+        
+        # Verifica se tem cache válido
+        if cache_key in historico_cache and historico_cache[cache_key]['expires'] > now:
+            cached = historico_cache[cache_key]['data']
+            print(f'⚡ Cache hit: {mes_filtro}/{ano_filtro} - economiza leituras Firestore')
+            return jsonify(cached), 200
+        
+        print(f'🔄 Cache miss: buscando {mes_filtro}/{ano_filtro} do Firestore')
 
         # Começa a query básica
         query = db.collection('saidas')
@@ -1058,45 +1090,78 @@ def get_historico():
         # Flag para saber se aplicamos filtros complexos (que exigem filtro local)
         needs_local_filter = False
         
-        # 1. Aplica filtro de DATA (se houver)
-        if data_filtro:
+        # ✅ 1. SEMPRE aplica filtro de MÊS/ANO primeiro (base de todas as buscas)
+        if mes_filtro and ano_filtro:
             try:
-                # Converte a data local para UTC para a consulta
-                data_obj = datetime.strptime(data_filtro, '%d/%m/%Y')
-                start_local = data_obj.replace(hour=0, minute=0, second=0, tzinfo=LOCAL_TZ)
-                end_local = data_obj.replace(hour=23, minute=59, second=59, tzinfo=LOCAL_TZ)
+                mes = int(mes_filtro)
+                ano = int(ano_filtro)
+                
+                # Primeiro dia do mês às 00:00:00
+                start_local = datetime(ano, mes, 1, 0, 0, 0, tzinfo=LOCAL_TZ)
+                
+                # Último dia do mês às 23:59:59
+                if mes == 12:
+                    end_local = datetime(ano, 12, 31, 23, 59, 59, tzinfo=LOCAL_TZ)
+                else:
+                    # Último segundo antes do próximo mês
+                    end_local = datetime(ano, mes + 1, 1, 0, 0, 0, tzinfo=LOCAL_TZ) - timedelta(seconds=1)
                 
                 start_utc = start_local.astimezone(timezone.utc)
                 end_utc = end_local.astimezone(timezone.utc)
                 
                 query = query.where(filter=firestore.FieldFilter('timestampSaida', '>=', start_utc))
                 query = query.where(filter=firestore.FieldFilter('timestampSaida', '<=', end_utc))
+                
+                print(f'📅 Filtro de mês: {mes}/{ano} ({start_local} até {end_local})')
+            except ValueError as e:
+                print(f'⚠️ Erro no filtro de mês/ano: {e}')
+                pass
+        
+        # ✅ 2. Aplica filtro de DATA ESPECÍFICA (refina o mês para um dia específico)
+        if data_filtro:
+            try:
+                # Converte a data local para UTC para a consulta
+                data_obj = datetime.strptime(data_filtro, '%d/%m/%Y')
+                
+                # ✅ VALIDA: data deve estar dentro do mês selecionado
+                if mes_filtro and ano_filtro:
+                    mes = int(mes_filtro)
+                    ano = int(ano_filtro)
+                    if data_obj.month != mes or data_obj.year != ano:
+                        print(f'⚠️ Data {data_filtro} fora do mês {mes}/{ano} - ignorando filtro de data')
+                        data_filtro = None  # Ignora data fora do mês
+                
+                if data_filtro:  # Se ainda é válida
+                    start_local = data_obj.replace(hour=0, minute=0, second=0, tzinfo=LOCAL_TZ)
+                    end_local = data_obj.replace(hour=23, minute=59, second=59, tzinfo=LOCAL_TZ)
+                    
+                    start_utc = start_local.astimezone(timezone.utc)
+                    end_utc = end_local.astimezone(timezone.utc)
+                    
+                    # Substitui o filtro de mês pelo filtro de dia específico
+                    query = db.collection('saidas')
+                    query = query.where(filter=firestore.FieldFilter('timestampSaida', '>=', start_utc))
+                    query = query.where(filter=firestore.FieldFilter('timestampSaida', '<=', end_utc))
+                    print(f'📅 Filtro de data específica: {data_filtro} dentro de {mes}/{ano}')
             except ValueError:
-                pass # Ignora data mal formatada
+                print(f'⚠️ Data inválida: {data_filtro}')
+                pass
 
-        # 2. Aplica filtro de PLACA (se houver e não houver data)
-        # Firestore limita queries compostas, então se houver data, filtramos placa localmente
-        if placa_filtro and not data_filtro:
-            # Garante que estamos comparando placas normalizadas
-            placa_normalizada = normalize_plate(placa_filtro)
-            query = query.where(filter=firestore.FieldFilter('veiculo', '==', placa_normalizada))
-        elif placa_filtro and data_filtro:
+        # ✅ 3. Aplica filtro de PLACA (se houver)
+        # Como já temos filtro de timestamp, precisamos fazer filtro local para placa
+        if placa_filtro:
             needs_local_filter = True
 
-        # 3. Motorista sempre filtrado localmente (mais flexível - case insensitive, partial match)
+        # ✅ 4. Motorista sempre filtrado localmente (mais flexível - case insensitive, partial match)
         if motorista_filtro:
             needs_local_filter = True
 
-        # 4. Ordena e Executa a query
-        # Se não houver filtros de data, não precisa do order_by timestampSaida no query
-        if data_filtro:
-            query = query.order_by('timestampSaida', direction=firestore.Query.DESCENDING)
-        elif not data_filtro and not placa_filtro:
-            # Sem filtros, ordena por timestamp
-            query = query.order_by('timestampSaida', direction=firestore.Query.DESCENDING)
+        # ✅ 5. Ordena e Executa a query
+        query = query.order_by('timestampSaida', direction=firestore.Query.DESCENDING)
         
-        # ✅ OTIMIZAÇÃO: LIMIT AGRESSIVO - 50 docs para economizar quota!
-        historico_docs = query.limit(50).stream()  # REDUZIDO 90%! 
+        # ✅ REMOVE PAGINAÇÃO COM OFFSET (causa o bug de retornar poucos registros)
+        # Retorna TODOS os registros do mês (até o limite de 500)
+        historico_docs = query.limit(limit).stream() 
 
         historico = []
         veiculos_cache_map = {}  # Cache de categorias dos veículos
@@ -1104,6 +1169,21 @@ def get_historico():
         for doc in historico_docs:
             data = serialize_doc(doc.to_dict())
             data['id'] = doc.id  # ✅ ADICIONA O ID DO DOCUMENTO
+            
+            # ✅ FILTROS LOCAIS (aplicados após buscar do Firestore)
+            # Filtro de placa
+            if placa_filtro:
+                placa_doc = data.get('veiculo', '')
+                placa_normalizada = normalize_plate(placa_filtro)
+                if placa_doc.upper() != placa_normalizada.upper():
+                    continue  # Pula este registro
+            
+            # Filtro de motorista (case insensitive, partial match)
+            if motorista_filtro:
+                motorista_doc = data.get('motorista', '').lower()
+                motorista_busca = motorista_filtro.lower()
+                if motorista_busca not in motorista_doc:
+                    continue  # Pula este registro
             
             # Busca categoria do veículo (com cache para evitar queries repetidas)
             placa = data.get('veiculo')
@@ -1121,12 +1201,66 @@ def get_historico():
             data['categoria'] = veiculos_cache_map.get(placa, 'Outros')
             historico.append(data)
         
-        # DEBUG: Verifica se os IDs foram adicionados
-        if historico:
-            print(f"🔍 /api/historico retornando {len(historico)} registros")
-            print(f"🆔 Primeiro registro tem ID? {bool(historico[0].get('id'))}")
-            print(f"📝 ID do primeiro: {historico[0].get('id')}")
-            print(f"🔑 Chaves do primeiro: {list(historico[0].keys())}")
+        # ✅ Busca TOTAL de registros (para paginação) - usa COUNT do Firestore (1 leitura!)
+        count_query = db.collection('saidas')
+        
+        # ✅ SEMPRE aplica filtro de mês no count (mesma lógica da query principal)
+        if mes_filtro and ano_filtro:
+            try:
+                mes = int(mes_filtro)
+                ano = int(ano_filtro)
+                start_local = datetime(ano, mes, 1, 0, 0, 0, tzinfo=LOCAL_TZ)
+                if mes == 12:
+                    end_local = datetime(ano, 12, 31, 23, 59, 59, tzinfo=LOCAL_TZ)
+                else:
+                    end_local = datetime(ano, mes + 1, 1, 0, 0, 0, tzinfo=LOCAL_TZ) - timedelta(seconds=1)
+                start_utc = start_local.astimezone(timezone.utc)
+                end_utc = end_local.astimezone(timezone.utc)
+                count_query = count_query.where(filter=firestore.FieldFilter('timestampSaida', '>=', start_utc))
+                count_query = count_query.where(filter=firestore.FieldFilter('timestampSaida', '<=', end_utc))
+            except ValueError:
+                pass
+        
+        # Se tem filtro de data específica, substitui o filtro de mês
+        if data_filtro:
+            try:
+                data_obj = datetime.strptime(data_filtro, '%d/%m/%Y')
+                start_local = data_obj.replace(hour=0, minute=0, second=0, tzinfo=LOCAL_TZ)
+                end_local = data_obj.replace(hour=23, minute=59, second=59, tzinfo=LOCAL_TZ)
+                start_utc = start_local.astimezone(timezone.utc)
+                end_utc = end_local.astimezone(timezone.utc)
+                count_query = db.collection('saidas')
+                count_query = count_query.where(filter=firestore.FieldFilter('timestampSaida', '>=', start_utc))
+                count_query = count_query.where(filter=firestore.FieldFilter('timestampSaida', '<=', end_utc))
+            except ValueError:
+                pass
+        
+        # ⚠️ Filtros locais (placa e motorista) não podem ser aplicados no count
+        # O count será aproximado se houver filtros locais
+        # Para ter count exato com filtros locais, usamos len(historico)
+        if needs_local_filter:
+            total_count = len(historico)
+            print(f"📊 COUNT com filtros locais: {total_count} registros")
+        else:
+            # Conta total de registros (busca apenas IDs, mais eficiente que documentos completos)
+            try:
+                # Tenta usar COUNT do Firestore (SDK mais recente)
+                count_result = count_query.count().get()
+                total_count = count_result[0][0].value
+                print(f"✅ COUNT otimizado: {total_count} registros totais (1 leitura)")
+            except Exception as count_error:
+                # Fallback: busca apenas 1 campo (timestampSaida) ao invés do doc completo
+                print(f"⚠️ COUNT falhou ({count_error}), usando contagem manual...")
+                docs_count = list(count_query.select(['timestampSaida']).stream())
+                total_count = len(docs_count)
+                print(f"📊 Contagem manual: {total_count} registros totais")
+        
+        # DEBUG: Verifica contagem
+        print(f"📄 Página {page}: retornando {len(historico)} registros de {total_count} totais")
+        if placa_filtro:
+            print(f"🔍 Filtro de placa aplicado: {placa_filtro}")
+        if motorista_filtro:
+            print(f"🔍 Filtro de motorista aplicado: {motorista_filtro}")
 
         # Ordena localmente: primeiro por status (em_curso primeiro), depois por timestamp (mais recente primeiro)
         def sort_key(item):
@@ -1148,13 +1282,25 @@ def get_historico():
         
         historico_final = sorted(historico, key=sort_key)
 
-        # ✅ Salva no cache (5 minutos) - APENAS se não tem filtros
-        if not data_filtro and not placa_filtro and not motorista_filtro:
-            historico_cache['data'] = historico_final
-            historico_cache['expires'] = time.time() + 300  # 5 minutos
-            print(f'💾 Histórico no cache por 5min')
+        # ✅ Salva no cache (5 minutos) - APENAS se não tem filtros E é página 1
+        response_data = {
+            'historico': historico_final,
+            'total': total_count,
+            'page': page,
+            'limit': limit
+        }
+        
+        # Salva no cache somente quando é busca geral (sem filtros) da página 1
+        if not data_filtro and not placa_filtro and not motorista_filtro and page == 1:
+            historico_cache[cache_key] = {
+                'data': response_data,
+                'expires': time.time() + 300  # 5 minutos
+            }
+            print(f'💾 Cache salvo: {mes_filtro}/{ano_filtro} por 5min ({len(historico_final)} registros)')
+        else:
+            print(f'✅ Sem cache (tem filtros): {len(historico_final)} registros')
 
-        return jsonify(historico_final), 200
+        return jsonify(response_data), 200
 
     except Exception as e:
         print(f"Erro ao buscar histórico: {e}")
@@ -2920,7 +3066,7 @@ def handle_saida(veiculo_placa, motorista_nome, solicitante, trajeto, horario=No
 
         # ✅ INVALIDA O CACHE DO DASHBOARD e HISTÓRICO após nova saída
         dashboard_cache.clear()
-        historico_cache['expires'] = 0  # Invalida cache do histórico também
+        historico_cache.clear()  # Limpa TODAS as chaves do cache
         print("🗑️ Cache do dashboard e histórico invalidados após nova saída")
 
         return f"Saída do veículo {veiculo_placa} registrada com sucesso."
@@ -3026,7 +3172,7 @@ def handle_chegada(veiculo_placa, horario=None, litros=None, odometro=None):
 
         # ✅ INVALIDA O CACHE DO DASHBOARD e HISTÓRICO após chegada
         dashboard_cache.clear()
-        historico_cache['expires'] = 0  # Invalida cache do histórico também
+        historico_cache.clear()  # Limpa TODAS as chaves do cache
         print("🗑️ Cache do dashboard e histórico invalidados após chegada")
 
         return return_msg
@@ -3963,23 +4109,49 @@ def pdf_abastecimentos():
         
         if data_inicio:
             try:
-                dt_inicio = datetime.fromisoformat(data_inicio)
-                filters.append(firestore.FieldFilter('timestamp', '>=', dt_inicio))
-            except:
+                # Converte data local (Brasil) para UTC
+                dt_inicio_local = datetime.fromisoformat(data_inicio)
+                if dt_inicio_local.tzinfo is None:
+                    dt_inicio_local = dt_inicio_local.replace(tzinfo=LOCAL_TZ)
+                dt_inicio_utc = dt_inicio_local.astimezone(timezone.utc)
+                filters.append(firestore.FieldFilter('timestamp', '>=', dt_inicio_utc))
+                print(f'📅 Filtro data_inicio: {data_inicio} (local) -> {dt_inicio_utc} (UTC)')
+            except Exception as e:
+                print(f'⚠️ Erro ao converter data_inicio: {e}')
                 pass
         
         if data_fim:
             try:
-                dt_fim = datetime.fromisoformat(data_fim)
-                filters.append(firestore.FieldFilter('timestamp', '<=', dt_fim))
-            except:
+                # Converte data local (Brasil) para UTC
+                dt_fim_local = datetime.fromisoformat(data_fim)
+                if dt_fim_local.tzinfo is None:
+                    dt_fim_local = dt_fim_local.replace(tzinfo=LOCAL_TZ)
+                dt_fim_utc = dt_fim_local.astimezone(timezone.utc)
+                filters.append(firestore.FieldFilter('timestamp', '<=', dt_fim_utc))
+                print(f'📅 Filtro data_fim: {data_fim} (local) -> {dt_fim_utc} (UTC)')
+            except Exception as e:
+                print(f'⚠️ Erro ao converter data_fim: {e}')
                 pass
         
         if filters:
             query = query.where(filter=And(filters))
+        elif not data_inicio and not data_fim:
+            # ⚠️ SEGURANÇA: Se não tem filtro de data, busca apenas do mês atual
+            now_local = datetime.now(LOCAL_TZ)
+            primeiro_dia = now_local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            ultimo_dia = (primeiro_dia.replace(month=primeiro_dia.month % 12 + 1, day=1) - timedelta(days=1)).replace(hour=23, minute=59, second=59)
+            
+            primeiro_dia_utc = primeiro_dia.astimezone(timezone.utc)
+            ultimo_dia_utc = ultimo_dia.astimezone(timezone.utc)
+            
+            query = query.where(filter=And([
+                firestore.FieldFilter('timestamp', '>=', primeiro_dia_utc),
+                firestore.FieldFilter('timestamp', '<=', ultimo_dia_utc)
+            ]))
+            print(f'⚠️ Sem filtros: buscando apenas mês atual ({primeiro_dia.strftime("%m/%Y")})')
         
         # Limitar a 500 registros
-        refuels_docs = list(query.order_by('timestamp', direction=firestore.Query.DESCENDING).limit(50).stream())
+        refuels_docs = list(query.order_by('timestamp', direction=firestore.Query.DESCENDING).limit(500).stream())
         
         refuels = []
         for doc in refuels_docs:
@@ -4135,23 +4307,53 @@ def pdf_saidas():
         
         if data_inicio:
             try:
-                dt_inicio = datetime.fromisoformat(data_inicio)
-                filters.append(firestore.FieldFilter('timestampSaida', '>=', dt_inicio))
-            except:
+                # Converte data local (Brasil) para UTC para comparar com timestampSaida
+                dt_inicio_local = datetime.fromisoformat(data_inicio)
+                # Se não tem timezone, adiciona o timezone local
+                if dt_inicio_local.tzinfo is None:
+                    dt_inicio_local = dt_inicio_local.replace(tzinfo=LOCAL_TZ)
+                dt_inicio_utc = dt_inicio_local.astimezone(timezone.utc)
+                filters.append(firestore.FieldFilter('timestampSaida', '>=', dt_inicio_utc))
+                print(f'📅 Filtro data_inicio: {data_inicio} (local) -> {dt_inicio_utc} (UTC)')
+            except Exception as e:
+                print(f'⚠️ Erro ao converter data_inicio: {e}')
                 pass
         
         if data_fim:
             try:
-                dt_fim = datetime.fromisoformat(data_fim)
-                filters.append(firestore.FieldFilter('timestampSaida', '<=', dt_fim))
-            except:
+                # Converte data local (Brasil) para UTC para comparar com timestampSaida
+                dt_fim_local = datetime.fromisoformat(data_fim)
+                # Se não tem timezone, adiciona o timezone local
+                if dt_fim_local.tzinfo is None:
+                    dt_fim_local = dt_fim_local.replace(tzinfo=LOCAL_TZ)
+                dt_fim_utc = dt_fim_local.astimezone(timezone.utc)
+                filters.append(firestore.FieldFilter('timestampSaida', '<=', dt_fim_utc))
+                print(f'📅 Filtro data_fim: {data_fim} (local) -> {dt_fim_utc} (UTC)')
+            except Exception as e:
+                print(f'⚠️ Erro ao converter data_fim: {e}')
                 pass
         
         if filters:
             query = query.where(filter=And(filters))
+        elif not data_inicio and not data_fim:
+            # ⚠️ SEGURANÇA: Se não tem filtro de data, busca apenas do mês atual
+            now_local = datetime.now(LOCAL_TZ)
+            primeiro_dia = now_local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            ultimo_dia = (primeiro_dia.replace(month=primeiro_dia.month % 12 + 1, day=1) - timedelta(days=1)).replace(hour=23, minute=59, second=59)
+            
+            primeiro_dia_utc = primeiro_dia.astimezone(timezone.utc)
+            ultimo_dia_utc = ultimo_dia.astimezone(timezone.utc)
+            
+            query = query.where(filter=And([
+                firestore.FieldFilter('timestampSaida', '>=', primeiro_dia_utc),
+                firestore.FieldFilter('timestampSaida', '<=', ultimo_dia_utc)
+            ]))
+            print(f'⚠️ Sem filtros: buscando apenas mês atual ({primeiro_dia.strftime("%m/%Y")})')
         
-        # Limitar a 500 registros
-        saidas_docs = list(query.order_by('timestampSaida', direction=firestore.Query.DESCENDING).limit(50).stream())
+        # ✅ LIMITE MÁXIMO: 500 registros para proteger quota
+        saidas_docs = list(query.order_by('timestampSaida', direction=firestore.Query.DESCENDING).limit(500).stream())
+        
+        print(f'📄 Gerando PDF com {len(saidas_docs)} registros')
         
         saidas = []
         for doc in saidas_docs:
@@ -4283,23 +4485,49 @@ def pdf_multas():
         
         if data_inicio:
             try:
-                dt_inicio = datetime.fromisoformat(data_inicio)
-                filters.append(firestore.FieldFilter('data_vencimento', '>=', dt_inicio))
-            except:
+                # Converte data local (Brasil) para UTC
+                dt_inicio_local = datetime.fromisoformat(data_inicio)
+                if dt_inicio_local.tzinfo is None:
+                    dt_inicio_local = dt_inicio_local.replace(tzinfo=LOCAL_TZ)
+                dt_inicio_utc = dt_inicio_local.astimezone(timezone.utc)
+                filters.append(firestore.FieldFilter('data_vencimento', '>=', dt_inicio_utc))
+                print(f'📅 Filtro data_inicio: {data_inicio} (local) -> {dt_inicio_utc} (UTC)')
+            except Exception as e:
+                print(f'⚠️ Erro ao converter data_inicio: {e}')
                 pass
         
         if data_fim:
             try:
-                dt_fim = datetime.fromisoformat(data_fim)
-                filters.append(firestore.FieldFilter('data_vencimento', '<=', dt_fim))
-            except:
+                # Converte data local (Brasil) para UTC
+                dt_fim_local = datetime.fromisoformat(data_fim)
+                if dt_fim_local.tzinfo is None:
+                    dt_fim_local = dt_fim_local.replace(tzinfo=LOCAL_TZ)
+                dt_fim_utc = dt_fim_local.astimezone(timezone.utc)
+                filters.append(firestore.FieldFilter('data_vencimento', '<=', dt_fim_utc))
+                print(f'📅 Filtro data_fim: {data_fim} (local) -> {dt_fim_utc} (UTC)')
+            except Exception as e:
+                print(f'⚠️ Erro ao converter data_fim: {e}')
                 pass
         
         if filters:
             query = query.where(filter=And(filters))
+        elif not data_inicio and not data_fim:
+            # ⚠️ SEGURANÇA: Se não tem filtro de data, busca apenas do mês atual
+            now_local = datetime.now(LOCAL_TZ)
+            primeiro_dia = now_local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            ultimo_dia = (primeiro_dia.replace(month=primeiro_dia.month % 12 + 1, day=1) - timedelta(days=1)).replace(hour=23, minute=59, second=59)
+            
+            primeiro_dia_utc = primeiro_dia.astimezone(timezone.utc)
+            ultimo_dia_utc = ultimo_dia.astimezone(timezone.utc)
+            
+            query = query.where(filter=And([
+                firestore.FieldFilter('data_vencimento', '>=', primeiro_dia_utc),
+                firestore.FieldFilter('data_vencimento', '<=', ultimo_dia_utc)
+            ]))
+            print(f'⚠️ Sem filtros: buscando apenas mês atual ({primeiro_dia.strftime("%m/%Y")})')
         
         # Limitar a 500 registros
-        multas_docs = list(query.order_by('data_vencimento', direction=firestore.Query.DESCENDING).limit(50).stream())
+        multas_docs = list(query.order_by('data_vencimento', direction=firestore.Query.DESCENDING).limit(500).stream())
         
         multas = []
         for doc in multas_docs:
