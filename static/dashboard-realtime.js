@@ -1,14 +1,19 @@
 /**
  * Dashboard Real-Time Updates usando Firebase onSnapshot
  * Atualiza automaticamente quando há mudanças no Firestore
- * ⚠️ PROTEÇÃO: Desliga listeners após 5min de inatividade para economizar quota
+ * ⚡ ECONOMIA DE QUOTA: Desliga listeners após 2h de inatividade (madrugada, fim de semana)
+ * ✅ REATIVA AUTOMATICAMENTE quando você volta para a aba ou interage
  */
 
-// Controle de inatividade
+console.log('📡 dashboard-realtime.js CARREGADO! v14.7');
+
+// Controle de inatividade - ECONOMIA DE QUOTA
 let lastActivityTime = Date.now();
 let inactivityCheckInterval = null;
-const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutos
+const INACTIVITY_TIMEOUT = 2 * 60 * 60 * 1000; // 2 HORAS (7200000ms)
 let listenersActive = false;
+
+console.log('⏰ Timeout de inatividade: 2 horas (para economizar quota)');
 
 // Atualiza timestamp de atividade
 function updateActivity() {
@@ -34,12 +39,26 @@ function startActivityMonitor() {
     console.log('👁️ Monitor de atividade iniciado');
 }
 
-// Verifica inatividade a cada 1 minuto
+// Verifica inatividade a cada 5 minutos
 function checkInactivity() {
     const inactiveTime = Date.now() - lastActivityTime;
+    const inactiveMinutes = Math.floor(inactiveTime / 60000);
+    
     if (inactiveTime > INACTIVITY_TIMEOUT && listenersActive) {
-        console.warn('⚠️ Inatividade detectada - desligando listeners Firebase para economizar quota');
+        console.warn(`⚠️ Inatividade detectada (${inactiveMinutes} minutos) - desligando listeners Firebase para economizar quota`);
         stopRealtimeListeners();
+        
+        // Mostra aviso visual
+        const indicator = document.getElementById('listener-status-indicator');
+        if (indicator) {
+            indicator.textContent = '💤 Modo economia (inativo 2h) - clique para reativar';
+            indicator.style.background = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
+            indicator.style.cursor = 'pointer';
+            indicator.onclick = () => {
+                console.log('👆 Usuário clicou no indicador - reativando...');
+                updateActivity();
+            };
+        }
     }
 }
 
@@ -63,22 +82,86 @@ function stopRealtimeListeners() {
     }
     listenersActive = false;
     console.log('🔴 Listeners desligados');
+    
+    // Remove indicador visual
+    const indicator = document.getElementById('listener-status-indicator');
+    if (indicator) {
+        indicator.remove();
+    }
 }
 
 // Aguarda o Firebase estar pronto
 function waitForFirebase() {
     return new Promise((resolve) => {
         if (window.firestoreDb && window.firestoreModules) {
+            console.log('Firebase já estava disponível');
             resolve();
         } else {
+            console.log('Aguardando Firebase ficar disponível...');
             const interval = setInterval(() => {
                 if (window.firestoreDb && window.firestoreModules) {
+                    console.log('Firebase ficou disponível');
                     clearInterval(interval);
                     resolve();
                 }
             }, 100);
         }
     });
+}
+
+// Mostra indicador visual do status dos listeners
+function showListenerStatus(message) {
+    // Remove indicador anterior se existir
+    const existingIndicator = document.getElementById('listener-status-indicator');
+    if (existingIndicator) {
+        existingIndicator.remove();
+    }
+    
+    // Cria novo indicador (DISCRETO - canto inferior direito)
+    const indicator = document.createElement('div');
+    indicator.id = 'listener-status-indicator';
+    indicator.innerHTML = '<span style="font-size: 10px;">🟢</span> <span style="font-size: 10px;">Tempo real</span>';
+    indicator.title = 'Atualização automática ativa';
+    indicator.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: rgba(16, 185, 129, 0.9);
+        color: white;
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 500;
+        box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+        z-index: 9999;
+        opacity: 0.7;
+        transition: opacity 0.3s;
+    `;
+    
+    // Fica mais visível ao passar o mouse
+    indicator.onmouseenter = () => indicator.style.opacity = '1';
+    indicator.onmouseleave = () => indicator.style.opacity = '0.7';
+    
+    // Adiciona animação
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideInRight {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+    
+    document.body.appendChild(indicator);
+    
+    // Mantém o indicador sempre visível enquanto os listeners estiverem ativos
+    console.log('✅ Indicador de status criado:', message);
 }
 
 // Variáveis globais para unsubscribe
@@ -91,7 +174,10 @@ let unsubscribeVeiculos = null;
  * Inicia os listeners em tempo real
  */
 async function initRealtimeListeners() {
+    console.log('🚀 initRealtimeListeners() chamado...');
+    
     await waitForFirebase();
+    console.log('✅ Firebase está pronto');
     
     const db = window.firestoreDb;
     const { collection, onSnapshot, query, orderBy, limit, where } = window.firestoreModules;
@@ -104,6 +190,9 @@ async function initRealtimeListeners() {
 
     console.log('🔴 Iniciando listeners em tempo real...');
     listenersActive = true;
+    
+    // ✅ Mostra indicador visual de que os listeners estão ativos
+    showListenerStatus('🟢 Atualização em tempo real ATIVA');
 
     // 1. Listener APENAS para Veículos EM CURSO (otimizado - 5-10 docs)
     // ✅ AGORA TAMBÉM ATUALIZA O DASHBOARD automaticamente quando há mudanças
@@ -116,7 +205,14 @@ async function initRealtimeListeners() {
         let isFirstSnapshot = true; // Ignora o snapshot inicial (carga da página)
 
         unsubscribeSaidas = onSnapshot(saidasQuery, async (snapshot) => {
-            console.log('📊 Atualização em veículos EM CURSO:', snapshot.docChanges().length, 'mudanças');
+            const timestamp = new Date().toLocaleTimeString();
+            console.log(`📊 [${timestamp}] Atualização em veículos EM CURSO: ${snapshot.docChanges().length} mudanças, ${snapshot.size} total`);
+            
+            // Log detalhado das mudanças
+            snapshot.docChanges().forEach((change) => {
+                const veiculo = change.doc.data().veiculo;
+                console.log(`  - ${change.type.toUpperCase()}: ${veiculo}`);
+            });
             
             // ✅ SEMPRE atualiza o contador (mesmo no primeiro snapshot)
             const statEmCurso = document.getElementById('stat-viagens-em-curso');
@@ -136,15 +232,20 @@ async function initRealtimeListeners() {
                 if (change.type === 'added' && !isFirstSnapshot) {
                     // Nova saída registrada
                     houveNovaOuChegada = true;
+                    console.log(`🚗 NOVA SAÍDA DETECTADA: ${data.veiculo} - ${data.motorista}`);
                     if (window.showToast) {
-                        showToast('info', `Nova saída: ${data.veiculo} - ${data.motorista}`);
+                        showToast('info', `🚗 Nova saída: ${data.veiculo} - ${data.motorista}`);
                     }
                 } else if (change.type === 'removed') {
                     // Chegada registrada (removido de em_curso)
                     houveNovaOuChegada = true;
+                    console.log(`✅ CHEGADA DETECTADA: ${data.veiculo}`);
                     if (window.showToast) {
-                        showToast('success', `Chegada registrada: ${data.veiculo}`);
+                        showToast('success', `✅ Chegada registrada: ${data.veiculo}`);
                     }
+                } else if (change.type === 'modified' && !isFirstSnapshot) {
+                    // Modificação em saída em curso
+                    console.log(`✏️ SAÍDA MODIFICADA: ${data.veiculo}`);
                 }
             });
 
@@ -155,21 +256,53 @@ async function initRealtimeListeners() {
                 try {
                     // ✅ LIMPA O CACHE IMEDIATAMENTE (força atualização)
                     await fetch('/api/dashboard_cache/clear', { method: 'POST' });
+                    console.log('✅ Cache limpo');
                     
-                    // ✅ PEQUENO DELAY para dar tempo do backend processar
-                    await new Promise(resolve => setTimeout(resolve, 500));
+                    // ✅ DELAY MAIOR - 3.5 segundos para dar tempo do Firestore propagar
+                    console.log('⏳ Aguardando 3.5s para Firestore propagar mudanças...');
+                    await new Promise(resolve => setTimeout(resolve, 3500));
                     
                     // Recarrega os dados do dashboard (gráficos e cards)
                     if (window.viagensChartsInitialized && typeof loadDashboardData === 'function') {
+                        console.log('📈 Atualizando gráficos...');
                         await loadDashboardData(
                             window.viagensPorVeiculoChartInstance,
                             window.viagensPorMotoristaChartInstance,
                             window.viagensPorVeiculoChartTotalInstance,
                             window.viagensPorMotoristaChartTotalInstance
                         );
+                        console.log('✅ Gráficos atualizados');
                     }
                     
-                    console.log('✅ Dashboard atualizado automaticamente!');
+                    // ✅ ATUALIZA O HISTÓRICO RECENTE TAMBÉM
+                    console.log('📋 Atualizando histórico recente...');
+                    
+                    if (typeof window.loadHistoricoData === 'function') {
+                        console.log('✅ Chamando window.loadHistoricoData(1)');
+                        await window.loadHistoricoData(1);
+                        console.log('✅ Histórico atualizado via window.loadHistoricoData');
+                    } else {
+                        console.error('❌ window.loadHistoricoData não está disponível!');
+                        console.log('🔍 Tentando buscar diretamente da API...');
+                        
+                        const response = await fetch('/api/historico?page=1&per_page=20&_=' + Date.now());
+                        if (response.ok) {
+                            const data = await response.json();
+                            console.log('✅ Dados recebidos da API:', data.items?.length, 'registros');
+                            
+                            if (typeof window.populateHistoryTable === 'function') {
+                                window.populateHistoryTable(data.items || []);
+                                console.log('✅ Tabela atualizada via window.populateHistoryTable');
+                            } else {
+                                console.error('❌ window.populateHistoryTable também não está disponível!');
+                            }
+                        } else {
+                            console.error('❌ Erro ao buscar da API:', response.status);
+                        }
+                    }
+                    
+                    console.log('✅ Dashboard e histórico atualizados automaticamente!');
+                    
                 } catch (error) {
                     console.error('❌ Erro ao atualizar dashboard:', error);
                 }
@@ -251,6 +384,11 @@ async function initRealtimeListeners() {
                 // Recarrega histórico
                 if (houveAlteracao) {
                     console.log('🔄 Recarregando histórico...');
+                    
+                    // ⏳ DELAY IMPORTANTE - aguarda Firestore propagar
+                    console.log('⏳ Aguardando 3.5s para Firestore propagar histórico...');
+                    await new Promise(resolve => setTimeout(resolve, 3500));
+                    
                     if (typeof loadHistoricoData === 'function') {
                         try {
                             await loadHistoricoData();
@@ -394,6 +532,16 @@ function createRealtimeIndicator() {
     }, 5000);
 }
 
+// ✅ LISTENER DE VISIBILIDADE DA ABA (reativa quando você volta)
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        console.log('👁️ Aba ficou oculta');
+    } else {
+        console.log('👁️ Aba voltou a ser visível - reativando listeners...');
+        updateActivity(); // Marca como ativo e reinicia listeners se necessário
+    }
+});
+
 // Cleanup ao sair da página
 window.addEventListener('beforeunload', () => {
     stopRealtimeListeners();
@@ -403,10 +551,22 @@ window.addEventListener('beforeunload', () => {
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         // Aguarda um pouco para garantir que o dashboard.js já inicializou
-        setTimeout(initRealtimeListeners, 1000);
+        setTimeout(() => {
+            initRealtimeListeners();
+            startActivityMonitor(); // ✅ Inicia o monitor de atividade
+            // ✅ Verifica inatividade a cada 5 minutos
+            inactivityCheckInterval = setInterval(checkInactivity, 5 * 60 * 1000);
+            console.log('✅ Listeners em tempo real ATIVOS (desliga após 2h de inatividade)');
+        }, 1000);
     });
 } else {
-    setTimeout(initRealtimeListeners, 1000);
+    setTimeout(() => {
+        initRealtimeListeners();
+        startActivityMonitor(); // ✅ Inicia o monitor de atividade
+        // ✅ Verifica inatividade a cada 5 minutos
+        inactivityCheckInterval = setInterval(checkInactivity, 5 * 60 * 1000);
+        console.log('✅ Listeners em tempo real ATIVOS (desliga após 2h de inatividade)');
+    }, 1000);
 }
 
 // Exporta para uso global

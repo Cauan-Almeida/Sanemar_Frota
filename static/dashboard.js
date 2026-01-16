@@ -134,11 +134,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const filtroPlaca = document.getElementById('filtro-placa');
     const filtroMotorista = document.getElementById('filtro-motorista');
 
-    [filtroData, filtroPlaca, filtroMotorista].forEach(input => {
-        input.addEventListener('keyup', () => {
-            loadHistoricoData();
-        });
+    console.log('🔍 Configurando listeners de pesquisa do histórico');
+    console.log('  - filtroData:', filtroData ? '✅' : '❌');
+    console.log('  - filtroPlaca:', filtroPlaca ? '✅' : '❌');
+    console.log('  - filtroMotorista:', filtroMotorista ? '✅' : '❌');
+
+    [filtroData, filtroPlaca, filtroMotorista].forEach((input, idx) => {
+        if (input) {
+            input.addEventListener('keyup', () => {
+                console.log(`🔎 Filtro ${idx} alterado - chamando loadHistoricoData()`);
+                loadHistoricoData();
+            });
+        }
     });
+    
+    console.log('✅ Listeners de pesquisa configurados');
 });
 
 // Parser robusto para vários formatos de timestamp (ISO, dd/mm/YYYY HH:MM, Firestore ts obj, numeric ms)
@@ -369,6 +379,8 @@ async function loadHistoricoData(page = 1) {
     let data = dataEl ? dataEl.value.trim() : '';
     const placa = placaEl ? placaEl.value : '';
     const motorista = motoristaEl ? motoristaEl.value : '';
+    
+    console.log(`🔎 Filtros aplicados:`, { data, placa, motorista });
     
     // ✅ Se digitou apenas o dia (1-31), completa com mês/ano selecionado
     if (data && /^\d{1,2}$/.test(data)) {
@@ -1295,3 +1307,8 @@ function trocarCategoria(categoria) {
     // Re-renderiza a tabela com a categoria filtrada
     populateHistoryTable(window.historicoCompleto);
 }
+
+// ✅ EXPORTA FUNÇÕES PARA ESCOPO GLOBAL (para uso pelo dashboard-realtime.js)
+window.loadHistoricoData = loadHistoricoData;
+window.populateHistoryTable = populateHistoryTable;
+console.log('✅ Funções exportadas para window: loadHistoricoData, populateHistoryTable');

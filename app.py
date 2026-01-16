@@ -133,6 +133,79 @@ def initialize_firebase():
 # Inicializa Firebase
 db, bucket = initialize_firebase()
 
+# ==========================================
+# 🔧 SISTEMA DE MODO DE MANUTENÇÃO
+# ==========================================
+
+def is_maintenance_mode():
+    """Verifica se o sistema está em modo de manutenção"""
+    try:
+        if os.path.exists('.maintenance'):
+            with open('.maintenance', 'r') as f:
+                content = f.read().strip().lower()
+                return content == 'on'
+        return False
+    except Exception as e:
+        print(f"Erro ao verificar modo de manutenção: {e}")
+        return False
+
+@app.before_request
+def check_maintenance():
+    """Intercepta todas as requisições e redireciona para tela de manutenção se ativado"""
+    # Permite acesso aos endpoints de controle de manutenção
+    if request.path.startswith('/api/maintenance'):
+        return None
+    
+    # Permite acesso à tela de manutenção
+    if request.path == '/maintenance':
+        return None
+    
+    # Permite acesso a assets estáticos
+    if request.path.startswith('/static/'):
+        return None
+    
+    # Se está em manutenção, redireciona para tela de manutenção
+    if is_maintenance_mode():
+        if request.path != '/maintenance':
+            return redirect(url_for('maintenance_page'))
+    
+    return None
+
+@app.route('/maintenance')
+def maintenance_page():
+    """Página de manutenção"""
+    return render_template('maintenance.html')
+
+# Endpoints para controlar o modo de manutenção via API
+@app.route('/api/maintenance/on', methods=['POST'])
+@requires_auth
+def activate_maintenance():
+    """Ativa o modo de manutenção"""
+    try:
+        with open('.maintenance', 'w') as f:
+            f.write('on')
+        return jsonify({"success": True, "message": "Modo de manutenção ATIVADO"}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/maintenance/off', methods=['POST'])
+def deactivate_maintenance():
+    """Desativa o modo de manutenção (sem autenticação para poder reativar o sistema)"""
+    try:
+        with open('.maintenance', 'w') as f:
+            f.write('off')
+        return jsonify({"success": True, "message": "Modo de manutenção DESATIVADO"}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/maintenance/status', methods=['GET'])
+def maintenance_status():
+    """Verifica o status do modo de manutenção"""
+    return jsonify({
+        "maintenance_mode": is_maintenance_mode(),
+        "message": "Sistema em manutenção" if is_maintenance_mode() else "Sistema operacional"
+    }), 200
+
 # Flag global para indicar que o Firestore está indisponível (por ex. quota excedida)
 FIRESTORE_AVAILABLE = True
 
@@ -1076,8 +1149,21 @@ def get_historico():
         now = time.time()
         cache_key = f"{mes_filtro}_{ano_filtro}_{placa_filtro}_{motorista_filtro}_{page}"
         
-        # Verifica se tem cache válido
-        if cache_key in historico_cache and historico_cache[cache_key]['expires'] > now:
+        # 🔥 BYPASS DE CACHE para requisições real-time (com parâmetro _t recente)
+        bypass_cache = False
+        timestamp_param = request.args.get('_t')
+        if timestamp_param:
+            try:
+                request_timestamp = int(timestamp_param) / 1000  # Converte de ms para segundos
+                time_diff = now - request_timestamp
+                if time_diff < 10:  # Se a requisição foi feita nos últimos 10 segundos
+                    bypass_cache = True
+                    print(f'⚡ BYPASS CACHE - Requisição real-time detectada (há {time_diff:.1f}s)')
+            except (ValueError, TypeError):
+                pass
+        
+        # Verifica se tem cache válido (só usa se não for bypass)
+        if not bypass_cache and cache_key in historico_cache and historico_cache[cache_key]['expires'] > now:
             cached = historico_cache[cache_key]['data']
             print(f'⚡ Cache hit: {mes_filtro}/{ano_filtro} - economiza leituras Firestore')
             return jsonify(cached), 200
