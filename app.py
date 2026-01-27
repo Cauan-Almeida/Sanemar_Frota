@@ -581,6 +581,7 @@ def dashboard():
     return render_template('dashboard.html', user_type=user_type)
 
 @app.route('/motorista/<nome>')
+@requires_auth
 def motorista_detalhes(nome):
     if not FIRESTORE_AVAILABLE:
         return render_template('maintenance.html'), 503
@@ -663,6 +664,7 @@ def api_cancelar():
 
 @app.route('/veiculo/<placa>')
 @app.route('/veiculos/<placa>')
+@requires_auth
 def veiculo_detalhes(placa):
     if not FIRESTORE_AVAILABLE:
         return render_template('maintenance.html'), 503
@@ -720,6 +722,7 @@ def veiculo_detalhes(placa):
 # --- API Endpoints ---
 
 @app.route('/api/saida', methods=['POST'])
+@requires_auth
 def api_saida():
     if not db:
         return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
@@ -761,6 +764,7 @@ def api_saida():
 
 
 @app.route('/api/chegada', methods=['POST'])
+@requires_auth
 def api_chegada():
     if not db:
         return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
@@ -794,6 +798,7 @@ def api_chegada():
         return jsonify({"error": response_message}), 500
 
 @app.route('/api/abastecimento', methods=['POST'])
+@requires_auth
 def api_abastecimento():
     """Rota para registrar abastecimento rápido"""
     if not db:
@@ -857,6 +862,7 @@ def api_abastecimento():
         return jsonify({"error": "Erro ao registrar abastecimento"}), 500
 
 @app.route('/api/veiculos_em_curso', methods=['GET'])
+@requires_auth
 def get_veiculos_em_curso():
     if not db:
         return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
@@ -1123,6 +1129,7 @@ def get_audit_logs():
 historico_cache = {}  # Dicionário de caches por chave (mes_ano_placa_motorista_page)
 
 @app.route('/api/historico', methods=['GET'])
+@requires_auth_historico
 def get_historico():
     if not db:
         return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
@@ -1908,6 +1915,15 @@ def historico_page():
     if not FIRESTORE_AVAILABLE:
         return render_template('maintenance.html'), 503
     return render_template('historico.html')
+
+# Página de Revisões Standalone (opcional - também acessível pelo dashboard)
+@app.route('/revisoes')
+@requires_auth
+def revisoes_page():
+    """Página de gestão de revisões e chamados de manutenção"""
+    if not FIRESTORE_AVAILABLE:
+        return render_template('maintenance.html'), 503
+    return render_template('revisoes.html')
 
 # Removido: /relatorios e /veiculos agora são abas do dashboard
 # @app.route('/relatorios')

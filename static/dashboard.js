@@ -88,10 +88,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (window.loadKmMensalData) loadKmMensalData();
             } else if (tab === 'multas') {
                 if (window.loadMultasData) loadMultasData();
-            } else if (tab === 'revisoes') {
-                if (window.loadRevisoesData) loadRevisoesData();
             }
             dataLoaded.add(tab);
+        }
+        
+        // Revisões sempre inicializa quando a aba é aberta (para garantir renderização)
+        if (tab === 'revisoes') {
+            console.log('🔧 Abrindo aba de revisões - verificando função...');
+            console.log('  - window.initRevisoesTab existe?', typeof window.initRevisoesTab);
+            if (window.initRevisoesTab) {
+                setTimeout(() => {
+                    console.log('🚀 Chamando initRevisoesTab()...');
+                    window.initRevisoesTab();
+                }, 150);
+            } else {
+                console.error('❌ window.initRevisoesTab não está definida!');
+            }
         }
         
         // Veículos sempre recarrega (para ter dados atualizados)

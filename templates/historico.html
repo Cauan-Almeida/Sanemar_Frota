@@ -15,6 +15,34 @@
         .pulse-dot {
             animation: pulse-dot 2s ease-in-out infinite;
         }
+        
+        /* Tabs de Categoria do Histórico */
+        .historico-category-tab {
+            background: #f3f4f6;
+            color: #6b7280;
+            border: 2px solid transparent;
+        }
+        .historico-category-tab:hover {
+            background: #e5e7eb;
+            color: #374151;
+        }
+        .historico-category-tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: #667eea;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        .count-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            background: rgba(255, 255, 255, 0.3);
+        }
+        .historico-category-tab.active .count-badge {
+            background: rgba(255, 255, 255, 0.4);
+        }
     </style>
 </head>
 <body class="bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
@@ -109,6 +137,21 @@
                     <button id="limpar-filtros" 
                             class="w-full px-6 py-3 bg-gray-200 hover:bg-gray-300 rounded-xl font-bold transition-all transform hover:scale-105">
                         🔄 Limpar
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Tabs de Categorias -->
+            <div class="mt-6">
+                <div class="flex flex-wrap gap-2 border-b-2 border-gray-200 pb-2">
+                    <button onclick="trocarCategoria('todos')" class="historico-category-tab active px-4 py-2 rounded-t-lg font-semibold text-sm transition-all" data-category="todos">
+                        🌐 Todos <span class="count-badge ml-1"></span>
+                    </button>
+                    <button onclick="trocarCategoria('Base ETE de Araçatiba')" class="historico-category-tab px-4 py-2 rounded-t-lg font-semibold text-sm transition-all" data-category="Base ETE de Araçatiba">
+                        📍 Araçatiba <span class="count-badge ml-1"></span>
+                    </button>
+                    <button onclick="trocarCategoria('Vans')" class="historico-category-tab px-4 py-2 rounded-t-lg font-semibold text-sm transition-all" data-category="Vans">
+                        🚐 Vans <span class="count-badge ml-1"></span>
                     </button>
                 </div>
             </div>
@@ -305,6 +348,7 @@
         let todosRegistros = [];
         let mesAtual = new Date().getMonth() + 1;  // 1-12
         let anoAtual = new Date().getFullYear();
+        let categoriaAtiva = 'todos'; // Categoria de filtro
 
         // Inicializa os seletores de mês/ano com a data atual
         function inicializarFiltrosMesAno() {
@@ -373,6 +417,35 @@
         // Disponibiliza globalmente
         window.mostrarToast = mostrarToast;
 
+        // Atualiza os badges de contagem de cada categoria
+        function atualizarBadgesCategorias() {
+            const contadores = {
+                'todos': 0,
+                'Base ETE de Araçatiba': 0,
+                'Vans': 0
+            };
+            
+            // Conta registros por categoria
+            todosRegistros.forEach(r => {
+                const categoria = r.veiculo_categoria || r.categoria || '';
+                contadores['todos']++;
+                if (categoria === 'Base ETE de Araçatiba') {
+                    contadores['Base ETE de Araçatiba']++;
+                } else if (categoria === 'Vans') {
+                    contadores['Vans']++;
+                }
+            });
+            
+            // Atualiza os badges
+            document.querySelectorAll('.historico-category-tab').forEach(tab => {
+                const categoria = tab.getAttribute('data-category');
+                const badge = tab.querySelector('.count-badge');
+                if (badge && contadores[categoria] !== undefined) {
+                    badge.textContent = contadores[categoria];
+                }
+            });
+        }
+
         // Atualiza estatísticas
         function atualizarStats(registros) {
             const emCurso = registros.filter(r => r.status === 'em_curso').length;
@@ -397,6 +470,9 @@
             } else {
                 avisoLimite.classList.add('hidden');
             }
+            
+            // Atualiza badges de categorias
+            atualizarBadgesCategorias();
         }
 
         // Renderiza tabela
@@ -461,6 +537,19 @@
             const motorista = document.getElementById('filtro-motorista').value.toUpperCase().trim();
 
             let filtrados = [...todosRegistros];
+
+            // Filtro de categoria - SEMPRE filtra apenas Araçatiba e Vans
+            filtrados = filtrados.filter(r => {
+                const categoria = r.veiculo_categoria || r.categoria || '';
+                
+                if (categoriaAtiva === 'todos') {
+                    // "Todos" mostra apenas Araçatiba + Vans
+                    return categoria === 'Base ETE de Araçatiba' || categoria === 'Vans';
+                } else {
+                    // Categoria específica
+                    return categoria === categoriaAtiva;
+                }
+            });
 
             // Filtro de data
             if (data) {
@@ -829,6 +918,26 @@
             e.target.value = e.target.value.toUpperCase();
             e.target.setSelectionRange(pos, pos);
         });
+        
+        // Função para trocar categoria ativa
+        function trocarCategoria(categoria) {
+            categoriaAtiva = categoria;
+            
+            // Atualiza visual dos botões
+            document.querySelectorAll('.historico-category-tab').forEach(tab => {
+                if (tab.getAttribute('data-category') === categoria) {
+                    tab.classList.add('active');
+                } else {
+                    tab.classList.remove('active');
+                }
+            });
+            
+            // Aplica filtros
+            aplicarFiltros();
+        }
+        
+        // Expõe funções globalmente
+        window.trocarCategoria = trocarCategoria;
         
         // Exporta para debug
         window.debugHistorico = { todosRegistros, aplicarFiltros };

@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Frota - Sanemar</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Ícones -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; }
+        .card-transition { transition: all 0.2s ease-in-out; }
+        .details-content { 
+            max-height: 0; 
+            overflow: hidden; 
+            transition: max-height 0.3s ease-out, opacity 0.3s ease;
+            opacity: 0;
+        }
+        .details-content.open { 
+            max-height: 1000px; 
+            opacity: 1;
+        }
+        .rotate-chevron { transform: rotate(180deg); }
+        
+        /* Badges e Cores */
+        .badge { font-size: 0.70rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 6px; letter-spacing: 0.025em; text-transform: uppercase; }
+        
+        .type-pneu { background-color: #FFF7ED; color: #C2410C; border: 1px solid #FFEDD5; }
+        .type-revisao { background-color: #EFF6FF; color: #1D4ED8; border: 1px solid #DBEAFE; }
+        .type-mecanica { background-color: #FEF2F2; color: #B91C1C; border: 1px solid #FECACA; }
+        .type-lataria { background-color: #F3F4F6; color: #4B5563; border: 1px solid #E5E7EB; }
+
+        /* Status Visual */
+        .status-border-pendente { border-left: 4px solid #EF4444; }
+        .status-border-andamento { border-left: 4px solid #F59E0B; }
+        .status-border-resolvido { border-left: 4px solid #22C55E; }
+
+        /* Modal */
+        .modal { transition: opacity 0.25s ease; }
+        body.modal-active { overflow-x: hidden; overflow-y: hidden !important; }
+    </style>
+</head>
+<body class="p-4 md:p-8 text-slate-800">
+
+    <div class="max-w-6xl mx-auto">
+        
+        <!-- Header Principal -->
+        <header class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <div>
+                <h1 class="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                    <i class="fa-solid fa-truck-pickup text-blue-600"></i> Gestão de Frota
+                </h1>
+                <p class="text-slate-500 text-sm mt-1">Controle de manutenção e chamados</p>
+            </div>
+            
+            <div class="flex flex-col md:flex-row gap-3 w-full md:w-auto">
+                <!-- Barra de Busca -->
+                <div class="relative w-full md:w-64">
+                    <input type="text" id="searchInput" onkeyup="applyFilters()" placeholder="Buscar placa, motorista..." 
+                        class="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm shadow-sm bg-slate-50">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-3.5 text-gray-400 text-xs"></i>
+                </div>
+
+                <!-- Botão Novo Chamado -->
+                <button onclick="openModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition-all flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-plus"></i> Novo Chamado
+                </button>
+            </div>
+        </header>
+
+        <!-- Filtros de Status (Abas) -->
+        <div class="flex flex-col sm:flex-row gap-4 mb-6">
+            <div class="bg-white p-1.5 rounded-xl shadow-sm border border-slate-200 inline-flex flex-1 sm:flex-none">
+                <button onclick="setMainTab('pendente')" id="btn-pendente" class="flex-1 sm:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-red-500"></span> Pendentes (<span id="count-pendente">0</span>)
+                </button>
+                <button onclick="setMainTab('andamento')" id="btn-andamento" class="flex-1 sm:flex-none px-6 py-2 rounded-lg text-sm font-bold text-slate-500 hover:bg-slate-50 transition-all flex items-center justify-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-amber-500"></span> Andamento (<span id="count-andamento">0</span>)
+                </button>
+                <button onclick="setMainTab('resolvido')" id="btn-resolvido" class="flex-1 sm:flex-none px-6 py-2 rounded-lg text-sm font-bold text-slate-500 hover:bg-slate-50 transition-all flex items-center justify-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-green-500"></span> Resolvidos (<span id="count-resolvido">0</span>)
+                </button>
+            </div>
+
+            <!-- Filtros de Categoria -->
+            <div id="category-filters" class="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0 no-scrollbar">
+                <button onclick="setCategory('all')" id="cat-all" class="whitespace-nowrap px-3 py-1.5 rounded-md text-xs font-bold border border-blue-200 bg-blue-50 text-blue-700 shadow-sm transition-all">Todos</button>
+                <button onclick="setCategory('pneu')" id="cat-pneu" class="whitespace-nowrap px-3 py-1.5 rounded-md text-xs font-bold border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50 transition-all">🚗 Pneus</button>
+                <button onclick="setCategory('revisao')" id="cat-revisao" class="whitespace-nowrap px-3 py-1.5 rounded-md text-xs font-bold border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50 transition-all">🛠️ Revisão</button>
+                <button onclick="setCategory('mecanica')" id="cat-mecanica" class="whitespace-nowrap px-3 py-1.5 rounded-md text-xs font-bold border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50 transition-all">⚙️ Mecânica</button>
+                <button onclick="setCategory('lataria')" id="cat-lataria" class="whitespace-nowrap px-3 py-1.5 rounded-md text-xs font-bold border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50 transition-all">🔨 Lataria</button>
+            </div>
+        </div>
+
+        <!-- Lista de Cards -->
+        <div id="list-container" class="space-y-3 pb-20">
+            <!-- Cards injetados via JS -->
+        </div>
+    </div>
+
+    <!-- MODAL (Adicionar/Editar) -->
+    <div id="modal" class="modal opacity-0 pointer-events-none fixed w-full h-full top-0 left-0 flex items-center justify-center z-50">
+        <div class="modal-overlay absolute w-full h-full bg-gray-900 opacity-50"></div>
+        
+        <div class="modal-container bg-white w-11/12 md:max-w-2xl mx-auto rounded-xl shadow-2xl z-50 overflow-y-auto max-h-[90vh]">
+            
+            <div class="modal-content py-4 text-left px-6">
+                <!-- Title -->
+                <div class="flex justify-between items-center pb-3 border-b border-slate-100">
+                    <p class="text-xl font-bold text-slate-800" id="modal-title">Novo Chamado</p>
+                    <div class="modal-close cursor-pointer z-50 p-2 hover:bg-slate-100 rounded-full" onclick="closeModal()">
+                        <i class="fa-solid fa-xmark text-slate-500"></i>
+                    </div>
+                </div>
+
+                <!-- Body -->
+                <form id="vehicleForm" class="my-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input type="hidden" id="form-id">
+                    
+                    <!-- Linha 1 -->
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Placa</label>
+                        <input type="text" id="form-plate" class="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none uppercase" placeholder="ABC-1234" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">KM Atual</label>
+                        <input type="text" id="form-km" class="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Ex: 45.000" required>
+                    </div>
+
+                    <!-- Linha 2 -->
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Motorista</label>
+                        <input type="text" id="form-driver" class="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Nome do Motorista">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Telefone Motorista</label>
+                        <input type="text" id="form-phone" class="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="(21) 99999-9999">
+                    </div>
+
+                    <!-- Linha 3 -->
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Categoria</label>
+                        <select id="form-category" class="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                            <option value="pneu">Pneu</option>
+                            <option value="revisao">Revisão</option>
+                            <option value="mecanica">Mecânica</option>
+                            <option value="lataria">Lataria</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Data Relato</label>
+                        <input type="text" id="form-date" class="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="DD/MM/AAAA">
+                    </div>
+
+                    <!-- Linha 4 (Full Width) -->
+                    <div class="md:col-span-2">
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Resumo do Problema (Título)</label>
+                        <input type="text" id="form-title" class="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Ex: Pneu furado e sem estepe" required>
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Descrição Completa</label>
+                        <textarea id="form-desc" rows="4" class="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Detalhes do ocorrido..."></textarea>
+                    </div>
+                    
+                    <!-- Hidden fields handled by logic, but editable here for simplicity -->
+                    <div>
+                         <label class="block text-xs font-bold text-slate-500 mb-1">Status Interno (Label)</label>
+                         <input type="text" id="form-subStatusLabel" class="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Ex: Aguardando Direcionamento">
+                    </div>
+                     <div>
+                         <label class="block text-xs font-bold text-slate-500 mb-1">Localização</label>
+                         <input type="text" id="form-location" class="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none" value="Av. Vereador F. Sabino da Costa, 907">
+                    </div>
+                </form>
+
+                <!-- Footer -->
+                <div class="flex justify-end pt-2 space-x-2 border-t border-slate-100">
+                    <button onclick="closeModal()" class="px-4 py-2 bg-slate-100 p-3 rounded-lg text-slate-600 hover:bg-slate-200 font-medium transition-colors">Cancelar</button>
+                    <button onclick="saveVehicle()" class="px-4 py-2 bg-blue-600 p-3 rounded-lg text-white hover:bg-blue-700 font-medium transition-colors">Salvar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DADOS INICIAIS (Se não houver no LocalStorage) ---
+        const initialData = [
+            {
+                id: 1, plate: "STN1C53", km: "53.902", date: "Não informada", driver: "Vinicius", phone: "+55 (21) 96715-3695", requester: "Cauan Almeida",
+                title: "Pneu furado / Sem estepe", fullDesc: "O veículo teve um dos pneus furado e, para possibilitar o deslocamento, foi necessário utilizar o estepe. No momento, o veículo encontra-se sem estepe disponível. Solicitamos a manutenção necessária.",
+                category: "pneu", mainStatus: "pendente", subStatusLabel: "Falta Levar (AR Estética)", subStatusType: "logistics", location: "Av. Vereador F. Sabino da Costa, 907"
+            },
+            {
+                id: 2, plate: "SNV8D27", km: "35.707", date: "Não informada", driver: "Caique", phone: "+55 (21) 97127-1233", requester: "Cauan Almeida",
+                title: "Pneus dianteiros carecas", fullDesc: "Conforme evidenciado nas fotos em anexo, os pneus dianteiros do veículo encontram-se excessivamente desgastados (carecas), comprometendo a segurança na condução. Solicitamos substituição.",
+                category: "pneu", mainStatus: "pendente", subStatusLabel: "Aguardando Direcionamento", subStatusType: "action", location: "Av. Vereador F. Sabino da Costa, 907"
+            },
+            {
+                id: 3, plate: "SNV7J27", km: "40.137", date: "Não informada", driver: "Caique", phone: "+55 (21) 97127-1233", requester: "Cauan Almeida",
+                title: "Pneu furado / Sem estepe", fullDesc: "O veículo teve um dos pneus furado e foi necessário utilizar o estepe. Encontra-se sem estepe disponível. Solicitamos a manutenção necessária.",
+                category: "pneu", mainStatus: "pendente", subStatusLabel: "Aguardando Direcionamento", subStatusType: "action", location: "Av. Vereador F. Sabino da Costa, 907"
+            },
+            {
+                id: 4, plate: "SNW9J82", km: "27.376", date: "Não informada", driver: "Valdsom", phone: "+55 (21) 97004-5508", requester: "Cauan Almeida",
+                title: "Pastilhas de Freio", fullDesc: "O veículo apresenta no painel a mensagem de alerta “verificar pastilhas dos travões”. Solicitamos a averiguação do sistema de freios.",
+                category: "mecanica", mainStatus: "pendente", subStatusLabel: "Falta Direcionar (Já solicitado)", subStatusType: "logistics", location: "Av. Vereador F. Sabino da Costa, 907"
+            },
+            {
+                id: 5, plate: "SNX3H03", km: "79.380", date: "15/01/2026", driver: "Amarildo", phone: "+55 (22) 98120-3147", requester: "Cauan Almeida",
+                title: "Revisão Preventiva", fullDesc: "A revisão do veículo encontra-se vencida. Solicitamos a realização da revisão preventiva.",
+                category: "revisao", mainStatus: "pendente", subStatusLabel: "Aguardando Direcionamento", subStatusType: "action", location: "Av. Vereador F. Sabino da Costa, 907"
+            },
+            {
+                id: 6, plate: "SNW9J72", km: "28.292", date: "10/11/2025", driver: "Felício", phone: "+55 (21) 99753-8575", requester: "Cauan Almeida",
+                title: "Revisão Preventiva", fullDesc: "A revisão do veículo encontra-se vencida. Diante disso, solicitamos a realização da manutenção preventiva.",
+                category: "revisao", mainStatus: "pendente", subStatusLabel: "Aguardando Direcionamento", subStatusType: "action", location: "Av. Vereador F. Sabino da Costa, 907"
+            },
+            {
+                id: 7, plate: "SNV8E07", km: "45.450", date: "08/01/2026", driver: "Eduardo", phone: "+55 (21) 97472-7661", requester: "Cauan Almeida",
+                title: "Revisão Preventiva", fullDesc: "A revisão periódica do veículo encontra-se vencida. Solicitamos a realização da manutenção/revisão do veículo o quanto antes.",
+                category: "revisao", mainStatus: "pendente", subStatusLabel: "Aguardando Direcionamento", subStatusType: "action", location: "Av. Vereador F. Sabino da Costa, 907"
+            },
+            {
+                id: 8, plate: "SNX3J73", km: "40.451", date: "08/01/2026", driver: "Pedro Paulo", phone: "+55 (21) 99726-8369", requester: "Cauan Almeida",
+                title: "Revisão + Checkup Geral", fullDesc: "Veículo com revisão vencida e apresentando outros problemas. Necessário checkup. Ficou de direcionar com o Fabio da AR Estética e não foi feito.",
+                category: "mecanica", mainStatus: "pendente", subStatusLabel: "Pendente Contato (Fábio - AR)", subStatusType: "logistics", location: "Av. Vereador F. Sabino da Costa, 907"
+            },
+            {
+                id: 9, plate: "SNV7H37", km: "37.781", date: "05/11/2025", driver: "Ricardo", phone: "+55 (21) 99775-9417", requester: "Cauan Almeida",
+                title: "Tampa Retrovisor Quebrada", fullDesc: "O veículo sofreu um pequeno incidente que resultou na quebra da tampa externa do retrovisor. Solicitamos a troca da tampa.",
+                category: "lataria", mainStatus: "pendente", subStatusLabel: "Aguardando Direcionamento", subStatusType: "action", location: "Av. Vereador F. Sabino da Costa, 907"
+            },
+            {
+                id: 10, plate: "SNU1B29", km: "48.511", date: "08/12/2025", driver: "Flávio", phone: "+55 (21) 97130-0718", requester: "Cauan Almeida",
+                title: "Revisão Preventiva", fullDesc: "O veículo encontra-se com a revisão vencida. Solicitamos a realização da revisão necessária.",
+                category: "revisao", mainStatus: "pendente", subStatusLabel: "Solicitado (Falta Direcionar)", subStatusType: "logistics", location: "Av. Vereador F. Sabino da Costa, 907"
+            },
+            {
+                id: 11, plate: "SNU1B69", km: "32.755", date: "14/01/2026", driver: "Bruno", phone: "+55 (21) 99938-0769", requester: "Cauan Almeida",
+                title: "Avaria Lateral Pneu", fullDesc: "O veículo apresentou avaria no pneu, com dano na lateral. Rodando com estepe. Direcionado, o pneu esta na oficina, aguardando resolução desde o dia 14/01/2026.",
+                category: "pneu", mainStatus: "andamento", subStatusLabel: "Na Oficina (Desde 14/01)", subStatusType: "wait", location: "Av. Vereador F. Sabino da Costa, 907"
+            },
+            {
+                id: 12, plate: "SNW9B40", km: "36.988", date: "18/12/2025", driver: "Antônio Jorge", phone: "+55 (21) 96743-4766", requester: "Cauan Almeida",
+                title: "Troca de 2 Pneus", fullDesc: "Trocou o estepe pelo pneu com a rachadura. O pneu rachado agora está no lugar do estepe. Rodando com estepe e um pneu careca. Aguardando a ASA comprar 2 pneus novos.",
+                category: "pneu", mainStatus: "andamento", subStatusLabel: "Aguardando Peça (Compra)", subStatusType: "wait", location: "Av. Vereador F. Sabino da Costa, 907"
+            },
+            {
+                id: 13, plate: "SNW6C90", km: "32.402", date: "Não informada", driver: "Felipe", phone: "+55 (21) 97004-5508", requester: "Cauan Almeida",
+                title: "Revisão Preventiva", fullDesc: "A revisão do veículo encontrava-se vencida. Já foi direcionado e resolvido.",
+                category: "revisao", mainStatus: "resolvido", subStatusLabel: "Concluído", subStatusType: "done", location: "Av. Vereador F. Sabino da Costa, 907"
+            }
+        ];
+
+        // --- LÓGICA DE APLICAÇÃO ---
+        
+        let vehicles = [];
+        let currentTab = 'pendente';
+        let currentCategory = 'all';
+
+        // Carregar dados
+        function loadData() {
+            const stored = localStorage.getItem('fleetData_v1');
+            if (stored) {
+                vehicles = JSON.parse(stored);
+            } else {
+                vehicles = JSON.parse(JSON.stringify(initialData));
+                saveData();
+            }
+            updateCounts();
+        }
+
+        // Salvar dados
+        function saveData() {
+            localStorage.setItem('fleetData_v1', JSON.stringify(vehicles));
+            updateCounts();
+            applyFilters();
+        }
+
+        function updateCounts() {
+            document.getElementById('count-pendente').innerText = vehicles.filter(v => v.mainStatus === 'pendente').length;
+            document.getElementById('count-andamento').innerText = vehicles.filter(v => v.mainStatus === 'andamento').length;
+            document.getElementById('count-resolvido').innerText = vehicles.filter(v => v.mainStatus === 'resolvido').length;
+        }
+
+        // --- FILTROS E RENDERIZAÇÃO ---
+        
+        const categoryLabels = {
+            'pneu': 'PNEUS', 'revisao': 'REVISÃO', 'mecanica': 'MECÂNICA', 'lataria': 'LATARIA'
+        };
+
+        function setMainTab(tab) {
+            currentTab = tab;
+            ['pendente', 'andamento', 'resolvido'].forEach(t => {
+                const btn = document.getElementById(`btn-${t}`);
+                if (t === tab) {
+                    btn.classList.remove('text-slate-500', 'hover:bg-slate-50');
+                    btn.classList.add('text-slate-900', 'bg-slate-100'); // Ativo (Visual Sutil)
+                    if(t === 'pendente') btn.className = "flex-1 sm:flex-none px-6 py-2 rounded-lg text-sm font-bold bg-white border border-red-200 text-red-700 shadow-sm flex items-center justify-center gap-2 transition-all";
+                    if(t === 'andamento') btn.className = "flex-1 sm:flex-none px-6 py-2 rounded-lg text-sm font-bold bg-white border border-amber-200 text-amber-700 shadow-sm flex items-center justify-center gap-2 transition-all";
+                    if(t === 'resolvido') btn.className = "flex-1 sm:flex-none px-6 py-2 rounded-lg text-sm font-bold bg-white border border-green-200 text-green-700 shadow-sm flex items-center justify-center gap-2 transition-all";
+                } else {
+                    btn.className = "flex-1 sm:flex-none px-6 py-2 rounded-lg text-sm font-bold text-slate-400 hover:text-slate-600 hover:bg-slate-50 flex items-center justify-center gap-2 transition-all opacity-70";
+                }
+            });
+            applyFilters();
+        }
+
+        function setCategory(cat) {
+            currentCategory = cat;
+            const categories = ['all', 'pneu', 'revisao', 'mecanica', 'lataria'];
+            categories.forEach(c => {
+                const btn = document.getElementById(`cat-${c}`);
+                if (c === cat) {
+                    btn.classList.remove('border-slate-200', 'bg-white', 'text-slate-600');
+                    btn.classList.add('border-blue-200', 'bg-blue-50', 'text-blue-700');
+                } else {
+                    btn.classList.add('border-slate-200', 'bg-white', 'text-slate-600');
+                    btn.classList.remove('border-blue-200', 'bg-blue-50', 'text-blue-700');
+                }
+            });
+            applyFilters();
+        }
+
+        function applyFilters() {
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const container = document.getElementById('list-container');
+            container.innerHTML = '';
+
+            const filtered = vehicles.filter(item => {
+                const matchTab = item.mainStatus === currentTab;
+                const matchCat = currentCategory === 'all' || item.category === currentCategory;
+                const matchSearch = item.plate.toLowerCase().includes(search) || 
+                                    item.driver.toLowerCase().includes(search) ||
+                                    item.title.toLowerCase().includes(search);
+                return matchTab && matchCat && matchSearch;
+            });
+
+            if (filtered.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-16 bg-white rounded-xl border border-dashed border-slate-300">
+                        <i class="fa-regular fa-folder-open text-4xl text-slate-300 mb-3"></i>
+                        <p class="text-slate-400 font-medium">Nenhum veículo encontrado nesta seção.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            filtered.forEach(item => {
+                const catClass = `type-${item.category}`;
+                const catLabel = categoryLabels[item.category] || item.category.toUpperCase();
+                const statusBorder = `status-border-${item.mainStatus}`;
+                
+                const dateHtml = item.date && item.date !== "Não informada"
+                    ? `<span class="text-xs text-slate-400 flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-full"><i class="fa-regular fa-calendar"></i> ${item.date}</span>` 
+                    : '';
+
+                // Botões de Ação Dinâmicos
+                let actionButtons = '';
+                if(item.mainStatus === 'pendente') {
+                    actionButtons = `
+                        <button onclick="changeStatus(${item.id}, 'andamento')" class="flex items-center gap-1 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-xs font-bold hover:bg-amber-100 border border-amber-200 transition-colors">
+                            <i class="fa-solid fa-arrow-right"></i> Mover p/ Andamento
+                        </button>
+                    `;
+                } else if (item.mainStatus === 'andamento') {
+                    actionButtons = `
+                        <button onclick="changeStatus(${item.id}, 'pendente')" class="flex items-center gap-1 px-3 py-1.5 bg-gray-50 text-gray-600 rounded-lg text-xs font-bold hover:bg-gray-100 border border-gray-200 transition-colors">
+                            <i class="fa-solid fa-arrow-left"></i> Voltar
+                        </button>
+                        <button onclick="changeStatus(${item.id}, 'resolvido')" class="flex items-center gap-1 px-3 py-1.5 bg-green-50 text-green-700 rounded-lg text-xs font-bold hover:bg-green-100 border border-green-200 transition-colors">
+                            <i class="fa-solid fa-check"></i> Concluir
+                        </button>
+                    `;
+                } else {
+                     actionButtons = `
+                        <button onclick="changeStatus(${item.id}, 'andamento')" class="flex items-center gap-1 px-3 py-1.5 bg-gray-50 text-gray-600 rounded-lg text-xs font-bold hover:bg-gray-100 border border-gray-200 transition-colors">
+                            <i class="fa-solid fa-arrow-rotate-left"></i> Reabrir
+                        </button>
+                    `;
+                }
+
+                const html = `
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 card-transition hover:shadow-md overflow-hidden ${statusBorder} group">
+                        
+                        <!-- Cabeçalho -->
+                        <div class="p-4 cursor-pointer relative" onclick="toggleDetails(${item.id}, event)">
+                            <div class="flex flex-col md:flex-row gap-4 md:items-center justify-between">
+                                
+                                <!-- Esquerda -->
+                                <div class="flex items-start gap-4">
+                                    <div class="hidden md:flex flex-col items-center justify-center w-12 h-12 rounded-full bg-slate-50 border border-slate-100 text-slate-400">
+                                        <i class="fa-solid fa-car text-lg"></i>
+                                    </div>
+                                    <div class="flex flex-col">
+                                        <div class="flex items-center flex-wrap gap-2 mb-1">
+                                            <span class="text-xl font-bold text-slate-800 font-mono tracking-tight">${item.plate}</span>
+                                            <span class="badge ${catClass}">${catLabel}</span>
+                                            <span class="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 flex items-center gap-1">
+                                                <i class="fa-solid fa-gauge-high text-[10px]"></i> ${item.km} Km
+                                            </span>
+                                        </div>
+                                        <div class="text-slate-700 font-medium text-sm">${item.title}</div>
+                                        <div class="text-slate-400 text-xs mt-1 md:hidden">${item.subStatusLabel}</div>
+                                    </div>
+                                </div>
+
+                                <!-- Direita -->
+                                <div class="flex items-center justify-between md:justify-end gap-4 w-full md:w-auto">
+                                    <div class="flex flex-col items-end hidden md:flex">
+                                        <span class="text-xs font-bold px-2 py-1 rounded bg-slate-50 border border-slate-100 text-slate-600">${item.subStatusLabel}</span>
+                                        <div class="mt-1">${dateHtml}</div>
+                                    </div>
+                                    <div class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors">
+                                        <i id="chevron-${item.id}" class="fa-solid fa-chevron-down text-slate-400 transition-transform duration-300"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Detalhes -->
+                        <div id="details-${item.id}" class="details-content bg-slate-50 border-t border-slate-100">
+                            <!-- Barra de Ações -->
+                            <div class="bg-white px-5 py-3 border-b border-slate-100 flex flex-wrap gap-2 items-center justify-between">
+                                <div class="flex gap-2">
+                                    ${actionButtons}
+                                </div>
+                                <div class="flex gap-2">
+                                    <button onclick="editVehicle(${item.id})" class="text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                                        <i class="fa-solid fa-pen"></i> Editar
+                                    </button>
+                                    <button onclick="deleteVehicle(${item.id})" class="text-red-400 hover:text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="p-5 grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+                                
+                                <!-- Info -->
+                                <div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                                    <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                        <i class="fa-regular fa-id-card"></i> Dados Operacionais
+                                    </h4>
+                                    <ul class="space-y-3 text-slate-600">
+                                        <li class="flex justify-between border-b border-slate-100 pb-2">
+                                            <span>Motorista:</span> <span class="font-bold text-slate-800">${item.driver}</span>
+                                        </li>
+                                        <li class="flex justify-between border-b border-slate-100 pb-2">
+                                            <span>Telefone:</span> <span class="font-medium text-slate-800">${item.phone}</span>
+                                        </li>
+                                        <li class="flex justify-between border-b border-slate-100 pb-2">
+                                            <span>Solicitante:</span> <span class="font-medium text-slate-800">${item.requester}</span>
+                                        </li>
+                                        <li class="block pt-1">
+                                            <span class="block text-xs text-slate-400 mb-1">Localização:</span>
+                                            <span class="font-medium text-slate-800 leading-snug">${item.location}</span>
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <!-- Descrição -->
+                                <div>
+                                    <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                        <i class="fa-regular fa-file-lines"></i> Relato Detalhado
+                                    </h4>
+                                    <div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm text-slate-700 leading-relaxed text-justify">
+                                        ${item.fullDesc}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', html);
+            });
+        }
+
+        // --- INTERAÇÕES ---
+
+        function toggleDetails(id, event) {
+            // Evitar que cliques nos botões disparem o toggle
+            if(event.target.tagName === 'BUTTON' || event.target.closest('button')) return;
+
+            const content = document.getElementById(`details-${id}`);
+            const chevron = document.getElementById(`chevron-${id}`);
+            
+            if (content.classList.contains('open')) {
+                content.classList.remove('open');
+                chevron.classList.remove('rotate-chevron');
+            } else {
+                // Fechar outros (Opcional, mas mantém limpo)
+                document.querySelectorAll('.details-content.open').forEach(el => {
+                   el.classList.remove('open');
+                });
+                document.querySelectorAll('.rotate-chevron').forEach(el => {
+                   el.classList.remove('rotate-chevron');
+                });
+
+                content.classList.add('open');
+                chevron.classList.add('rotate-chevron');
+            }
+        }
+
+        // --- CRUD E MODAL ---
+
+        function openModal(editId = null) {
+            const modal = document.getElementById('modal');
+            const title = document.getElementById('modal-title');
+            const form = document.getElementById('vehicleForm');
+
+            // Reset form
+            document.getElementById('form-id').value = '';
+            document.getElementById('form-plate').value = '';
+            document.getElementById('form-km').value = '';
+            document.getElementById('form-driver').value = '';
+            document.getElementById('form-phone').value = '';
+            document.getElementById('form-title').value = '';
+            document.getElementById('form-desc').value = '';
+            document.getElementById('form-subStatusLabel').value = '';
+            document.getElementById('form-category').value = 'mecanica';
+            document.getElementById('form-date').value = new Date().toLocaleDateString('pt-BR');
+
+            if (editId) {
+                title.innerText = "Editar Chamado";
+                const item = vehicles.find(v => v.id === editId);
+                if(item) {
+                    document.getElementById('form-id').value = item.id;
+                    document.getElementById('form-plate').value = item.plate;
+                    document.getElementById('form-km').value = item.km;
+                    document.getElementById('form-driver').value = item.driver;
+                    document.getElementById('form-phone').value = item.phone;
+                    document.getElementById('form-title').value = item.title;
+                    document.getElementById('form-desc').value = item.fullDesc;
+                    document.getElementById('form-subStatusLabel').value = item.subStatusLabel;
+                    document.getElementById('form-category').value = item.category;
+                    document.getElementById('form-location').value = item.location;
+                    if(item.date) document.getElementById('form-date').value = item.date;
+                }
+            } else {
+                title.innerText = "Novo Chamado";
+            }
+
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            document.body.classList.add('modal-active');
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('modal');
+            modal.classList.add('opacity-0', 'pointer-events-none');
+            document.body.classList.remove('modal-active');
+        }
+
+        function saveVehicle() {
+            const id = document.getElementById('form-id').value;
+            const plate = document.getElementById('form-plate').value.toUpperCase();
+            const km = document.getElementById('form-km').value;
+            
+            if(!plate || !km) {
+                alert("Placa e KM são obrigatórios.");
+                return;
+            }
+
+            const data = {
+                plate: plate,
+                km: km,
+                driver: document.getElementById('form-driver').value,
+                phone: document.getElementById('form-phone').value,
+                title: document.getElementById('form-title').value,
+                fullDesc: document.getElementById('form-desc').value,
+                category: document.getElementById('form-category').value,
+                subStatusLabel: document.getElementById('form-subStatusLabel').value || "Aguardando",
+                location: document.getElementById('form-location').value,
+                date: document.getElementById('form-date').value,
+                requester: "Usuário do Sistema" // Padrão
+            };
+
+            if (id) {
+                // Edit
+                const index = vehicles.findIndex(v => v.id == id);
+                if (index > -1) {
+                    vehicles[index] = { ...vehicles[index], ...data };
+                }
+            } else {
+                // Create
+                const newId = vehicles.length > 0 ? Math.max(...vehicles.map(v => v.id)) + 1 : 1;
+                const newVehicle = {
+                    id: newId,
+                    ...data,
+                    mainStatus: 'pendente',
+                    subStatusType: 'action'
+                };
+                vehicles.unshift(newVehicle); // Adiciona no topo
+            }
+
+            saveData();
+            closeModal();
+        }
+
+        function editVehicle(id) {
+            // Evita propagação do click para o card
+            event.stopPropagation();
+            openModal(id);
+        }
+
+        function deleteVehicle(id) {
+            event.stopPropagation();
+            if(confirm("Tem certeza que deseja excluir este chamado?")) {
+                vehicles = vehicles.filter(v => v.id !== id);
+                saveData();
+            }
+        }
+
+        function changeStatus(id, newStatus) {
+            event.stopPropagation();
+            const index = vehicles.findIndex(v => v.id === id);
+            if (index > -1) {
+                vehicles[index].mainStatus = newStatus;
+                
+                // Lógica simples para atualizar label/tipo
+                if(newStatus === 'andamento') {
+                    vehicles[index].subStatusLabel = "Em Andamento";
+                    vehicles[index].subStatusType = "wait";
+                } else if (newStatus === 'resolvido') {
+                    vehicles[index].subStatusLabel = "Concluído";
+                    vehicles[index].subStatusType = "done";
+                } else {
+                    vehicles[index].subStatusLabel = "Reaberto / Pendente";
+                    vehicles[index].subStatusType = "action";
+                }
+
+                saveData();
+            }
+        }
+
+        // Inicializar
+        loadData();
+        setMainTab('pendente');
+
+    </script>
+</body>
+</html>

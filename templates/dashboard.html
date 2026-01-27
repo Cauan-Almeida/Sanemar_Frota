@@ -11,6 +11,7 @@
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico?v=9.0">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="manifest" href="/static/manifest.json">
     <style>
@@ -134,13 +135,356 @@
             background: rgba(255, 255, 255, 0.4);
         }
         
+        /* Estilos para Aba de Revisões */
+        .revisoes-card-transition { transition: all 0.2s ease-in-out; }
+        .revisoes-details-content { 
+            max-height: 0; 
+            overflow: hidden; 
+            transition: max-height 0.3s ease-out, opacity 0.3s ease;
+            opacity: 0;
+        }
+        .revisoes-details-content.open { 
+            max-height: 1000px; 
+            opacity: 1;
+        }
+        .revisoes-rotate-chevron { transform: rotate(180deg); }
+        
+        /* Badges e Cores para Revisões */
+        .revisoes-badge { font-size: 0.70rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 6px; letter-spacing: 0.025em; text-transform: uppercase; }
+        
+        .revisoes-type-pneu { background-color: #FFF7ED; color: #C2410C; border: 1px solid #FFEDD5; }
+        .revisoes-type-revisao { background-color: #EFF6FF; color: #1D4ED8; border: 1px solid #DBEAFE; }
+        .revisoes-type-mecanica { background-color: #FEF2F2; color: #B91C1C; border: 1px solid #FECACA; }
+        .revisoes-type-lataria { background-color: #F3F4F6; color: #4B5563; border: 1px solid #E5E7EB; }
+
+        /* Status Visual para Revisões */
+        .revisoes-status-border-pendente { border-left: 4px solid #EF4444; }
+        .revisoes-status-border-andamento { border-left: 4px solid #F59E0B; }
+        .revisoes-status-border-resolvido { border-left: 4px solid #22C55E; }
+
+        /* Modal para Revisões */
+        .revisoes-modal { transition: opacity 0.25s ease; }
+        body.revisoes-modal-active { overflow-x: hidden; overflow-y: hidden !important; }
+        
+        /* ==================== DARK MODE ==================== */
+        body.dark-mode {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #e5e7eb;
+        }
+        body.dark-mode .glass { 
+            background: rgba(30, 41, 59, 0.95); 
+            backdrop-filter: blur(10px);
+        }
+        body.dark-mode .glass-dark { 
+            background: rgba(15, 23, 42, 0.98); 
+        }
+        body.dark-mode h1, body.dark-mode h2, body.dark-mode h3, body.dark-mode h4 { 
+            color: #f8fafc !important; 
+        }
+        body.dark-mode .text-slate-900, body.dark-mode .text-gray-800 { 
+            color: #f1f5f9 !important; 
+        }
+        body.dark-mode .text-slate-700, body.dark-mode .text-gray-700 { 
+            color: #e2e8f0 !important; 
+        }
+        body.dark-mode .text-slate-600, body.dark-mode .text-gray-600 { 
+            color: #cbd5e1 !important; 
+        }
+        body.dark-mode .text-slate-500 { 
+            color: #94a3b8 !important; 
+        }
+        body.dark-mode .text-slate-400 { 
+            color: #64748b !important; 
+        }
+        body.dark-mode .bg-white { 
+            background: #1e293b !important; 
+        }
+        body.dark-mode .bg-slate-50, body.dark-mode .bg-gray-50 { 
+            background: #0f172a !important; 
+        }
+        body.dark-mode .bg-slate-100 { 
+            background: #1e293b !important; 
+        }
+        body.dark-mode .border-slate-200, body.dark-mode .border-gray-200 { 
+            border-color: #334155 !important; 
+        }
+        body.dark-mode .border-slate-100 { 
+            border-color: #1e293b !important; 
+        }
+        body.dark-mode input, body.dark-mode select, body.dark-mode textarea {
+            background: #0f172a !important;
+            border-color: #334155 !important;
+            color: #e5e7eb !important;
+        }
+        body.dark-mode input:focus, body.dark-mode select:focus, body.dark-mode textarea:focus {
+            border-color: #6366f1 !important;
+            background: #1e293b !important;
+        }
+        body.dark-mode .revisoes-details-content { 
+            background: rgba(15, 23, 42, 0.9) !important; 
+        }
+        body.dark-mode #revisoes-list-container .bg-white {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important;
+            border-color: #334155 !important;
+        }
+        body.dark-mode #revisoes-list-container .bg-white:hover {
+            background: linear-gradient(135deg, #334155 0%, #1e293b 100%) !important;
+        }
+        body.dark-mode table thead {
+            background: #1e293b !important;
+        }
+        body.dark-mode table tbody tr {
+            background: #0f172a !important;
+            border-color: #334155 !important;
+        }
+        body.dark-mode table tbody tr:hover {
+            background: #1e293b !important;
+        }
+        body.dark-mode .stat-card {
+            background: #1e293b !important;
+            border-color: #334155 !important;
+        }
+        body.dark-mode .chart-container {
+            background: #1e293b !important;
+        }
+        body.dark-mode #revisoes-list-container > div > div:first-child > div:first-child > div:first-child {
+            background: rgba(88, 28, 135, 0.2) !important;
+            border-color: rgba(168, 85, 247, 0.4) !important;
+        }
+        body.dark-mode #revisoes-list-container .fa-truck {
+            color: #a78bfa !important;
+        }
+        body.dark-mode #revisoes-list-container .bg-slate-50 {
+            background: #0f172a !important;
+        }
+        body.dark-mode #revisoes-list-container .border-slate-100 {
+            border-color: #334155 !important;
+        }
+        body.dark-mode #revisoes-list-container .border-slate-200 {
+            border-color: #475569 !important;
+        }
+        body.dark-mode #revisoes-list-container .text-slate-800 {
+            color: #f1f5f9 !important;
+        }
+        body.dark-mode #revisoes-list-container .text-slate-700 {
+            color: #e2e8f0 !important;
+        }
+        body.dark-mode #revisoes-list-container .text-slate-600 {
+            color: #cbd5e1 !important;
+        }
+        body.dark-mode #revisoes-list-container .text-slate-500 {
+            color: #94a3b8 !important;
+        }
+        body.dark-mode #revisoes-list-container .text-slate-400 {
+            color: #64748b !important;
+        }
+        /* Navegação de mês em dark mode */
+        body.dark-mode .bg-gradient-to-r.from-indigo-50 {
+            background: linear-gradient(to right, #1e293b, #0f172a) !important;
+            border-color: #475569 !important;
+        }
+        body.dark-mode .border-indigo-200 {
+            border-color: #475569 !important;
+        }
+        body.dark-mode .border-indigo-300 {
+            border-color: #475569 !important;
+        }
+        body.dark-mode .text-indigo-700 {
+            color: #a5b4fc !important;
+        }
+        body.dark-mode .bg-indigo-100 {
+            background: #334155 !important;
+        }
+        /* Formulários e gradientes */
+        body.dark-mode .from-indigo-50.to-purple-50,
+        body.dark-mode .from-blue-50.to-cyan-50,
+        body.dark-mode .from-green-50.to-emerald-50,
+        body.dark-mode .from-red-50.to-pink-50,
+        body.dark-mode .from-green-50.to-teal-50 {
+            background: linear-gradient(to right, #1e293b, #0f172a) !important;
+        }
+        body.dark-mode label,
+        body.dark-mode .text-gray-500,
+        body.dark-mode .text-gray-400 {
+            color: #cbd5e1 !important;
+        }
+        body.dark-mode .text-gray-700 {
+            color: #e2e8f0 !important;
+        }
+        body.dark-mode .text-gray-600 {
+            color: #cbd5e1 !important;
+        }
+        body.dark-mode #current-date {
+            color: #f1f5f9 !important;
+        }
+        body.dark-mode .hover\:bg-indigo-100:hover {
+            background: #334155 !important;
+        }
+        /* Tabelas - texto das células em dark mode */
+        body.dark-mode table tbody td {
+            color: #e5e7eb !important;
+        }
+        body.dark-mode table thead th {
+            color: #f1f5f9 !important;
+        }
+        /* Placeholder de inputs */
+        body.dark-mode input::placeholder,
+        body.dark-mode textarea::placeholder {
+            color: #64748b !important;
+        }
+        /* Badges e pills */
+        body.dark-mode .bg-green-100 {
+            background: #064e3b !important;
+        }
+        body.dark-mode .text-green-800 {
+            color: #6ee7b7 !important;
+        }
+        body.dark-mode .bg-blue-100 {
+            background: #1e3a8a !important;
+        }
+        body.dark-mode .text-blue-800 {
+            color: #93c5fd !important;
+        }
+        body.dark-mode .bg-red-100 {
+            background: #7f1d1d !important;
+        }
+        body.dark-mode .text-red-800 {
+            color: #fca5a5 !important;
+        }
+        body.dark-mode .bg-yellow-100 {
+            background: #78350f !important;
+        }
+        body.dark-mode .text-yellow-800 {
+            color: #fcd34d !important;
+        }
+        /* Tabs de categoria do histórico em dark mode */
+        body.dark-mode .historico-category-tab {
+            background: #1e293b;
+            color: #94a3b8;
+            border-color: #334155;
+        }
+        body.dark-mode .historico-category-tab:hover {
+            background: #334155;
+            color: #cbd5e1;
+        }
+        body.dark-mode .historico-category-tab.active {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            color: white;
+            border-color: #6366f1;
+        }
+        body.dark-mode .count-badge {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        body.dark-mode .historico-category-tab.active .count-badge {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        .dark-mode-icon { display: none; }
+        .light-mode-icon { display: inline; }
+        body.dark-mode .dark-mode-icon { display: inline; }
+        body.dark-mode .light-mode-icon { display: none; }
+        
+        /* Sidebar escondida (estilo hamburger) */
+        aside {
+            transition: transform 0.3s ease;
+            z-index: 1002 !important;
+            position: fixed !important;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: 16rem;
+            transform: translateX(0);
+        }
+        aside.sidebar-hidden {
+            transform: translateX(-100%);
+        }
+        
+        /* Overlay quando sidebar aberta */
+        .sidebar-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 1001;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .sidebar-overlay.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+        
+        /* Botão Hamburger Flutuante */
+        .hamburger-btn {
+            position: fixed;
+            top: 1.5rem;
+            left: 1.5rem;
+            z-index: 1003;
+            width: 3.5rem;
+            height: 3.5rem;
+            border-radius: 0.75rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+        }
+        .hamburger-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+        }
+        .hamburger-btn.sidebar-open {
+            left: 17rem;
+        }
+        
+        /* Cards de revisões melhorados */
+        #revisoes-list-container > div {
+            position: relative;
+            padding-left: 1rem;
+        }
+        #revisoes-list-container > div::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            border-radius: 0 4px 4px 0;
+        }
+        #revisoes-list-container > div.revisoes-status-border-pendente::before {
+            background: linear-gradient(180deg, #dc2626 0%, #ef4444 100%);
+        }
+        #revisoes-list-container > div.revisoes-status-border-andamento::before {
+            background: linear-gradient(180deg, #f59e0b 0%, #fbbf24 100%);
+        }
+        #revisoes-list-container > div.revisoes-status-border-resolvido::before {
+            background: linear-gradient(180deg, #10b981 0%, #34d399 100%);
+        }
+        #revisoes-list-container .bg-white {
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            border: 1px solid #e2e8f0;
+        }
+        #revisoes-list-container .bg-white:hover {
+            background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%);
+            border-color: #cbd5e1;
+        }
+        .revisoes-details-content {
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        }
+        .revisoes-details-content .bg-white {
+            background: white !important;
+        }
+        
     </style>
 </head>
 <body class="overflow-hidden" data-active-tab="{{ active_tab|default('dashboard') }}" data-user-type="{{ user_type }}">
 
     <div class="flex h-screen">
         <!-- Sidebar -->
-        <aside id="sidebar" class="w-64 glass-dark text-white flex-col fixed inset-y-0 left-0 transform -translate-x-full md:relative md:translate-x-0 transition-transform duration-300 ease-in-out z-30 shadow-2xl">
+        <aside id="sidebar" class="w-64 glass-dark text-white flex-col sidebar-hidden shadow-2xl">
             <div class="p-6 border-b border-white border-opacity-20 flex justify-between items-center bg-gradient-to-r from-purple-900 to-indigo-900">
                 <div class="flex items-center gap-3">
                     <div class="bg-white bg-opacity-20 p-2 rounded-xl backdrop-blur-sm">
@@ -225,10 +569,20 @@
             </nav>
         </aside>
 
+        <!-- Overlay da Sidebar -->
+        <div id="sidebar-overlay" class="sidebar-overlay" onclick="toggleSidebarHamburger()"></div>
+
+        <!-- Botão Hamburger Flutuante -->
+        <button id="hamburger-btn" class="hamburger-btn" onclick="toggleSidebarHamburger()">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+            </svg>
+        </button>
+
         <!-- Main Content -->
         <div class="flex-1 flex flex-col overflow-hidden">
-            <header class="glass shadow-xl p-6 flex justify-between items-center animate-fade-in">
-                <button id="open-sidebar" class="text-gray-600 hover:text-indigo-600 md:hidden transition-colors">
+            <header class="glass shadow-xl p-6 pl-24 flex justify-between items-center animate-fade-in">
+                <button id="open-sidebar" class="hidden text-gray-600 hover:text-indigo-600 md:hidden transition-colors">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
                 </button>
                 <div class="flex items-center gap-4">
@@ -236,10 +590,14 @@
                     <h1 id="main-title" class="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent"></h1>
                 </div>
                 <div class="flex items-center gap-4">
+                    <button id="theme-toggle-btn" class="px-4 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-xl font-semibold shadow-lg transition-all transform hover:scale-105" title="Alternar tema claro/escuro">
+                        <span class="dark-mode-icon hidden">🌙</span>
+                        <span class="light-mode-icon">☀️</span>
+                    </button>
                     <button id="refresh-cache-btn" class="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white rounded-xl font-semibold shadow-lg transition-all transform hover:scale-105" title="Atualizar dados (limpa cache)">
                         🔄 Atualizar
                     </button>
-                    <div class="hidden md:block text-sm text-gray-600 font-medium">
+                    <div class="hidden md:block text-sm text-slate-900 font-bold">
                         <span id="current-date"></span>
                     </div>
                 </div>
@@ -841,165 +1199,185 @@
                     </div>
                 </div>
 
-                <!-- Conteúdo de Revisões -->
+                <!-- Conteúdo de Revisões (Sistema Completo) -->
                 <div id="revisoes-content" class="main-content hidden animate-fade-in">
                     <div class="glass p-8 rounded-2xl shadow-lg">
-                        <h1 class="text-3xl font-bold mb-6 flex items-center gap-3">
-                            <span class="bg-gradient-to-r from-purple-500 to-indigo-500 text-white p-3 rounded-xl">🔧</span>
-                            Gestão de Revisões Periódicas
-                        </h1>
-
-                        <!-- Estatísticas de Revisões -->
-                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                            <div class="bg-gradient-to-br from-purple-50 to-indigo-50 p-4 rounded-xl">
-                                <div class="flex items-center justify-between">
-                                    <div>
-                                        <p class="text-sm font-semibold text-gray-600 uppercase">Total</p>
-                                        <p id="stat-revisoes-total" class="text-3xl font-bold text-purple-600">0</p>
-                                    </div>
-                                    <span class="text-4xl">📋</span>
-                                </div>
-                            </div>
-                            <div class="bg-gradient-to-br from-green-50 to-emerald-50 p-4 rounded-xl">
-                                <div class="flex items-center justify-between">
-                                    <div>
-                                        <p class="text-sm font-semibold text-gray-600 uppercase">Em Dia</p>
-                                        <p id="stat-revisoes-em-dia" class="text-3xl font-bold text-green-600">0</p>
-                                    </div>
-                                    <span class="text-4xl">✅</span>
-                                </div>
-                            </div>
-                            <div class="bg-gradient-to-br from-yellow-50 to-orange-50 p-4 rounded-xl">
-                                <div class="flex items-center justify-between">
-                                    <div>
-                                        <p class="text-sm font-semibold text-gray-600 uppercase">Próximas</p>
-                                        <p id="stat-revisoes-proximas" class="text-3xl font-bold text-yellow-600">0</p>
-                                    </div>
-                                    <span class="text-4xl">⚠️</span>
-                                </div>
-                            </div>
-                            <div class="bg-gradient-to-br from-red-50 to-pink-50 p-4 rounded-xl">
-                                <div class="flex items-center justify-between">
-                                    <div>
-                                        <p class="text-sm font-semibold text-gray-600 uppercase">Atrasadas</p>
-                                        <p id="stat-revisoes-atrasadas" class="text-3xl font-bold text-red-600">0</p>
-                                    </div>
-                                    <span class="text-4xl">🚨</span>
-                                </div>
-                            </div>
-                        </div>
                         
-                        <!-- Form para adicionar/editar revisão -->
-                        <div class="bg-gradient-to-r from-purple-50 to-indigo-50 p-6 rounded-xl mb-6">
-                            <h2 class="text-xl font-bold mb-4">Registrar Revisão</h2>
-                            <form id="form-revisao" class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <input type="hidden" id="revisao-id">
-                                <div>
-                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Veículo (Placa) *</label>
-                                    <input type="text" id="revisao-placa" required
-                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all uppercase"
-                                           placeholder="Placa">
+                        <!-- Header com Busca e Botão -->
+                        <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+                            <div>
+                                <h1 class="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
+                                    <span class="bg-gradient-to-r from-purple-500 to-indigo-500 text-white p-3 rounded-xl">🔧</span>
+                                    Gestão de Chamados de Manutenção
+                                </h1>
+                                <p class="text-slate-500 text-sm mt-2">Controle de manutenção e chamados técnicos</p>
+                            </div>
+                            
+                            <div class="flex flex-col md:flex-row gap-3 w-full md:w-auto">
+                                <!-- Barra de Busca -->
+                                <div class="relative w-full md:w-64">
+                                    <input type="text" id="revisoes-searchInput" onkeyup="applyRevisoesFilters()" placeholder="Buscar placa, motorista..." 
+                                        class="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm shadow-sm bg-slate-50">
+                                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-3.5 text-gray-400 text-xs"></i>
                                 </div>
-                                <div>
-                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Tipo de Revisão *</label>
-                                    <input type="text" id="revisao-tipo" required
-                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all"
-                                           placeholder="Ex: 10.000 km, 20.000 km">
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-semibold text-gray-700 mb-2">KM da Revisão *</label>
-                                    <input type="number" id="revisao-km" required min="0"
-                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all"
-                                           placeholder="0">
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Data da Revisão *</label>
-                                    <input type="date" id="revisao-data" required
-                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all">
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-semibold text-gray-700 mb-2">KM Próxima Revisão *</label>
-                                    <input type="number" id="revisao-km-proxima" required min="0"
-                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all"
-                                           placeholder="0">
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Data Próxima Prevista</label>
-                                    <input type="date" id="revisao-data-proxima"
-                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all">
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Oficina</label>
-                                    <input type="text" id="revisao-oficina"
-                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all"
-                                           placeholder="Nome da oficina">
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Valor (R$)</label>
-                                    <input type="number" step="0.01" id="revisao-valor" min="0"
-                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all"
-                                           placeholder="0.00">
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-semibold text-gray-700 mb-2">Observação</label>
-                                    <input type="text" id="revisao-observacao"
-                                           class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all"
-                                           placeholder="Observações">
-                                </div>
-                                <div class="md:col-span-3 flex gap-3">
-                                    <button type="submit" class="gradient-btn text-white px-8 py-3 rounded-xl font-bold shadow-lg">
-                                        ➕ Salvar Revisão
-                                    </button>
-                                    <button type="button" id="revisao-cancelar" class="hidden px-8 py-3 bg-gray-300 hover:bg-gray-400 rounded-xl font-bold shadow-lg transition-all">
-                                        ❌ Cancelar
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
 
-                        <!-- Filtros -->
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                            <div>
-                                <label class="block text-sm font-semibold text-gray-700 mb-2">Filtrar por Veículo</label>
-                                <select id="revisao-filtro-placa" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all">
-                                    <option value="">Todos os veículos</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-semibold text-gray-700 mb-2">Filtrar por Status</label>
-                                <select id="revisao-filtro-status" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all">
-                                    <option value="">Todos os status</option>
-                                    <option value="em_dia">Em dia</option>
-                                    <option value="proxima">Próxima</option>
-                                    <option value="atrasada">Atrasada</option>
-                                </select>
-                            </div>
-                            <div class="flex items-end">
-                                <button id="revisao-limpar-filtros" class="w-full px-4 py-3 bg-gray-200 hover:bg-gray-300 rounded-xl font-semibold transition-all">
-                                    🔄 Limpar Filtros
+                                <!-- Botão Novo Chamado -->
+                                <button onclick="openRevisoesModal()" class="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition-all flex items-center justify-center gap-2">
+                                    <i class="fa-solid fa-plus"></i> Novo Chamado
                                 </button>
                             </div>
                         </div>
 
-                        <!-- Tabela de Revisões -->
-                        <div class="overflow-x-auto rounded-xl border-2 border-gray-200">
-                            <table class="w-full">
-                                <thead class="bg-gradient-to-r from-purple-100 to-indigo-100">
-                                    <tr>
-                                        <th class="p-4 font-bold text-gray-700">Status</th>
-                                        <th class="p-4 font-bold text-gray-700">Placa</th>
-                                        <th class="p-4 font-bold text-gray-700">Tipo</th>
-                                        <th class="p-4 font-bold text-gray-700">KM Revisão</th>
-                                        <th class="p-4 font-bold text-gray-700">Data</th>
-                                        <th class="p-4 font-bold text-gray-700">KM Próxima</th>
-                                        <th class="p-4 font-bold text-gray-700">Restante</th>
-                                        <th class="p-4 font-bold text-gray-700">Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tabela-revisoes">
-                                    <!-- Linhas serão inseridas aqui via JS -->
-                                </tbody>
-                            </table>
+                        <!-- Abas de Status (Pendente/Andamento/Resolvido) -->
+                        <div class="flex flex-col sm:flex-row gap-2 mb-5">
+                            <button id="revisoes-btn-pendente" onclick="setRevisoesMainTab('pendente')" class="flex-1 sm:flex-none px-6 py-2 rounded-lg text-sm font-bold bg-white border border-red-200 text-red-700 shadow-sm flex items-center justify-center gap-2 transition-all">
+                                <i class="fa-solid fa-circle-exclamation"></i> Pendente (<span id="revisoes-count-pendente">0</span>)
+                            </button>
+                            <button id="revisoes-btn-andamento" onclick="setRevisoesMainTab('andamento')" class="flex-1 sm:flex-none px-6 py-2 rounded-lg text-sm font-bold text-slate-400 hover:text-slate-600 hover:bg-slate-50 flex items-center justify-center gap-2 transition-all opacity-70">
+                                <i class="fa-solid fa-spinner"></i> Andamento (<span id="revisoes-count-andamento">0</span>)
+                            </button>
+                            <button id="revisoes-btn-resolvido" onclick="setRevisoesMainTab('resolvido')" class="flex-1 sm:flex-none px-6 py-2 rounded-lg text-sm font-bold text-slate-400 hover:text-slate-600 hover:bg-slate-50 flex items-center justify-center gap-2 transition-all opacity-70">
+                                <i class="fa-solid fa-circle-check"></i> Resolvido (<span id="revisoes-count-resolvido">0</span>)
+                            </button>
+                        </div>
+
+                        <!-- Filtros por Categoria -->
+                        <div class="flex flex-wrap gap-2 mb-6">
+                            <button id="revisoes-cat-all" onclick="setRevisoesCategory('all')" class="px-4 py-2 text-xs font-bold border-2 border-purple-200 bg-purple-50 text-purple-700 rounded-lg flex items-center gap-1.5 transition-all hover:shadow-sm">
+                                <i class="fa-solid fa-filter"></i> Todos
+                            </button>
+                            <button id="revisoes-cat-pneu" onclick="setRevisoesCategory('pneu')" class="px-4 py-2 text-xs font-bold border-2 border-slate-200 bg-white text-slate-600 rounded-lg flex items-center gap-1.5 transition-all hover:shadow-sm">
+                                <i class="fa-solid fa-circle-dot"></i> Pneus
+                            </button>
+                            <button id="revisoes-cat-revisao" onclick="setRevisoesCategory('revisao')" class="px-4 py-2 text-xs font-bold border-2 border-slate-200 bg-white text-slate-600 rounded-lg flex items-center gap-1.5 transition-all hover:shadow-sm">
+                                <i class="fa-solid fa-clipboard-check"></i> Revisão
+                            </button>
+                            <button id="revisoes-cat-mecanica" onclick="setRevisoesCategory('mecanica')" class="px-4 py-2 text-xs font-bold border-2 border-slate-200 bg-white text-slate-600 rounded-lg flex items-center gap-1.5 transition-all hover:shadow-sm">
+                                <i class="fa-solid fa-wrench"></i> Mecânica
+                            </button>
+                            <button id="revisoes-cat-lataria" onclick="setRevisoesCategory('lataria')" class="px-4 py-2 text-xs font-bold border-2 border-slate-200 bg-white text-slate-600 rounded-lg flex items-center gap-1.5 transition-all hover:shadow-sm">
+                                <i class="fa-solid fa-car-burst"></i> Lataria
+                            </button>
+                        </div>
+
+                        <!-- Lista de Chamados -->
+                        <div id="revisoes-list-container" class="space-y-3 pb-20"></div>
+                    </div>
+
+                    <!-- Modal de Chamados -->
+                    <div id="revisoes-modal" class="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-start justify-center pt-10 px-4 opacity-0 pointer-events-none transition-all duration-300">
+                        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto revisoes-modal-content">
+                            
+                            <!-- Modal Header -->
+                            <div class="sticky top-0 bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-6 rounded-t-2xl flex items-center justify-between z-10">
+                                <h2 id="revisoes-modal-title" class="text-2xl font-bold flex items-center gap-3">
+                                    <i class="fa-solid fa-wrench"></i> Novo Chamado
+                                </h2>
+                                <button onclick="closeRevisoesModal()" class="hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-colors">
+                                    <i class="fa-solid fa-times text-2xl"></i>
+                                </button>
+                            </div>
+
+                            <!-- Modal Body -->
+                            <div class="p-6">
+                                <form id="revisoes-form" onsubmit="event.preventDefault(); saveRevisoesVehicle();" class="space-y-4">
+                                    <input type="hidden" id="revisoes-form-id">
+                                    
+                                    <!-- Dados do Veículo -->
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-sm font-bold text-slate-700 mb-2">🚗 Placa *</label>
+                                            <input type="text" id="revisoes-form-plate" required
+                                                class="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all uppercase font-mono tracking-wider"
+                                                placeholder="ABC1D23">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-bold text-slate-700 mb-2">📊 Quilometragem *</label>
+                                            <input type="text" id="revisoes-form-km" required
+                                                class="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all"
+                                                placeholder="50.000">
+                                        </div>
+                                    </div>
+
+                                    <!-- Dados do Motorista -->
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-sm font-bold text-slate-700 mb-2">👤 Motorista</label>
+                                            <input type="text" id="revisoes-form-driver"
+                                                class="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all"
+                                                placeholder="Nome do motorista">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-bold text-slate-700 mb-2">📱 Telefone</label>
+                                            <input type="text" id="revisoes-form-phone"
+                                                class="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all"
+                                                placeholder="+55 (21) 99999-9999">
+                                        </div>
+                                    </div>
+
+                                    <!-- Categoria e Data -->
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-sm font-bold text-slate-700 mb-2">🔧 Categoria</label>
+                                            <select id="revisoes-form-category"
+                                                class="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all">
+                                                <option value="pneu">🔴 Pneus</option>
+                                                <option value="revisao">📋 Revisão</option>
+                                                <option value="mecanica">⚙️ Mecânica</option>
+                                                <option value="lataria">🚗 Lataria</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-bold text-slate-700 mb-2">📅 Data do Registro</label>
+                                            <input type="text" id="revisoes-form-date"
+                                                class="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all"
+                                                placeholder="DD/MM/AAAA">
+                                        </div>
+                                    </div>
+
+                                    <!-- Título do Chamado -->
+                                    <div>
+                                        <label class="block text-sm font-bold text-slate-700 mb-2">📝 Título do Chamado</label>
+                                        <input type="text" id="revisoes-form-title"
+                                            class="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all"
+                                            placeholder="Ex: Pneu furado / Sem estepe">
+                                    </div>
+
+                                    <!-- Descrição Completa -->
+                                    <div>
+                                        <label class="block text-sm font-bold text-slate-700 mb-2">📄 Descrição Completa</label>
+                                        <textarea id="revisoes-form-desc" rows="4"
+                                            class="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all resize-none"
+                                            placeholder="Descreva o problema em detalhes..."></textarea>
+                                    </div>
+
+                                    <!-- Status Atual -->
+                                    <div>
+                                        <label class="block text-sm font-bold text-slate-700 mb-2">📍 Status Atual</label>
+                                        <input type="text" id="revisoes-form-subStatusLabel"
+                                            class="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all"
+                                            placeholder="Ex: Aguardando Direcionamento">
+                                    </div>
+
+                                    <!-- Localização -->
+                                    <div>
+                                        <label class="block text-sm font-bold text-slate-700 mb-2">🗺️ Localização do Veículo</label>
+                                        <input type="text" id="revisoes-form-location"
+                                            class="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all"
+                                            placeholder="Av. Vereador F. Sabino da Costa, 907">
+                                    </div>
+
+                                    <!-- Botões de Ação -->
+                                    <div class="flex gap-3 pt-4">
+                                        <button type="submit" class="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-3 rounded-lg font-bold shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2">
+                                            <i class="fa-solid fa-check"></i> Salvar Chamado
+                                        </button>
+                                        <button type="button" onclick="closeRevisoesModal()" class="px-6 py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-bold transition-all">
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1596,13 +1974,14 @@
     </script>
 
     <script src="/static/toast.js?v=13.0"></script>
-    <script src="/static/dashboard.js?v=13.3"></script>
+    <script src="/static/dashboard.js?v=13.4"></script>
     <script src="/static/dashboard-realtime.js?v=14.7"></script>
     <script src="/static/km-multas.js?v=1.0"></script>
     <script src="/static/revisoes-tab.js?v=1.0"></script>
     <script src="/static/veiculos-tab.js?v=1.6"></script>
     <script src="/static/relatorios-tab.js?v=1.0"></script>
     <script src="/static/usuarios-tab.js?v=1.0"></script>
+    <script src="/static/revisoes-chamados.js?v=1.1"></script>
     <script>
         // Handle categoria select change
         function handleCategoriaChange() {
@@ -2890,6 +3269,77 @@
                 auditLogsLink.style.display = 'none';
             }
         })();
+    </script>
+
+    <!-- 🌓 Dark Mode Toggle -->
+    <script>
+        // Carregar tema salvo
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark') {
+            document.body.classList.add('dark-mode');
+        }
+
+        // Toggle de tema
+        document.getElementById('theme-toggle-btn')?.addEventListener('click', function() {
+            document.body.classList.toggle('dark-mode');
+            const isDark = document.body.classList.contains('dark-mode');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+        });
+    </script>
+
+    <!-- 📱 Toggle da Sidebar Hamburger (Abrir/Fechar Completamente) -->
+    <script>
+        function toggleSidebarHamburger() {
+            const sidebar = document.querySelector('aside');
+            const overlay = document.getElementById('sidebar-overlay');
+            const hamburgerBtn = document.getElementById('hamburger-btn');
+            
+            if (!sidebar || !overlay || !hamburgerBtn) return;
+            
+            const isHidden = sidebar.classList.contains('sidebar-hidden');
+            
+            if (isHidden) {
+                // Abrir sidebar
+                sidebar.classList.remove('sidebar-hidden');
+                overlay.classList.add('active');
+                hamburgerBtn.classList.add('sidebar-open');
+                
+                // Mudar ícone para X
+                hamburgerBtn.innerHTML = `
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                `;
+            } else {
+                // Fechar sidebar
+                sidebar.classList.add('sidebar-hidden');
+                overlay.classList.remove('active');
+                hamburgerBtn.classList.remove('sidebar-open');
+                
+                // Mudar ícone para hamburger
+                hamburgerBtn.innerHTML = `
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                    </svg>
+                `;
+            }
+        }
+        
+        // Fechar sidebar ao clicar em qualquer link do menu
+        document.addEventListener('DOMContentLoaded', function() {
+            const sidebarLinks = document.querySelectorAll('.sidebar-link');
+            sidebarLinks.forEach(link => {
+                link.addEventListener('click', function() {
+                    // Pequeno delay para a transição da aba acontecer primeiro
+                    setTimeout(() => {
+                        const sidebar = document.querySelector('aside');
+                        if (sidebar && !sidebar.classList.contains('sidebar-hidden')) {
+                            toggleSidebarHamburger();
+                        }
+                    }, 100);
+                });
+            });
+        });
     </script>
 
 </body>
