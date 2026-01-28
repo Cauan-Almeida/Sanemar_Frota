@@ -6,13 +6,13 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>Controle de Frota - Sanemar</title>
-    <link rel="icon" type="image/x-icon" href="/static/favicon.ico?v=9.0">
-    <meta name="app-version" content="9.0">
+    <title>Controle de Frota - Sanemar v5.0</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico?v=10.0">
+    <meta name="app-version" content="10.0">
     <script src="https://cdn.tailwindcss.com?v=3.4.0"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=2">
-    <link rel="manifest" href="/static/manifest.json">
+    <link rel="stylesheet" href="/static/style.css?v=10">
+    <link rel="manifest" href="/static/manifest.json?v=10">
     <style>
         * { 
             font-family: 'Inter', sans-serif;
@@ -565,15 +565,13 @@
                     }
                     
                     try {
-                        const response = await fetch('/api/abastecimento', {
+                        const result = await safeFetchJSON('/api/abastecimento', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ placa, motorista, litros, odometro, veiculo_categoria: categoria })
                         });
                         
-                        const result = await response.json();
-                        
-                        if (response.ok) {
+                        if (result) {
                             showToast('success', '✅ ' + (result.message || 'Abastecimento registrado!'), 5000);
                             // Reseta campos
                             const placaSelect = document.getElementById('quick-refuel-placa') || document.getElementById('quick-refuel-placa-select-hidden');
@@ -629,8 +627,33 @@
     
     <!-- Funções globais para veículos em curso -->
     <script id="veiculos-em-curso-script-v4">
-        // ⚠️ VERSÃO 4.0 - 2025-11-18 21:30 - CARDS RESPONSIVOS MOBILE
-        console.log('🔧 Script de veículos em curso v4.0 carregado');
+        // ⚠️ VERSÃO 5.0 - 2026-01-28 - TRATAMENTO DE ERROS JSON
+        console.log('🔧 Script de veículos em curso v5.0 carregado');
+        
+        // Função auxiliar para verificar se resposta é JSON válido
+        async function safeFetchJSON(url, options = {}) {
+            try {
+                const response = await fetch(url, options);
+                
+                // Verifica o content-type da resposta
+                const contentType = response.headers.get('content-type');
+                
+                // Se não for JSON, provavelmente é uma página HTML (erro, login, manutenção)
+                if (!contentType || !contentType.includes('application/json')) {
+                    console.error('⚠️ Resposta não é JSON:', contentType);
+                    throw new Error('Servidor retornou HTML em vez de JSON. Possível erro ou manutenção.');
+                }
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                return await response.json();
+            } catch (error) {
+                console.error('❌ Erro na requisição:', error);
+                throw error;
+            }
+        }
         
         // Função para buscar e exibir veículos em curso
         async function fetchVeiculosEmCurso() {
@@ -638,7 +661,7 @@
             try {
                 // Adiciona timestamp para evitar cache + configuração no-cache
                 const timestamp = new Date().getTime();
-                const response = await fetch(`/api/veiculos_em_curso?t=${timestamp}`, {
+                const data = await safeFetchJSON(`/api/veiculos_em_curso?t=${timestamp}`, {
                     cache: 'no-store',
                     headers: {
                         'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -646,9 +669,8 @@
                         'Expires': '0'
                     }
                 });
-                if (!response.ok) throw new Error('Erro ao buscar veículos');
                 
-                const veiculos = await response.json();
+                const veiculos = data;
                 console.log(`📋 Recebidos ${veiculos.length} veículos em curso`);
                 const container = document.getElementById('veiculos-em-curso-container');
                 if (!container) return;
@@ -823,29 +845,23 @@
                     body.horario = horario;
                 }
                 
-                const response = await fetch('/api/chegada', {
+                const result = await safeFetchJSON('/api/chegada', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body)
                 });
                 
-                const result = await response.json();
-                
-                if (response.ok) {
+                if (result) {
                     if (window.showToast) {
                         const msg = horario ? `Chegada registrada: ${placa} às ${horario}` : `Chegada registrada: ${placa}`;
                         showToast('success', msg);
                     }
                     fetchVeiculosEmCurso(); // Atualiza a lista
-                } else {
-                    if (window.showToast) {
-                        showToast('error', result.error || 'Erro ao registrar chegada');
-                    }
                 }
             } catch (error) {
                 console.error('Erro:', error);
                 if (window.showToast) {
-                    showToast('error', 'Erro ao registrar chegada');
+                    showToast('error', error.message || 'Erro ao registrar chegada');
                 }
             }
         }
@@ -861,29 +877,23 @@
             if (!confirmed) return;
             
             try {
-                const response = await fetch('/api/cancelar', {
+                const result = await safeFetchJSON('/api/cancelar', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ veiculo: placa })
                 });
                 
-                const result = await response.json();
-                
-                if (response.ok) {
+                if (result) {
                     if (window.showToast) {
                         showToast('success', `Viagem cancelada: ${placa}`);
                     }
                     // Força atualização imediata
                     fetchVeiculosEmCurso();
-                } else {
-                    if (window.showToast) {
-                        showToast('error', result.error || 'Erro ao cancelar viagem');
-                    }
                 }
             } catch (error) {
                 console.error('Erro:', error);
                 if (window.showToast) {
-                    showToast('error', 'Erro ao cancelar viagem');
+                    showToast('error', error.message || 'Erro ao cancelar viagem');
                 }
             }
         }
@@ -891,6 +901,7 @@
         // Torna as funções globais para acesso de outros scripts
         window.fetchVeiculosEmCurso = fetchVeiculosEmCurso;
         window.cancelarViagem = cancelarViagem;
+        window.safeFetchJSON = safeFetchJSON; // Exporta para outros scripts
 
         console.log('✅ Funções de veículos em curso carregadas');
     </script>
@@ -953,21 +964,36 @@
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js').then(registration => {
-                    console.log('[SW v9] Registrado com sucesso:', registration.scope);
+                    console.log('[SW v15] Registrado com sucesso:', registration.scope);
                     
                     // Detecta atualização do Service Worker
                     registration.addEventListener('updatefound', () => {
                         const newWorker = registration.installing;
                         newWorker.addEventListener('statechange', () => {
                             if (newWorker.state === 'activated' && navigator.serviceWorker.controller) {
-                                console.log('[SW v9] 🔄 Nova versão detectada!');
+                                console.log('[SW v15] 🔄 Nova versão detectada!');
                                 showUpdateToast();
                             }
                         });
                     });
                 }, err => {
-                    console.warn('[SW v9] Falha no registro:', err);
+                    console.warn('[SW v15] Falha no registro:', err);
                 });
+                
+                // Escuta mensagens do Service Worker
+                navigator.serviceWorker.addEventListener('message', event => {
+                    if (event.data.type === 'SW_UPDATED') {
+                        console.log('[SW v15] 📢 Mensagem recebida: Nova versão', event.data.version);
+                        showUpdateModal();
+                    }
+                });
+                
+                // Verifica atualizações a cada 30 segundos
+                setInterval(() => {
+                    navigator.serviceWorker.getRegistration().then(reg => {
+                        if (reg) reg.update();
+                    });
+                }, 30000);
             });
         }
         
@@ -1386,15 +1412,13 @@
             const trajeto = document.getElementById('edit-rapido-trajeto').value;
 
             try {
-                const response = await fetch(`/api/saidas/${saidaId}/atualizar-rapido`, {
+                const result = await safeFetchJSON(`/api/saidas/${saidaId}/atualizar-rapido`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ solicitante, trajeto })
                 });
 
-                const result = await response.json();
-
-                if (response.ok) {
+                if (result) {
                     if (typeof showToast === 'function') {
                         showToast('success', '✅ Saída atualizada com sucesso!');
                     } else {
@@ -1402,19 +1426,13 @@
                     }
                     fecharModalEditarRapido();
                     fetchVeiculosEmCurso(); // Atualiza tabela
-                } else {
-                    if (typeof showToast === 'function') {
-                        showToast('error', `❌ Erro: ${result.error || 'Falha ao atualizar'}`);
-                    } else {
-                        alert(`❌ Erro: ${result.error || 'Falha ao atualizar'}`);
-                    }
                 }
             } catch (error) {
                 console.error('Erro ao atualizar:', error);
                 if (typeof showToast === 'function') {
-                    showToast('error', '❌ Erro ao atualizar saída');
+                    showToast('error', error.message || '❌ Erro ao atualizar saída');
                 } else {
-                    alert('❌ Erro ao atualizar saída');
+                    alert(error.message || '❌ Erro ao atualizar saída');
                 }
             }
         });

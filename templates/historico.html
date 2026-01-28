@@ -535,6 +535,30 @@
             const data = document.getElementById('filtro-data').value;
             const placa = document.getElementById('filtro-placa').value.toUpperCase().trim();
             const motorista = document.getElementById('filtro-motorista').value.toUpperCase().trim();
+            
+            // Detecta qual botão está ativo para cada tipo de filtro
+            let filtroAprovacao = '';
+            if (document.getElementById('btn-aprovado')?.classList.contains('bg-purple-500')) {
+                filtroAprovacao = 'aprovado';
+            } else if (document.getElementById('btn-falta-aprovacao')?.classList.contains('bg-purple-500')) {
+                filtroAprovacao = 'falta_aprovacao';
+            } else if (document.getElementById('btn-sem-direcionamento')?.classList.contains('bg-purple-500')) {
+                filtroAprovacao = 'sem_direcionamento';
+            }
+            
+            let filtroDirecionamento = '';
+            if (document.getElementById('btn-direcionado')?.classList.contains('bg-blue-500')) {
+                filtroDirecionamento = 'direcionado';
+            } else if (document.getElementById('btn-nao-direcionado')?.classList.contains('bg-blue-500')) {
+                filtroDirecionamento = 'nao_direcionado';
+            }
+            
+            let filtroPosDirecionamento = '';
+            if (document.getElementById('btn-pos-aprovado')?.classList.contains('bg-indigo-500')) {
+                filtroPosDirecionamento = 'aprovado';
+            } else if (document.getElementById('btn-pos-falta')?.classList.contains('bg-indigo-500')) {
+                filtroPosDirecionamento = 'falta_aprovacao';
+            }
 
             let filtrados = [...todosRegistros];
 
@@ -551,32 +575,6 @@
                 }
             });
 
-            // Filtro de data
-            if (data) {
-                const [ano, mes, dia] = data.split('-').map(Number);
-                filtrados = filtrados.filter(r => {
-                    const ts = parseDateValue(r.timestampSaida);
-                    if (!ts) return false;
-                    return ts.getFullYear() === ano && 
-                           ts.getMonth() === (mes - 1) && 
-                           ts.getDate() === dia;
-                });
-            }
-
-            // Filtro de placa
-            if (placa) {
-                filtrados = filtrados.filter(r => 
-                    (r.veiculo || '').toUpperCase().includes(placa)
-                );
-            }
-
-            // Filtro de motorista
-            if (motorista) {
-                filtrados = filtrados.filter(r => 
-                    (r.motorista || '').toUpperCase().includes(motorista)
-                );
-            }
-
             renderizarTabela(filtrados);
         }
 
@@ -588,19 +586,6 @@
                 const ano = document.getElementById('filtro-ano').value;
                 
                 // Se houver data específica, usa ela; senão usa mês/ano
-                const dataFiltro = document.getElementById('filtro-data').value;
-                
-                let url = '/api/historico?';
-                if (dataFiltro) {
-                    // Converte yyyy-mm-dd para dd/mm/yyyy
-                    const [y, m, d] = dataFiltro.split('-');
-                    url += `data=${d}/${m}/${y}`;
-                } else {
-                    url += `mes=${mes}&ano=${ano}`;
-                }
-                
-                const response = await fetch(url);
-                const data = await response.json();
                 
                 if (!data || data.error) {
                     throw new Error(data.error || 'Erro ao carregar dados');
@@ -683,9 +668,6 @@
             const toast = document.createElement('div');
             
             const colors = {
-                success: 'bg-green-500',
-                error: 'bg-red-500',
-                info: 'bg-blue-500'
             };
 
             toast.className = `${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 translate-x-0`;
@@ -704,6 +686,9 @@
         document.getElementById('filtro-data').addEventListener('change', aplicarFiltros);
         document.getElementById('filtro-placa').addEventListener('input', aplicarFiltros);
         document.getElementById('filtro-motorista').addEventListener('input', aplicarFiltros);
+        document.getElementById('filtro-aprovacao').addEventListener('change', aplicarFiltros);
+        document.getElementById('filtro-direcionamento').addEventListener('change', aplicarFiltros);
+        document.getElementById('filtro-pos-direcionamento').addEventListener('change', aplicarFiltros);
         
         // Navegação de mês
         document.getElementById('mes-anterior').addEventListener('click', () => {
@@ -726,6 +711,7 @@
             let ano = parseInt(document.getElementById('filtro-ano').value);
             
             mes++;
+            
             if (mes > 12) {
                 mes = 1;
                 ano++;
@@ -782,6 +768,12 @@
             document.getElementById('edit-solicitante').value = saida.solicitante || '';
             document.getElementById('edit-trajeto').value = saida.trajeto || '';
             document.getElementById('edit-status').value = saida.status || 'em_curso';
+            
+            // Novos campos de aprovação e direcionamento
+            document.getElementById('edit-status-aprovacao').value = saida.status_aprovacao || '';
+            document.getElementById('edit-status-direcionamento').value = saida.status_direcionamento || '';
+            document.getElementById('edit-status-pos-direcionamento').value = saida.status_pos_direcionamento || '';
+            document.getElementById('edit-observacoes').value = saida.observacoes || '';
 
             // Converte timestamps para datetime-local
             const saida_date = parseDateValue(saida.timestampSaida);
@@ -814,7 +806,8 @@
                 const result = await response.json();
 
                 if (response.ok) {
-                    mostrarToast('✅ Registro excluído com sucesso!', 'success');
+                    mostrarToast('✅ Registro excluído com sucesso', 'success');
+                    carregarHistorico();
                 } else {
                     mostrarToast(`❌ Erro: ${result.error || 'Falha ao excluir'}`, 'error');
                 }
@@ -881,10 +874,9 @@
                 const result = await response.json();
 
                 if (response.ok) {
-                    console.log('✅ Salvou com sucesso, fechando modal...');
-                    mostrarToast('✅ Registro atualizado com sucesso!', 'success');
+                    console.log('✅ Salvou com sucesso');
+                    mostrarToast('✅ Registro atualizado com sucesso', 'success');
                     
-                    // ✅ Fecha modal diretamente via DOM
                     const modal = document.getElementById('modal-editar');
                     if (modal) {
                         modal.classList.add('hidden');
@@ -907,10 +899,10 @@
                 console.error('Erro ao atualizar:', error);
                 mostrarToast('❌ Erro ao atualizar registro', 'error');
             }
-            });
-        } else {
-            console.error('❌ Formulário de edição não encontrado!');
-        }
+        });
+    } else {
+        console.error('❌ Formulário de edição não encontrado!');
+    }
 
         // Force uppercase no campo veículo do modal
         document.getElementById('edit-veiculo').addEventListener('input', (e) => {
@@ -938,10 +930,8 @@
         
         // Expõe funções globalmente
         window.trocarCategoria = trocarCategoria;
-        
-        // Exporta para debug
-        window.debugHistorico = { todosRegistros, aplicarFiltros };
+        window.editarSaida = editarSaida;
+        window.excluirSaida = excluirSaida;
     </script>
-
 </body>
 </html>

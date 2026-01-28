@@ -579,6 +579,55 @@
             </svg>
         </button>
 
+        <!-- Botão de DEBUG - Encontrar Footer Duplicado (apenas mobile) -->
+        <button id="debug-footer-btn" onclick="debugFooters()" style="position: fixed; bottom: 20px; right: 20px; z-index: 99999; background: #ef4444; color: white; padding: 12px 16px; border-radius: 50%; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.5); border: none; font-size: 20px; display: none;">
+            🐛
+        </button>
+
+        <script>
+            // Mostra botão de debug apenas no mobile
+            if (window.innerWidth <= 768) {
+                document.getElementById('debug-footer-btn').style.display = 'block';
+            }
+
+            function debugFooters() {
+                let report = '🔍 ELEMENTOS FIXOS NO BOTTOM:\n\n';
+                let count = 0;
+                
+                document.querySelectorAll('*').forEach(el => {
+                    const style = window.getComputedStyle(el);
+                    const position = style.position;
+                    const bottom = style.bottom;
+                    
+                    if ((position === 'fixed' || position === 'absolute') && 
+                        (bottom === '0px' || bottom === '0')) {
+                        count++;
+                        el.style.border = '5px solid red';
+                        el.style.boxShadow = '0 0 20px red';
+                        
+                        report += `${count}. ${el.tagName}\n`;
+                        report += `   ID: ${el.id || 'sem ID'}\n`;
+                        report += `   Classes: ${el.className || 'sem classes'}\n`;
+                        report += `   Position: ${position}\n`;
+                        report += `   Z-index: ${style.zIndex}\n\n`;
+                    }
+                });
+                
+                report += `\n📊 TOTAL: ${count} elementos\n\n`;
+                report += 'Os elementos estão com BORDA VERMELHA.\n';
+                report += 'Me envie um print da tela!';
+                
+                alert(report);
+                
+                // Copia para área de transferência
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(report).then(() => {
+                        setTimeout(() => alert('✅ Relatório copiado! Cole em uma mensagem para mim.'), 500);
+                    });
+                }
+            }
+        </script>
+
         <!-- Main Content -->
         <div class="flex-1 flex flex-col overflow-hidden">
             <header class="glass shadow-xl p-6 pl-24 flex justify-between items-center animate-fade-in">

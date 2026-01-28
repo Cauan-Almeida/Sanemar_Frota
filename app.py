@@ -4198,6 +4198,8 @@ def pdf_abastecimentos():
     try:
         # Filtros opcionais
         veiculo = request.args.get('veiculo')
+        motorista = request.args.get('motorista')
+        tipo_combustivel = request.args.get('tipo_combustivel')
         data_inicio = request.args.get('data_inicio')
         data_fim = request.args.get('data_fim')
         
@@ -4208,6 +4210,10 @@ def pdf_abastecimentos():
         filters = []
         if veiculo:
             filters.append(firestore.FieldFilter('veiculo', '==', veiculo))
+        if motorista:
+            filters.append(firestore.FieldFilter('motorista', '==', motorista))
+        if tipo_combustivel:
+            filters.append(firestore.FieldFilter('tipo_combustivel', '==', tipo_combustivel))
         
         if data_inicio:
             try:
@@ -4391,7 +4397,11 @@ def pdf_saidas():
         # Filtros opcionais
         veiculo = request.args.get('veiculo')
         motorista = request.args.get('motorista')
+        solicitante = request.args.get('solicitante')
         status = request.args.get('status')  # 'em_curso' ou 'finalizada'
+        categoria = request.args.get('categoria')  # 'Base ETE de Araçatiba' ou 'Vans'
+        status_aprovacao = request.args.get('status_aprovacao')
+        status_direcionamento = request.args.get('status_direcionamento')
         data_inicio = request.args.get('data_inicio')
         data_fim = request.args.get('data_fim')
         
@@ -4404,8 +4414,16 @@ def pdf_saidas():
             filters.append(firestore.FieldFilter('veiculo', '==', veiculo))
         if motorista:
             filters.append(firestore.FieldFilter('motorista', '==', motorista))
+        if solicitante:
+            filters.append(firestore.FieldFilter('solicitante', '==', solicitante))
         if status:
             filters.append(firestore.FieldFilter('status', '==', status))
+        if categoria:
+            filters.append(firestore.FieldFilter('veiculo_categoria', '==', categoria))
+        if status_aprovacao:
+            filters.append(firestore.FieldFilter('status_aprovacao', '==', status_aprovacao))
+        if status_direcionamento:
+            filters.append(firestore.FieldFilter('status_direcionamento', '==', status_direcionamento))
         
         if data_inicio:
             try:

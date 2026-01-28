@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Controle de Frota - Sanemar</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Controle de Frota - Sanemar - v2.1</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <!-- Ícones -->
@@ -94,6 +97,62 @@
             </div>
         </div>
 
+        <!-- Filtros de Aprovação e Direcionamento -->
+        <div class="mb-6 p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl border-2 border-purple-200">
+            <label class="block text-sm font-semibold text-gray-700 mb-3">🎯 Filtros de Aprovação e Direcionamento</label>
+            
+            <!-- Filtros de Aprovação -->
+            <div class="mb-4">
+                <p class="text-xs font-semibold text-gray-600 mb-2">Status de Aprovação:</p>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="aplicarFiltroRapido('aprovacao', '')" class="px-3 py-1.5 rounded-lg bg-purple-500 text-white text-xs font-bold transition-all border-2 border-purple-500" id="btn-todos-aprovacao">
+                        🌐 Todos
+                    </button>
+                    <button onclick="aplicarFiltroRapido('aprovacao', 'aprovado')" class="px-3 py-1.5 rounded-lg bg-white hover:bg-green-50 text-gray-700 text-xs font-bold transition-all border-2 border-gray-300" id="btn-aprovado">
+                        ✅ Aprovados
+                    </button>
+                    <button onclick="aplicarFiltroRapido('aprovacao', 'falta_aprovacao')" class="px-3 py-1.5 rounded-lg bg-white hover:bg-yellow-50 text-gray-700 text-xs font-bold transition-all border-2 border-gray-300" id="btn-falta-aprovacao">
+                        ⏳ Falta Aprovação
+                    </button>
+                    <button onclick="aplicarFiltroRapido('aprovacao', 'sem_direcionamento')" class="px-3 py-1.5 rounded-lg bg-white hover:bg-red-50 text-gray-700 text-xs font-bold transition-all border-2 border-gray-300" id="btn-sem-direcionamento">
+                        ❌ Sem Direcionamento
+                    </button>
+                </div>
+            </div>
+
+            <!-- Filtros de Direcionamento -->
+            <div class="mb-4">
+                <p class="text-xs font-semibold text-gray-600 mb-2">Direcionamento:</p>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="aplicarFiltroRapido('direcionamento', '')" class="px-3 py-1.5 rounded-lg bg-blue-500 text-white text-xs font-bold transition-all border-2 border-blue-500" id="btn-todos-direcionamento">
+                        🌐 Todos
+                    </button>
+                    <button onclick="aplicarFiltroRapido('direcionamento', 'direcionado')" class="px-3 py-1.5 rounded-lg bg-white hover:bg-green-50 text-gray-700 text-xs font-bold transition-all border-2 border-gray-300" id="btn-direcionado">
+                        ✅ Direcionado
+                    </button>
+                    <button onclick="aplicarFiltroRapido('direcionamento', 'nao_direcionado')" class="px-3 py-1.5 rounded-lg bg-white hover:bg-yellow-50 text-gray-700 text-xs font-bold transition-all border-2 border-gray-300" id="btn-nao-direcionado">
+                        ⏳ Não Direcionado
+                    </button>
+                </div>
+            </div>
+
+            <!-- Filtros Pós-Direcionamento -->
+            <div>
+                <p class="text-xs font-semibold text-gray-600 mb-2">Pós-Direcionamento:</p>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="aplicarFiltroRapido('pos_direcionamento', '')" class="px-3 py-1.5 rounded-lg bg-indigo-500 text-white text-xs font-bold transition-all border-2 border-indigo-500" id="btn-todos-pos">
+                        🌐 Todos
+                    </button>
+                    <button onclick="aplicarFiltroRapido('pos_direcionamento', 'aprovado')" class="px-3 py-1.5 rounded-lg bg-white hover:bg-green-50 text-gray-700 text-xs font-bold transition-all border-2 border-gray-300" id="btn-pos-aprovado">
+                        ✅ Aprovado
+                    </button>
+                    <button onclick="aplicarFiltroRapido('pos_direcionamento', 'falta_aprovacao')" class="px-3 py-1.5 rounded-lg bg-white hover:bg-yellow-50 text-gray-700 text-xs font-bold transition-all border-2 border-gray-300" id="btn-pos-falta">
+                        ⏳ Falta Aprovação
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Lista de Cards -->
         <div id="list-container" class="space-y-3 pb-20">
             <!-- Cards injetados via JS -->
@@ -163,6 +222,39 @@
                     <div class="md:col-span-2">
                         <label class="block text-xs font-bold text-slate-500 mb-1">Descrição Completa</label>
                         <textarea id="form-desc" rows="4" class="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Detalhes do ocorrido..."></textarea>
+                    </div>
+                    
+                    <!-- Campos de Aprovação e Direcionamento -->
+                    <div>
+                        <label class="block text-xs font-bold text-purple-600 mb-1">✅ Status de Aprovação</label>
+                        <select id="form-status-aprovacao" class="w-full p-2 border border-purple-300 rounded focus:ring-2 focus:ring-purple-500 focus:outline-none bg-white">
+                            <option value="">Não especificado</option>
+                            <option value="aprovado">✅ Aprovado</option>
+                            <option value="falta_aprovacao">⏳ Falta Aprovação</option>
+                            <option value="sem_direcionamento">❌ Sem Direcionamento</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-blue-600 mb-1">🎯 Status de Direcionamento</label>
+                        <select id="form-status-direcionamento" class="w-full p-2 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                            <option value="">Não especificado</option>
+                            <option value="direcionado">✅ Direcionado</option>
+                            <option value="nao_direcionado">⏳ Ainda Não Direcionado</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-xs font-bold text-indigo-600 mb-1">📝 Status Pós-Direcionamento</label>
+                        <select id="form-status-pos-direcionamento" class="w-full p-2 border border-indigo-300 rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white">
+                            <option value="">Não especificado</option>
+                            <option value="aprovado">✅ Aprovado</option>
+                            <option value="falta_aprovacao">⏳ Falta Aprovação</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">📌 Observações</label>
+                        <textarea id="form-observacoes" rows="2" class="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Observações sobre aprovação, direcionamento, etc."></textarea>
                     </div>
                     
                     <!-- Hidden fields handled by logic, but editable here for simplicity -->
@@ -260,6 +352,11 @@
         let vehicles = [];
         let currentTab = 'pendente';
         let currentCategory = 'all';
+        
+        // Filtros de aprovação e direcionamento
+        let filtroAprovacao = '';
+        let filtroDirecionamento = '';
+        let filtroPosDirecionamento = '';
 
         // Carregar dados
         function loadData() {
@@ -324,6 +421,57 @@
             });
             applyFilters();
         }
+        
+        // Função para aplicar filtros rápidos de aprovação/direcionamento
+        window.aplicarFiltroRapido = function(tipo, valor) {
+            if (tipo === 'aprovacao') {
+                filtroAprovacao = valor;
+                
+                // Remove active de todos os botões do grupo
+                document.querySelectorAll('[id^="btn-todos-aprovacao"], [id^="btn-aprovado"], [id^="btn-falta-aprovacao"], [id^="btn-sem-direcionamento"]').forEach(btn => {
+                    btn.classList.remove('bg-purple-500', 'text-white', 'border-purple-500');
+                    btn.classList.add('bg-white', 'text-gray-700', 'border-gray-300');
+                });
+                
+                // Ativa o botão clicado
+                let btnId = valor === '' ? 'btn-todos-aprovacao' : `btn-${valor.replace('_', '-')}`;
+                const btn = document.getElementById(btnId);
+                if (btn) {
+                    btn.classList.remove('bg-white', 'text-gray-700', 'border-gray-300');
+                    btn.classList.add('bg-purple-500', 'text-white', 'border-purple-500');
+                }
+            } else if (tipo === 'direcionamento') {
+                filtroDirecionamento = valor;
+                
+                document.querySelectorAll('[id^="btn-todos-direcionamento"], [id^="btn-direcionado"], [id^="btn-nao-direcionado"]').forEach(btn => {
+                    btn.classList.remove('bg-blue-500', 'text-white', 'border-blue-500');
+                    btn.classList.add('bg-white', 'text-gray-700', 'border-gray-300');
+                });
+                
+                let btnId = valor === '' ? 'btn-todos-direcionamento' : `btn-${valor.replace('_', '-')}`;
+                const btn = document.getElementById(btnId);
+                if (btn) {
+                    btn.classList.remove('bg-white', 'text-gray-700', 'border-gray-300');
+                    btn.classList.add('bg-blue-500', 'text-white', 'border-blue-500');
+                }
+            } else if (tipo === 'pos_direcionamento') {
+                filtroPosDirecionamento = valor;
+                
+                document.querySelectorAll('[id^="btn-todos-pos"], [id^="btn-pos-aprovado"], [id^="btn-pos-falta"]').forEach(btn => {
+                    btn.classList.remove('bg-indigo-500', 'text-white', 'border-indigo-500');
+                    btn.classList.add('bg-white', 'text-gray-700', 'border-gray-300');
+                });
+                
+                let btnId = valor === '' ? 'btn-todos-pos' : `btn-pos-${valor === 'aprovado' ? 'aprovado' : 'falta'}`;
+                const btn = document.getElementById(btnId);
+                if (btn) {
+                    btn.classList.remove('bg-white', 'text-gray-700', 'border-gray-300');
+                    btn.classList.add('bg-indigo-500', 'text-white', 'border-indigo-500');
+                }
+            }
+            
+            applyFilters();
+        };
 
         function applyFilters() {
             const search = document.getElementById('searchInput').value.toLowerCase();
@@ -336,7 +484,13 @@
                 const matchSearch = item.plate.toLowerCase().includes(search) || 
                                     item.driver.toLowerCase().includes(search) ||
                                     item.title.toLowerCase().includes(search);
-                return matchTab && matchCat && matchSearch;
+                
+                // Filtros de aprovação e direcionamento
+                const matchAprovacao = !filtroAprovacao || item.status_aprovacao === filtroAprovacao;
+                const matchDirecionamento = !filtroDirecionamento || item.status_direcionamento === filtroDirecionamento;
+                const matchPosDirecionamento = !filtroPosDirecionamento || item.status_pos_direcionamento === filtroPosDirecionamento;
+                
+                return matchTab && matchCat && matchSearch && matchAprovacao && matchDirecionamento && matchPosDirecionamento;
             });
 
             if (filtered.length === 0) {
@@ -523,6 +677,10 @@
             document.getElementById('form-subStatusLabel').value = '';
             document.getElementById('form-category').value = 'mecanica';
             document.getElementById('form-date').value = new Date().toLocaleDateString('pt-BR');
+            document.getElementById('form-status-aprovacao').value = '';
+            document.getElementById('form-status-direcionamento').value = '';
+            document.getElementById('form-status-pos-direcionamento').value = '';
+            document.getElementById('form-observacoes').value = '';
 
             if (editId) {
                 title.innerText = "Editar Chamado";
@@ -539,6 +697,10 @@
                     document.getElementById('form-category').value = item.category;
                     document.getElementById('form-location').value = item.location;
                     if(item.date) document.getElementById('form-date').value = item.date;
+                    document.getElementById('form-status-aprovacao').value = item.status_aprovacao || '';
+                    document.getElementById('form-status-direcionamento').value = item.status_direcionamento || '';
+                    document.getElementById('form-status-pos-direcionamento').value = item.status_pos_direcionamento || '';
+                    document.getElementById('form-observacoes').value = item.observacoes || '';
                 }
             } else {
                 title.innerText = "Novo Chamado";
@@ -575,7 +737,11 @@
                 subStatusLabel: document.getElementById('form-subStatusLabel').value || "Aguardando",
                 location: document.getElementById('form-location').value,
                 date: document.getElementById('form-date').value,
-                requester: "Usuário do Sistema" // Padrão
+                requester: "Usuário do Sistema", // Padrão
+                status_aprovacao: document.getElementById('form-status-aprovacao').value,
+                status_direcionamento: document.getElementById('form-status-direcionamento').value,
+                status_pos_direcionamento: document.getElementById('form-status-pos-direcionamento').value,
+                observacoes: document.getElementById('form-observacoes').value
             };
 
             if (id) {

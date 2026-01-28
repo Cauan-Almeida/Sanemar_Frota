@@ -107,7 +107,14 @@
                     </div>
                 </div>
                 <form id="form-abastecimentos" class="space-y-3">
-                    <input type="text" id="abast-veiculo" placeholder="Veículo (ex: ABC1234)" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-orange-500 transition-all">
+                    <input type="text" id="abast-veiculo" placeholder="Veículo (ex: ABC1234)" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-orange-500 transition-all uppercase">
+                    <input type="text" id="abast-motorista" placeholder="Motorista" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-orange-500 transition-all">
+                    <select id="abast-tipo-combustivel" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-orange-500 transition-all">
+                        <option value="">Todos os Combustíveis</option>
+                        <option value="gasolina">Gasolina</option>
+                        <option value="etanol">Etanol</option>
+                        <option value="diesel">Diesel</option>
+                    </select>
                     <input type="date" id="abast-data-inicio" placeholder="Data Início" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-orange-500 transition-all">
                     <input type="date" id="abast-data-fim" placeholder="Data Fim" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-orange-500 transition-all">
                     <button type="submit" class="w-full bg-gradient-to-r from-orange-500 to-amber-500 text-white py-3 rounded-xl font-semibold shadow-lg hover:scale-105 transition-all">
@@ -126,12 +133,29 @@
                     </div>
                 </div>
                 <form id="form-saidas" class="space-y-3">
-                    <input type="text" id="saidas-veiculo" placeholder="Veículo (ex: ABC1234)" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 transition-all">
+                    <input type="text" id="saidas-veiculo" placeholder="Veículo (ex: ABC1234)" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 transition-all uppercase">
                     <input type="text" id="saidas-motorista" placeholder="Motorista" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 transition-all">
+                    <input type="text" id="saidas-solicitante" placeholder="Solicitante" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 transition-all">
                     <select id="saidas-status" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 transition-all">
                         <option value="">Todos os Status</option>
                         <option value="em_curso">Em Curso</option>
                         <option value="finalizada">Finalizada</option>
+                    </select>
+                    <select id="saidas-categoria" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 transition-all">
+                        <option value="">Todas as Categorias</option>
+                        <option value="Base ETE de Araçatiba">Base ETE de Araçatiba</option>
+                        <option value="Vans">Vans</option>
+                    </select>
+                    <select id="saidas-aprovacao" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 transition-all">
+                        <option value="">Status Aprovação</option>
+                        <option value="aprovado">✅ Aprovados</option>
+                        <option value="falta_aprovacao">⏳ Falta Aprovação</option>
+                        <option value="sem_direcionamento">❌ Sem Direcionamento</option>
+                    </select>
+                    <select id="saidas-direcionamento" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 transition-all">
+                        <option value="">Status Direcionamento</option>
+                        <option value="direcionado">✅ Direcionado</option>
+                        <option value="nao_direcionado">⏳ Ainda Não Direcionado</option>
                     </select>
                     <input type="date" id="saidas-data-inicio" placeholder="Data Início" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 transition-all">
                     <input type="date" id="saidas-data-fim" placeholder="Data Fim" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 transition-all">
@@ -141,10 +165,80 @@
                 </form>
             </div>
 
+            <!-- 5. Revisões e Manutenções -->
+            <div class="bg-white rounded-2xl shadow-xl p-6">
+                <div class="flex items-center gap-3 mb-4">
+                    <span class="text-4xl">🔧</span>
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800">Revisões/Manutenções</h2>
+                        <p class="text-gray-600 text-sm">Histórico de manutenções</p>
+                    </div>
+                </div>
+                <form id="form-revisoes" class="space-y-3">
+                    <input type="text" id="revisoes-veiculo" placeholder="Veículo (ex: ABC1234)" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-purple-500 transition-all uppercase">
+                    <select id="revisoes-tipo" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-purple-500 transition-all">
+                        <option value="">Todos os Tipos</option>
+                        <option value="pneu">🚗 Pneus</option>
+                        <option value="revisao">🛠️ Revisão</option>
+                        <option value="mecanica">⚙️ Mecânica</option>
+                        <option value="lataria">🔨 Lataria</option>
+                    </select>
+                    <select id="revisoes-status" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-purple-500 transition-all">
+                        <option value="">Todos os Status</option>
+                        <option value="pendente">⏳ Pendentes</option>
+                        <option value="andamento">🔄 Em Andamento</option>
+                        <option value="resolvido">✅ Resolvidos</option>
+                    </select>
+                    <input type="date" id="revisoes-data-inicio" placeholder="Data Início" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-purple-500 transition-all">
+                    <input type="date" id="revisoes-data-fim" placeholder="Data Fim" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-purple-500 transition-all">
+                    <button type="submit" class="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 rounded-xl font-semibold shadow-lg hover:scale-105 transition-all">
+                        📥 Gerar PDF Filtrado
+                    </button>
+                </form>
+            </div>
+
+            <!-- 6. Km e Multas -->
+            <div class="bg-white rounded-2xl shadow-xl p-6">
+                <div class="flex items-center gap-3 mb-4">
+                    <span class="text-4xl">📊</span>
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800">Km e Multas</h2>
+                        <p class="text-gray-600 text-sm">Relatório de quilometragem e multas</p>
+                    </div>
+                </div>
+                <form id="form-km-multas" class="space-y-3">
+                    <input type="text" id="km-veiculo" placeholder="Veículo (ex: ABC1234)" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-red-500 transition-all uppercase">
+                    <select id="km-tipo" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-red-500 transition-all">
+                        <option value="">Todos</option>
+                        <option value="km">📏 Apenas Km</option>
+                        <option value="multas">🚨 Apenas Multas</option>
+                    </select>
+                    <input type="date" id="km-data-inicio" placeholder="Data Início" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-red-500 transition-all">
+                    <input type="date" id="km-data-fim" placeholder="Data Fim" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-red-500 transition-all">
+                    <button type="submit" class="w-full bg-gradient-to-r from-red-500 to-rose-500 text-white py-3 rounded-xl font-semibold shadow-lg hover:scale-105 transition-all">
+                        📥 Gerar PDF Filtrado
+                    </button>
+                </form>
+            </div>
+
         </div>
     </div>
 
     <script>
+        // Uppercase automático nos campos de veículo
+        document.getElementById('abast-veiculo').addEventListener('input', (e) => {
+            e.target.value = e.target.value.toUpperCase();
+        });
+        document.getElementById('saidas-veiculo').addEventListener('input', (e) => {
+            e.target.value = e.target.value.toUpperCase();
+        });
+        document.getElementById('revisoes-veiculo').addEventListener('input', (e) => {
+            e.target.value = e.target.value.toUpperCase();
+        });
+        document.getElementById('km-veiculo').addEventListener('input', (e) => {
+            e.target.value = e.target.value.toUpperCase();
+        });
+
         // Form Motoristas
         document.getElementById('form-motoristas').addEventListener('submit', (e) => {
             e.preventDefault();
@@ -174,7 +268,9 @@
         // Form Abastecimentos
         document.getElementById('form-abastecimentos').addEventListener('submit', (e) => {
             e.preventDefault();
-            const veiculo = document.getElementById('abast-veiculo').value.trim();
+            const veiculo = document.getElementById('abast-veiculo').value.trim().toUpperCase();
+            const motorista = document.getElementById('abast-motorista').value.trim();
+            const tipoCombustivel = document.getElementById('abast-tipo-combustivel').value;
             const dataInicio = document.getElementById('abast-data-inicio').value;
             const dataFim = document.getElementById('abast-data-fim').value;
             
@@ -182,6 +278,8 @@
             const params = [];
             
             if (veiculo) params.push(`veiculo=${encodeURIComponent(veiculo)}`);
+            if (motorista) params.push(`motorista=${encodeURIComponent(motorista)}`);
+            if (tipoCombustivel) params.push(`tipo_combustivel=${encodeURIComponent(tipoCombustivel)}`);
             if (dataInicio) params.push(`data_inicio=${dataInicio}T00:00:00`);
             if (dataFim) params.push(`data_fim=${dataFim}T23:59:59`);
             
@@ -192,9 +290,13 @@
         // Form Saídas
         document.getElementById('form-saidas').addEventListener('submit', (e) => {
             e.preventDefault();
-            const veiculo = document.getElementById('saidas-veiculo').value.trim();
+            const veiculo = document.getElementById('saidas-veiculo').value.trim().toUpperCase();
             const motorista = document.getElementById('saidas-motorista').value.trim();
+            const solicitante = document.getElementById('saidas-solicitante').value.trim();
             const status = document.getElementById('saidas-status').value;
+            const categoria = document.getElementById('saidas-categoria').value;
+            const aprovacao = document.getElementById('saidas-aprovacao').value;
+            const direcionamento = document.getElementById('saidas-direcionamento').value;
             const dataInicio = document.getElementById('saidas-data-inicio').value;
             const dataFim = document.getElementById('saidas-data-fim').value;
             
@@ -203,7 +305,53 @@
             
             if (veiculo) params.push(`veiculo=${encodeURIComponent(veiculo)}`);
             if (motorista) params.push(`motorista=${encodeURIComponent(motorista)}`);
+            if (solicitante) params.push(`solicitante=${encodeURIComponent(solicitante)}`);
             if (status) params.push(`status=${status}`);
+            if (categoria) params.push(`categoria=${encodeURIComponent(categoria)}`);
+            if (aprovacao) params.push(`status_aprovacao=${aprovacao}`);
+            if (direcionamento) params.push(`status_direcionamento=${direcionamento}`);
+            if (dataInicio) params.push(`data_inicio=${dataInicio}T00:00:00`);
+            if (dataFim) params.push(`data_fim=${dataFim}T23:59:59`);
+            
+            url += params.join('&');
+            window.open(url, '_blank');
+        });
+
+        // Form Revisões
+        document.getElementById('form-revisoes').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const veiculo = document.getElementById('revisoes-veiculo').value.trim().toUpperCase();
+            const tipo = document.getElementById('revisoes-tipo').value;
+            const status = document.getElementById('revisoes-status').value;
+            const dataInicio = document.getElementById('revisoes-data-inicio').value;
+            const dataFim = document.getElementById('revisoes-data-fim').value;
+            
+            let url = '/pdf/revisoes?';
+            const params = [];
+            
+            if (veiculo) params.push(`veiculo=${encodeURIComponent(veiculo)}`);
+            if (tipo) params.push(`tipo=${encodeURIComponent(tipo)}`);
+            if (status) params.push(`status=${status}`);
+            if (dataInicio) params.push(`data_inicio=${dataInicio}T00:00:00`);
+            if (dataFim) params.push(`data_fim=${dataFim}T23:59:59`);
+            
+            url += params.join('&');
+            window.open(url, '_blank');
+        });
+
+        // Form Km e Multas
+        document.getElementById('form-km-multas').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const veiculo = document.getElementById('km-veiculo').value.trim().toUpperCase();
+            const tipo = document.getElementById('km-tipo').value;
+            const dataInicio = document.getElementById('km-data-inicio').value;
+            const dataFim = document.getElementById('km-data-fim').value;
+            
+            let url = '/pdf/km-multas?';
+            const params = [];
+            
+            if (veiculo) params.push(`veiculo=${encodeURIComponent(veiculo)}`);
+            if (tipo) params.push(`tipo=${tipo}`);
             if (dataInicio) params.push(`data_inicio=${dataInicio}T00:00:00`);
             if (dataFim) params.push(`data_fim=${dataFim}T23:59:59`);
             

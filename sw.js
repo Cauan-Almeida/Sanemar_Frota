@@ -1,5 +1,5 @@
 // ⚠️ AUMENTE ESTE NÚMERO SEMPRE QUE FIZER MUDANÇAS NO CÓDIGO
-const APP_VERSION = 'v13.33'; // Fix: .replace(tzinfo=) ao invés de .localize() - 09/01/2026
+const APP_VERSION = 'v15.0'; // PWA Auto-update + Correções JSON - 28/01/2026
 const CACHE_NAME = `frota-sanemar-cache-${APP_VERSION}`;
 const OLD_CACHES = [
   'frota-sanemar-cache-v3',
@@ -7,7 +7,9 @@ const OLD_CACHES = [
   'frota-sanemar-cache-v5',
   'frota-sanemar-cache-v6-clean',
   'frota-sanemar-cache-v7-final',
-  'frota-sanemar-cache-v8-connection'
+  'frota-sanemar-cache-v8-connection',
+  'frota-sanemar-cache-v13.33',
+  'frota-sanemar-cache-v14.0'
 ];
 const urlsToCache = [
   '/',
