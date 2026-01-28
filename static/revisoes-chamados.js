@@ -78,6 +78,7 @@ const initialRevisoesData = [
 let revisoesVehicles = [];
 let revisoesCurrentTab = 'pendente';
 let revisoesCurrentCategory = 'all';
+let revisoesCurrentAprovacao = 'all'; // NOVO: Filtro de aprovação/direcionamento
 
 // Labels de categorias
 const revisoesCategoryLabels = {
@@ -170,6 +171,27 @@ function setRevisoesCategory(cat) {
     applyRevisoesFilters();
 }
 
+// NOVO: Alterar filtro de aprovação/direcionamento
+function setRevisoesAprovacao(filtro) {
+    revisoesCurrentAprovacao = filtro;
+    const filtros = ['all', 'aprovado', 'falta_aprovacao', 'sem_direcionamento', 'direcionado', 'nao_direcionado'];
+    const filtrosId = ['all', 'aprovado', 'faltaaprovacao', 'semdirecionamento', 'direcionado', 'naodirecionado'];
+    
+    filtros.forEach((f, index) => {
+        const btn = document.getElementById(`revisoes-apr-${filtrosId[index]}`);
+        if (!btn) return;
+        
+        if (f === filtro) {
+            btn.classList.remove('border-slate-200', 'bg-white', 'text-slate-600');
+            btn.classList.add('border-blue-200', 'bg-blue-50', 'text-blue-700');
+        } else {
+            btn.classList.add('border-slate-200', 'bg-white', 'text-slate-600');
+            btn.classList.remove('border-blue-200', 'bg-blue-50', 'text-blue-700');
+        }
+    });
+    applyRevisoesFilters();
+}
+
 // Aplicar todos os filtros e renderizar lista
 function applyRevisoesFilters() {
     const searchInput = document.getElementById('revisoes-searchInput');
@@ -183,10 +205,30 @@ function applyRevisoesFilters() {
     const filtered = revisoesVehicles.filter(item => {
         const matchTab = item.mainStatus === revisoesCurrentTab;
         const matchCat = revisoesCurrentCategory === 'all' || item.category === revisoesCurrentCategory;
+        
+        // NOVO: Filtro de aprovação/direcionamento
+        let matchAprovacao = true;
+        if (revisoesCurrentAprovacao !== 'all') {
+            const aprovacao = item.aprovacao || '';
+            const direcionamento = item.direcionamento || '';
+            
+            if (revisoesCurrentAprovacao === 'aprovado') {
+                matchAprovacao = aprovacao === 'aprovado';
+            } else if (revisoesCurrentAprovacao === 'falta_aprovacao') {
+                matchAprovacao = aprovacao === 'falta_aprovacao';
+            } else if (revisoesCurrentAprovacao === 'sem_direcionamento') {
+                matchAprovacao = direcionamento === 'sem_direcionamento';
+            } else if (revisoesCurrentAprovacao === 'direcionado') {
+                matchAprovacao = direcionamento === 'direcionado';
+            } else if (revisoesCurrentAprovacao === 'nao_direcionado') {
+                matchAprovacao = direcionamento === 'nao_direcionado';
+            }
+        }
+        
         const matchSearch = item.plate.toLowerCase().includes(search) || 
                             item.driver.toLowerCase().includes(search) ||
                             item.title.toLowerCase().includes(search);
-        return matchTab && matchCat && matchSearch;
+        return matchTab && matchCat && matchAprovacao && matchSearch;
     });
 
     if (filtered.length === 0) {
@@ -396,6 +438,8 @@ function openRevisoesModal(editId = null) {
             document.getElementById('revisoes-form-subStatusLabel').value = item.subStatusLabel;
             document.getElementById('revisoes-form-category').value = item.category;
             document.getElementById('revisoes-form-location').value = item.location;
+            document.getElementById('revisoes-form-aprovacao').value = item.aprovacao || '';
+            document.getElementById('revisoes-form-direcionamento').value = item.direcionamento || '';
             if(item.date) document.getElementById('revisoes-form-date').value = item.date;
         }
     } else {
@@ -441,6 +485,8 @@ function saveRevisoesVehicle() {
         subStatusLabel: document.getElementById('revisoes-form-subStatusLabel').value || "Aguardando",
         location: document.getElementById('revisoes-form-location').value,
         date: document.getElementById('revisoes-form-date').value,
+        aprovacao: document.getElementById('revisoes-form-aprovacao').value || '',
+        direcionamento: document.getElementById('revisoes-form-direcionamento').value || '',
         requester: "Usuário do Sistema"
     };
 
@@ -564,6 +610,7 @@ window.loadRevisoesData = loadRevisoesData;
 window.saveRevisoesData = saveRevisoesData;
 window.setRevisoesMainTab = setRevisoesMainTab;
 window.setRevisoesCategory = setRevisoesCategory;
+window.setRevisoesAprovacao = setRevisoesAprovacao; // NOVO: Exportar função de filtro de aprovação
 window.applyRevisoesFilters = applyRevisoesFilters;
 window.toggleRevisoesDetails = toggleRevisoesDetails;
 window.openRevisoesModal = openRevisoesModal;
@@ -573,9 +620,10 @@ window.editRevisoesVehicle = editRevisoesVehicle;
 window.deleteRevisoesVehicle = deleteRevisoesVehicle;
 window.changeRevisoesStatus = changeRevisoesStatus;
 
-console.log('📦 Sistema de Revisões carregado - v1.1');
+console.log('📦 Sistema de Revisões carregado - v2.0');
 console.log('✅ Funções exportadas:', {
     initRevisoesTab: typeof window.initRevisoesTab,
     loadRevisoesData: typeof window.loadRevisoesData,
+    setRevisoesAprovacao: typeof window.setRevisoesAprovacao,
     applyRevisoesFilters: typeof window.applyRevisoesFilters
 });

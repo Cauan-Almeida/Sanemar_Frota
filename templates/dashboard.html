@@ -18,11 +18,29 @@
         * { font-family: 'Inter', sans-serif; }
         body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
         .glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
-        .glass-dark { background: rgba(31, 41, 55, 0.95); backdrop-filter: blur(10px); }
+        .glass-dark { 
+            background: rgba(31, 41, 55, 0.98) !important; 
+            backdrop-filter: blur(10px); 
+        }
         .chart-container { position: relative; width: 100%; height: 40vh; max-height: 350px; }
         .table-responsive { max-height: 500px; overflow-y: auto; }
-        .stat-card { transition: all 0.3s ease; }
-        .stat-card:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15); }
+        .stat-card { 
+            transition: all 0.3s ease;
+            min-height: 100px;
+        }
+        .stat-card:hover { 
+            transform: translateY(-4px); 
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15); 
+        }
+        /* Melhora cards no mobile */
+        @media (max-width: 640px) {
+            .stat-card {
+                min-height: 90px;
+            }
+            .stat-card p {
+                font-size: 1.75rem !important;
+            }
+        }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in { animation: fadeIn 0.5s ease-out; }
         .gradient-btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); transition: all 0.3s; }
@@ -383,7 +401,7 @@
         body.dark-mode .dark-mode-icon { display: inline; }
         body.dark-mode .light-mode-icon { display: none; }
         
-        /* Sidebar escondida (estilo hamburger) */
+        /* === SIDEBAR PRINCIPAL === */
         aside {
             transition: transform 0.3s ease;
             z-index: 1002 !important;
@@ -392,10 +410,22 @@
             left: 0;
             height: 100vh;
             width: 16rem;
+            background: #1f2937;
             transform: translateX(0);
         }
+        /* Esconde sidebar quando tem sidebar-hidden */
         aside.sidebar-hidden {
             transform: translateX(-100%);
+        }
+        
+        /* No mobile, sidebar começa escondida */
+        @media (max-width: 768px) {
+            aside {
+                transform: translateX(-100%);
+            }
+            aside:not(.sidebar-hidden) {
+                transform: translateX(0);
+            }
         }
         
         /* Overlay quando sidebar aberta */
@@ -415,29 +445,42 @@
         
         /* Botão Hamburger Flutuante */
         .hamburger-btn {
-            position: fixed;
-            top: 1.5rem;
-            left: 1.5rem;
-            z-index: 1003;
-            width: 3.5rem;
-            height: 3.5rem;
+            position: fixed !important;
+            top: 0.5rem !important;
+            left: 0.5rem !important;
+            z-index: 9999 !important;
+            width: 3rem;
+            height: 3rem;
             border-radius: 0.75rem;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
             cursor: pointer;
-            display: flex;
+            display: flex !important;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            pointer-events: all !important;
         }
         .hamburger-btn:hover {
             transform: scale(1.05);
-            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
         }
         .hamburger-btn.sidebar-open {
-            left: 17rem;
+            left: 16.5rem !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+        @media (min-width: 768px) {
+            .hamburger-btn {
+                top: 1.25rem !important;
+                left: 1rem !important;
+                width: 3.5rem;
+                height: 3.5rem;
+            }
+            .hamburger-btn.sidebar-open {
+                left: 17rem !important;
+            }
         }
         
         /* Cards de revisões melhorados */
@@ -484,7 +527,7 @@
 
     <div class="flex h-screen">
         <!-- Sidebar -->
-        <aside id="sidebar" class="w-64 glass-dark text-white flex-col sidebar-hidden shadow-2xl">
+        <aside id="sidebar" class="w-64 glass-dark text-white flex flex-col sidebar-hidden shadow-2xl">
             <div class="p-6 border-b border-white border-opacity-20 flex justify-between items-center bg-gradient-to-r from-purple-900 to-indigo-900">
                 <div class="flex items-center gap-3">
                     <div class="bg-white bg-opacity-20 p-2 rounded-xl backdrop-blur-sm">
@@ -492,9 +535,6 @@
                     </div>
                     <span class="text-lg font-bold tracking-tight">Gestão de Frota</span>
                 </div>
-                <button id="close-sidebar" class="md:hidden text-gray-300 hover:text-white transition-colors">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                </button>
             </div>
             
             <nav class="flex-1 p-4 space-y-1 overflow-y-auto">
@@ -583,75 +623,76 @@
 
         <!-- Main Content -->
         <div class="flex-1 flex flex-col overflow-hidden">
-            <header class="glass shadow-xl p-6 pl-24 flex justify-between items-center animate-fade-in">
-                <div class="flex items-center gap-4">
-                    <img src="/static/Logo_frota_sanemar.png" alt="Sanemar Frota" class="h-12 w-12 rounded-xl shadow-lg">
-                    <h1 id="main-title" class="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent"></h1>
+            <header class="glass shadow-xl p-3 md:p-6 flex justify-between items-center animate-fade-in">
+                <div class="flex items-center gap-2 md:gap-4 ml-12 md:ml-0">
+                    <img src="/static/Logo_frota_sanemar.png" alt="Sanemar Frota" class="h-9 w-9 md:h-12 md:w-12 rounded-xl shadow-lg">
+                    <h1 id="main-title" class="text-base md:text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent truncate"></h1>
                 </div>
-                <div class="flex items-center gap-4">
-                    <button id="refresh-cache-btn" class="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white rounded-xl font-semibold shadow-lg transition-all transform hover:scale-105" title="Atualizar dados (limpa cache)">
-                        🔄 Atualizar
+                <div class="flex items-center gap-2 md:gap-4">
+                    <button id="refresh-cache-btn" class="px-3 py-1.5 md:px-4 md:py-2 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white rounded-xl text-sm md:text-base font-semibold shadow-lg transition-all transform hover:scale-105" title="Atualizar dados (limpa cache)">
+                        <span class="hidden md:inline">🔄 Atualizar</span>
+                        <span class="md:hidden">🔄</span>
                     </button>
-                    <div class="hidden md:block text-sm text-slate-900 font-bold">
+                    <div class="hidden lg:block text-sm text-slate-900 font-bold">
                         <span id="current-date"></span>
                     </div>
                     <!-- Botão de tema discreto no canto -->
-                    <button id="theme-toggle-btn" class="p-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg transition-all opacity-70 hover:opacity-100" title="Alternar tema claro/escuro">
-                        <span class="dark-mode-icon hidden text-lg">🌙</span>
-                        <span class="light-mode-icon text-lg">☀️</span>
+                    <button id="theme-toggle-btn" class="p-1.5 md:p-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg transition-all opacity-70 hover:opacity-100" title="Alternar tema claro/escuro">
+                        <span class="dark-mode-icon hidden text-base md:text-lg">🌙</span>
+                        <span class="light-mode-icon text-base md:text-lg">☀️</span>
                     </button>
                 </div>
             </header>
 
-            <main class="flex-1 p-6 md:p-8 overflow-y-auto">
+            <main class="flex-1 p-3 md:p-6 lg:p-8 overflow-y-auto">
                 <!-- Conteúdo do Dashboard -->
                 <div id="dashboard-content" class="main-content animate-fade-in">
                     
                     <!-- Cards de Estatísticas -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
-                        <div class="glass stat-card p-6 rounded-2xl shadow-lg">
+                    <div class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6 mb-6 md:mb-8">
+                        <div class="glass stat-card p-4 md:p-6 rounded-2xl shadow-lg">
                             <div class="flex items-center justify-between mb-2">
-                                <h3 class="text-sm font-semibold text-gray-500 uppercase">Em Curso</h3>
-                                <span class="text-2xl">🚗</span>
+                                <h3 class="text-xs md:text-sm font-semibold text-gray-500 uppercase">Em Curso</h3>
+                                <span class="text-xl md:text-2xl">🚗</span>
                             </div>
-                            <p id="stat-viagens-em-curso" class="text-4xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">0</p>
+                            <p id="stat-viagens-em-curso" class="text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">0</p>
                         </div>
-                        <div class="glass stat-card p-6 rounded-2xl shadow-lg relative">
+                        <div class="glass stat-card p-4 md:p-6 rounded-2xl shadow-lg relative">
                             <div class="flex items-center justify-between mb-2">
-                                <h3 class="text-sm font-semibold text-gray-500 uppercase">Hoje</h3>
+                                <h3 class="text-xs md:text-sm font-semibold text-gray-500 uppercase">Hoje</h3>
                                 <div class="flex items-center gap-2">
                                     <button 
                                         id="refresh-dashboard-btn" 
                                         onclick="refreshDashboardManually()"
-                                        class="text-gray-400 hover:text-green-600 transition-colors"
+                                        class="text-gray-400 hover:text-green-600 transition-colors text-base md:text-xl"
                                         title="Atualizar agora">
                                         🔄
                                     </button>
-                                    <span class="text-2xl">📅</span>
+                                    <span class="text-xl md:text-2xl">📅</span>
                                 </div>
                             </div>
-                            <p id="stat-viagens-hoje" class="text-4xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">0</p>
+                            <p id="stat-viagens-hoje" class="text-3xl md:text-4xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">0</p>
                         </div>
-                        <div class="glass stat-card p-6 rounded-2xl shadow-lg">
+                        <div class="glass stat-card p-4 md:p-6 rounded-2xl shadow-lg">
                             <div class="flex items-center justify-between mb-2">
-                                <h3 class="text-sm font-semibold text-gray-500 uppercase">Horas na Rua</h3>
-                                <span class="text-2xl">⏱️</span>
+                                <h3 class="text-xs md:text-sm font-semibold text-gray-500 uppercase">Horas na Rua</h3>
+                                <span class="text-xl md:text-2xl">⏱️</span>
                             </div>
-                            <p id="stat-total-horas-na-rua" class="text-4xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">00:00</p>
+                            <p id="stat-total-horas-na-rua" class="text-3xl md:text-4xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">00:00</p>
                         </div>
-                        <div class="glass stat-card p-6 rounded-2xl shadow-lg">
+                        <div class="glass stat-card p-4 md:p-6 rounded-2xl shadow-lg">
                             <div class="flex items-center justify-between mb-2">
-                                <h3 class="text-sm font-semibold text-gray-500 uppercase">Motorista Destaque</h3>
-                                <span class="text-2xl">👤</span>
+                                <h3 class="text-xs md:text-sm font-semibold text-gray-500 uppercase truncate">Destaque</h3>
+                                <span class="text-xl md:text-2xl">👤</span>
                             </div>
-                            <p id="stat-motorista-do-mes" class="text-2xl font-bold text-gray-800">N/A</p>
+                            <p id="stat-motorista-do-mes" class="text-lg md:text-2xl font-bold text-gray-800 truncate">N/A</p>
                         </div>
-                        <div class="glass stat-card p-6 rounded-2xl shadow-lg">
+                        <div class="glass stat-card p-4 md:p-6 rounded-2xl shadow-lg">
                             <div class="flex items-center justify-between mb-2">
-                                <h3 class="text-sm font-semibold text-gray-500 uppercase">Veículo Destaque</h3>
-                                <span class="text-2xl">🏆</span>
+                                <h3 class="text-xs md:text-sm font-semibold text-gray-500 uppercase truncate">Veículo</h3>
+                                <span class="text-xl md:text-2xl">🏆</span>
                             </div>
-                            <p id="stat-veiculo-do-mes" class="text-2xl font-bold text-gray-800">N/A</p>
+                            <p id="stat-veiculo-do-mes" class="text-lg md:text-2xl font-bold text-gray-800 truncate">N/A</p>
                         </div>
                     </div>
 
@@ -1242,22 +1283,50 @@
                         </div>
 
                         <!-- Filtros por Categoria -->
-                        <div class="flex flex-wrap gap-2 mb-6">
-                            <button id="revisoes-cat-all" onclick="setRevisoesCategory('all')" class="px-4 py-2 text-xs font-bold border-2 border-purple-200 bg-purple-50 text-purple-700 rounded-lg flex items-center gap-1.5 transition-all hover:shadow-sm">
-                                <i class="fa-solid fa-filter"></i> Todos
-                            </button>
-                            <button id="revisoes-cat-pneu" onclick="setRevisoesCategory('pneu')" class="px-4 py-2 text-xs font-bold border-2 border-slate-200 bg-white text-slate-600 rounded-lg flex items-center gap-1.5 transition-all hover:shadow-sm">
-                                <i class="fa-solid fa-circle-dot"></i> Pneus
-                            </button>
-                            <button id="revisoes-cat-revisao" onclick="setRevisoesCategory('revisao')" class="px-4 py-2 text-xs font-bold border-2 border-slate-200 bg-white text-slate-600 rounded-lg flex items-center gap-1.5 transition-all hover:shadow-sm">
-                                <i class="fa-solid fa-clipboard-check"></i> Revisão
-                            </button>
-                            <button id="revisoes-cat-mecanica" onclick="setRevisoesCategory('mecanica')" class="px-4 py-2 text-xs font-bold border-2 border-slate-200 bg-white text-slate-600 rounded-lg flex items-center gap-1.5 transition-all hover:shadow-sm">
-                                <i class="fa-solid fa-wrench"></i> Mecânica
-                            </button>
-                            <button id="revisoes-cat-lataria" onclick="setRevisoesCategory('lataria')" class="px-4 py-2 text-xs font-bold border-2 border-slate-200 bg-white text-slate-600 rounded-lg flex items-center gap-1.5 transition-all hover:shadow-sm">
-                                <i class="fa-solid fa-car-burst"></i> Lataria
-                            </button>
+                        <div class="mb-3">
+                            <h3 class="text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">Filtros por Categoria:</h3>
+                            <div class="flex flex-wrap gap-2">
+                                <button id="revisoes-cat-all" onclick="setRevisoesCategory('all')" class="px-4 py-2 text-xs font-bold border-2 border-purple-200 bg-purple-50 text-purple-700 rounded-lg flex items-center gap-1.5 transition-all hover:shadow-sm">
+                                    <i class="fa-solid fa-filter"></i> Todos
+                                </button>
+                                <button id="revisoes-cat-pneu" onclick="setRevisoesCategory('pneu')" class="px-4 py-2 text-xs font-bold border-2 border-slate-200 bg-white text-slate-600 rounded-lg flex items-center gap-1.5 transition-all hover:shadow-sm">
+                                    <i class="fa-solid fa-circle-dot"></i> Pneus
+                                </button>
+                                <button id="revisoes-cat-revisao" onclick="setRevisoesCategory('revisao')" class="px-4 py-2 text-xs font-bold border-2 border-slate-200 bg-white text-slate-600 rounded-lg flex items-center gap-1.5 transition-all hover:shadow-sm">
+                                    <i class="fa-solid fa-clipboard-check"></i> Revisão
+                                </button>
+                                <button id="revisoes-cat-mecanica" onclick="setRevisoesCategory('mecanica')" class="px-4 py-2 text-xs font-bold border-2 border-slate-200 bg-white text-slate-600 rounded-lg flex items-center gap-1.5 transition-all hover:shadow-sm">
+                                    <i class="fa-solid fa-wrench"></i> Mecânica
+                                </button>
+                                <button id="revisoes-cat-lataria" onclick="setRevisoesCategory('lataria')" class="px-4 py-2 text-xs font-bold border-2 border-slate-200 bg-white text-slate-600 rounded-lg flex items-center gap-1.5 transition-all hover:shadow-sm">
+                                    <i class="fa-solid fa-car-burst"></i> Lataria
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Filtros por Aprovação e Direcionamento -->
+                        <div class="mb-6">
+                            <h3 class="text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">Filtros por Status de Aprovação/Direcionamento:</h3>
+                            <div class="flex flex-wrap gap-2">
+                                <button id="revisoes-apr-all" onclick="setRevisoesAprovacao('all')" class="px-4 py-2 text-xs font-bold border-2 border-blue-200 bg-blue-50 text-blue-700 rounded-lg flex items-center gap-1.5 transition-all hover:shadow-sm">
+                                    <i class="fa-solid fa-list"></i> Todos
+                                </button>
+                                <button id="revisoes-apr-aprovado" onclick="setRevisoesAprovacao('aprovado')" class="px-4 py-2 text-xs font-bold border-2 border-slate-200 bg-white text-slate-600 rounded-lg flex items-center gap-1.5 transition-all hover:shadow-sm">
+                                    <i class="fa-solid fa-check-circle"></i> Aprovados
+                                </button>
+                                <button id="revisoes-apr-faltaaprovacao" onclick="setRevisoesAprovacao('falta_aprovacao')" class="px-4 py-2 text-xs font-bold border-2 border-slate-200 bg-white text-slate-600 rounded-lg flex items-center gap-1.5 transition-all hover:shadow-sm">
+                                    <i class="fa-solid fa-clock"></i> Falta Aprovação
+                                </button>
+                                <button id="revisoes-apr-semdirecionamento" onclick="setRevisoesAprovacao('sem_direcionamento')" class="px-4 py-2 text-xs font-bold border-2 border-slate-200 bg-white text-slate-600 rounded-lg flex items-center gap-1.5 transition-all hover:shadow-sm">
+                                    <i class="fa-solid fa-question-circle"></i> Sem Direcionamento
+                                </button>
+                                <button id="revisoes-apr-direcionado" onclick="setRevisoesAprovacao('direcionado')" class="px-4 py-2 text-xs font-bold border-2 border-slate-200 bg-white text-slate-600 rounded-lg flex items-center gap-1.5 transition-all hover:shadow-sm">
+                                    <i class="fa-solid fa-arrow-right"></i> Direcionado
+                                </button>
+                                <button id="revisoes-apr-naodirecionado" onclick="setRevisoesAprovacao('nao_direcionado')" class="px-4 py-2 text-xs font-bold border-2 border-slate-200 bg-white text-slate-600 rounded-lg flex items-center gap-1.5 transition-all hover:shadow-sm">
+                                    <i class="fa-solid fa-ban"></i> Não Direcionado
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Lista de Chamados -->
@@ -1357,6 +1426,29 @@
                                         <input type="text" id="revisoes-form-subStatusLabel"
                                             class="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all"
                                             placeholder="Ex: Aguardando Direcionamento">
+                                    </div>
+
+                                    <!-- Aprovação e Direcionamento -->
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-sm font-bold text-slate-700 mb-2">✅ Status de Aprovação</label>
+                                            <select id="revisoes-form-aprovacao"
+                                                class="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all">
+                                                <option value="">Selecione...</option>
+                                                <option value="aprovado">✅ Aprovado</option>
+                                                <option value="falta_aprovacao">⏳ Falta Aprovação</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-bold text-slate-700 mb-2">🎯 Status de Direcionamento</label>
+                                            <select id="revisoes-form-direcionamento"
+                                                class="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all">
+                                                <option value="">Selecione...</option>
+                                                <option value="sem_direcionamento">❓ Sem Direcionamento</option>
+                                                <option value="direcionado">✔️ Direcionado</option>
+                                                <option value="nao_direcionado">❌ Não Direcionado</option>
+                                            </select>
+                                        </div>
                                     </div>
 
                                     <!-- Localização -->
@@ -1753,22 +1845,41 @@
                                 </form>
                             </div>
 
-                            <!-- Card Revisões -->
+                            <!-- Card Chamados de Manutenção -->
                             <div class="glass p-6 rounded-2xl shadow-lg">
                                 <div class="flex items-center gap-3 mb-4">
                                     <span class="bg-gradient-to-r from-purple-500 to-indigo-500 text-white p-3 rounded-xl text-2xl">🔧</span>
                                     <div>
-                                        <h3 class="font-bold text-xl text-gray-800">Revisões</h3>
-                                        <p class="text-sm text-gray-600">Manutenções periódicas</p>
+                                        <h3 class="font-bold text-xl text-gray-800">Chamados</h3>
+                                        <p class="text-sm text-gray-600">Manutenções e chamados</p>
                                     </div>
                                 </div>
                                 <form id="form-revisoes" class="space-y-3">
-                                    <input type="text" id="revisoes-veiculo" placeholder="Veículo (ex: ABC1234)" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-purple-500 transition-all">
-                                    <select id="revisoes-status" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-purple-500 transition-all">
+                                    <input type="text" id="revisoes-placa" placeholder="Placa (ex: ABC1234)" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-purple-500 transition-all text-sm">
+                                    <select id="revisoes-status-chamado" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-purple-500 transition-all text-sm">
                                         <option value="">Todos os Status</option>
-                                        <option value="em_dia">Em Dia</option>
-                                        <option value="proxima">Próximas</option>
-                                        <option value="atrasada">Atrasadas</option>
+                                        <option value="pendente">🔴 Pendente</option>
+                                        <option value="andamento">🟡 Em Andamento</option>
+                                        <option value="pendente-andamento">🔴🟡 Pendentes + Em Andamento</option>
+                                        <option value="resolvido">🟢 Resolvido</option>
+                                    </select>
+                                    <select id="revisoes-categoria" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-purple-500 transition-all text-sm">
+                                        <option value="">Todas Categorias</option>
+                                        <option value="pneu">🛞 Pneus</option>
+                                        <option value="revisao">🔧 Revisão</option>
+                                        <option value="mecanica">⚙️ Mecânica</option>
+                                        <option value="lataria">🚗 Lataria</option>
+                                    </select>
+                                    <select id="revisoes-aprovacao" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-purple-500 transition-all text-sm">
+                                        <option value="">Todas Aprovações</option>
+                                        <option value="aprovado">✅ Aprovado</option>
+                                        <option value="falta_aprovacao">⏳ Falta Aprovação</option>
+                                    </select>
+                                    <select id="revisoes-direcionamento" class="w-full px-4 py-2 rounded-lg border-2 border-gray-200 focus:border-purple-500 transition-all text-sm">
+                                        <option value="">Todos Direcionamentos</option>
+                                        <option value="direcionado">➡️ Direcionado</option>
+                                        <option value="nao_direcionado">❌ Não Direcionado</option>
+                                        <option value="sem_direcionamento">❓ Sem Direcionamento</option>
                                     </select>
                                     <button type="submit" class="w-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white py-3 rounded-xl font-semibold shadow-lg hover:scale-105 transition-all">
                                         📥 Gerar PDF Filtrado
@@ -2005,14 +2116,14 @@
     </script>
 
     <script src="/static/toast.js?v=13.0"></script>
-    <script src="/static/dashboard.js?v=13.4"></script>
+    <script src="/static/dashboard.js?v=13.9"></script>
     <script src="/static/dashboard-realtime.js?v=14.7"></script>
     <script src="/static/km-multas.js?v=1.0"></script>
     <script src="/static/revisoes-tab.js?v=1.0"></script>
     <script src="/static/veiculos-tab.js?v=1.6"></script>
-    <script src="/static/relatorios-tab.js?v=1.0"></script>
+    <script src="/static/relatorios-tab.js?v=3.1"></script>
     <script src="/static/usuarios-tab.js?v=1.0"></script>
-    <script src="/static/revisoes-chamados.js?v=1.1"></script>
+    <script src="/static/revisoes-chamados.js?v=2.1"></script>
     <script>
         // Handle categoria select change
         function handleCategoriaChange() {
@@ -2482,21 +2593,23 @@
             const modal = document.createElement('div');
             modal.style.cssText = `
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                padding: 40px;
+                padding: 50px 40px;
                 border-radius: 24px;
                 box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-                max-width: 500px;
+                max-width: 550px;
                 width: 90%;
                 text-align: center;
                 animation: modalBounce 0.5s ease-out;
+                max-height: 90vh;
+                overflow-y: auto;
             `;
             
             modal.innerHTML = `
-                <div style="font-size: 80px; animation: spin 2s linear infinite;">🔄</div>
-                <h2 style="color: white; font-size: 28px; font-weight: bold; margin: 20px 0 10px 0;">
+                <div style="font-size: 100px; animation: spin 2s linear infinite; margin-bottom: 20px;">🔄</div>
+                <h2 style="color: white; font-size: 32px; font-weight: bold; margin: 20px 0 15px 0;">
                     Atualização Disponível!
                 </h2>
-                <p style="color: rgba(255,255,255,0.9); font-size: 16px; margin-bottom: 30px; line-height: 1.6;">
+                <p style="color: rgba(255,255,255,0.95); font-size: 17px; margin-bottom: 35px; line-height: 1.8;">
                     Uma nova versão do sistema foi instalada com melhorias e correções.<br>
                     <strong>É necessário atualizar para continuar usando.</strong>
                 </p>
@@ -2574,8 +2687,9 @@
     <!-- Modal de Edição de Saída (Dashboard) -->
     <div id="modal-editar-dashboard" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 rounded-t-2xl">
+            <div class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 rounded-t-2xl flex justify-between items-center">
                 <h2 class="text-2xl font-bold">✏️ Editar Saída</h2>
+                <button type="button" onclick="fecharModalEditarDashboard()" class="text-white hover:text-gray-200 transition-all text-3xl leading-none">&times;</button>
             </div>
             <form id="form-editar-dashboard" class="p-6">
                 <input type="hidden" id="edit-dashboard-saida-id">
@@ -2629,12 +2743,8 @@
 
                 <div class="flex gap-3">
                     <button type="submit" 
-                            class="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-bold transition-all transform hover:scale-105">
-                        💾 Salvar
-                    </button>
-                    <button type="button" onclick="fecharModalEditarDashboard()" 
-                            class="flex-1 px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl font-bold transition-all">
-                        ❌ Cancelar
+                            class="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-bold transition-all transform hover:scale-105">
+                        💾 Salvar Alterações
                     </button>
                 </div>
             </form>
@@ -2644,8 +2754,9 @@
     <!-- Modal Upload CNH -->
     <div id="modal-upload-cnh" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full">
-            <div class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-6 rounded-t-2xl">
+            <div class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-6 rounded-t-2xl flex justify-between items-center">
                 <h2 class="text-2xl font-bold">📄 Upload CNH</h2>
+                <button onclick="fecharModalUploadCNH()" class="text-white hover:text-gray-200 transition-all text-3xl leading-none">&times;</button>
             </div>
             <form id="form-upload-cnh" class="p-6">
                 <input type="hidden" id="upload-cnh-motorista-id">
@@ -2681,12 +2792,8 @@
 
                 <div class="flex gap-3">
                     <button type="submit" id="btn-upload-cnh"
-                            class="flex-1 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl font-bold transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
+                            class="w-full px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl font-bold transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
                         📤 Enviar CNH
-                    </button>
-                    <button type="button" onclick="fecharModalUploadCNH()" 
-                            class="flex-1 px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl font-bold transition-all">
-                        ❌ Cancelar
                     </button>
                 </div>
             </form>
@@ -3334,12 +3441,33 @@
 
     <!-- 📱 Toggle da Sidebar Hamburger (Abrir/Fechar Completamente) -->
     <script>
+        // Inicializa estado correto no mobile
+        document.addEventListener('DOMContentLoaded', function() {
+            const sidebar = document.querySelector('aside');
+            const isMobile = window.innerWidth < 768;
+            
+            if (sidebar && isMobile) {
+                // No mobile, começa escondida
+                sidebar.classList.add('sidebar-hidden');
+            }
+        });
+        
+        // Variável para prevenir cliques múltiplos rápidos
+        let isTogglingSidebar = false;
+        
         function toggleSidebarHamburger() {
+            // Previne múltiplas execuções simultâneas
+            if (isTogglingSidebar) return;
+            isTogglingSidebar = true;
+            
             const sidebar = document.querySelector('aside');
             const overlay = document.getElementById('sidebar-overlay');
             const hamburgerBtn = document.getElementById('hamburger-btn');
             
-            if (!sidebar || !overlay || !hamburgerBtn) return;
+            if (!sidebar || !overlay || !hamburgerBtn) {
+                isTogglingSidebar = false;
+                return;
+            }
             
             const isHidden = sidebar.classList.contains('sidebar-hidden');
             
@@ -3368,23 +3496,15 @@
                     </svg>
                 `;
             }
+            
+            // Libera após animação completar
+            setTimeout(() => {
+                isTogglingSidebar = false;
+            }, 350); // Tempo da transição CSS
         }
         
-        // Fechar sidebar ao clicar em qualquer link do menu
-        document.addEventListener('DOMContentLoaded', function() {
-            const sidebarLinks = document.querySelectorAll('.sidebar-link');
-            sidebarLinks.forEach(link => {
-                link.addEventListener('click', function() {
-                    // Pequeno delay para a transição da aba acontecer primeiro
-                    setTimeout(() => {
-                        const sidebar = document.querySelector('aside');
-                        if (sidebar && !sidebar.classList.contains('sidebar-hidden')) {
-                            toggleSidebarHamburger();
-                        }
-                    }, 100);
-                });
-            });
-        });
+        // OBS: O fechamento ao clicar em links é feito pelo dashboard.js
+        // Não duplicar lógica aqui para evitar conflitos
     </script>
 
 </body>

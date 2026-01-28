@@ -53,14 +53,29 @@ document.addEventListener('DOMContentLoaded', () => {
     const mainTitle = document.getElementById('main-title');
     const dataLoaded = new Set();
 
+    // Funções de sidebar unificadas (usa APENAS sidebar-hidden)
     function openSidebar() {
-        sidebar.classList.remove('-translate-x-full');
-        sidebar.classList.add('translate-x-0');
+        if (sidebar) {
+            sidebar.classList.remove('sidebar-hidden');
+        }
     }
 
     function closeSidebar() {
-        sidebar.classList.remove('translate-x-0');
-        sidebar.classList.add('-translate-x-full');
+        if (sidebar) {
+            sidebar.classList.add('sidebar-hidden');
+            // Também fecha overlay e botão hamburger
+            const overlay = document.getElementById('sidebar-overlay');
+            const hamburgerBtn = document.getElementById('hamburger-btn');
+            if (overlay) overlay.classList.remove('active');
+            if (hamburgerBtn) {
+                hamburgerBtn.classList.remove('sidebar-open');
+                hamburgerBtn.innerHTML = `
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                    </svg>
+                `;
+            }
+        }
     }
 
     if(openSidebarBtn) openSidebarBtn.addEventListener('click', openSidebar);

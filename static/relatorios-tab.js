@@ -81,22 +81,98 @@ function initRelatoriosTab() {
         });
     }
 
-    // Form Revisões
+    // Form Revisões/Chamados
     const formRevisoes = document.getElementById('form-revisoes');
     if (formRevisoes) {
-        formRevisoes.addEventListener('submit', (e) => {
+        formRevisoes.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const veiculo = document.getElementById('revisoes-veiculo').value.trim();
-            const status = document.getElementById('revisoes-status').value;
             
-            let url = '/pdf/revisoes?';
-            const params = [];
+            // Pega dados do LocalStorage (onde os chamados estão salvos)
+            const stored = localStorage.getItem('fleetData_v1');
             
-            if (veiculo) params.push(`veiculo=${encodeURIComponent(veiculo)}`);
-            if (status) params.push(`status=${status}`);
+            let chamados = [];
             
-            url += params.join('&');
-            window.open(url, '_blank');
+            if (stored) {
+                try {
+                    chamados = JSON.parse(stored);
+                } catch (e) {
+                    console.error('[PDF] Erro ao carregar dados:', e);
+                    alert('Erro ao carregar dados dos chamados');
+                    return;
+                }
+            } else {
+                alert('Nenhum chamado encontrado. Verifique se há dados na aba Revisões.');
+                return;
+            }
+            
+            // Aplicar filtros localmente
+            const placaInput = document.getElementById('revisoes-placa');
+            const statusInput = document.getElementById('revisoes-status-chamado');
+            const categoriaInput = document.getElementById('revisoes-categoria');
+            const aprovacaoInput = document.getElementById('revisoes-aprovacao');
+            const direcionamentoInput = document.getElementById('revisoes-direcionamento');
+            
+            const placa = placaInput ? placaInput.value.trim().toUpperCase() : '';
+            const status = statusInput ? statusInput.value : '';
+            const categoria = categoriaInput ? categoriaInput.value : '';
+            const aprovacao = aprovacaoInput ? aprovacaoInput.value : '';
+            const direcionamento = direcionamentoInput ? direcionamentoInput.value : '';
+            
+            // Filtra chamados
+            let chamadosFiltrados = chamados;
+            
+            if (placa) {
+                chamadosFiltrados = chamadosFiltrados.filter(c => c.plate && c.plate.toUpperCase().includes(placa));
+            }
+            if (status) {
+                // Se for 'pendente-andamento', aceita pendente OU em andamento
+                if (status === 'pendente-andamento') {
+                    chamadosFiltrados = chamadosFiltrados.filter(c => 
+                        c.mainStatus === 'pendente' || c.mainStatus === 'andamento'
+                    );
+                } else {
+                    chamadosFiltrados = chamadosFiltrados.filter(c => c.mainStatus === status);
+                }
+            }
+            if (categoria) {
+                chamadosFiltrados = chamadosFiltrados.filter(c => c.category === categoria);
+            }
+            if (aprovacao) {
+                chamadosFiltrados = chamadosFiltrados.filter(c => c.aprovacao === aprovacao);
+            }
+            if (direcionamento) {
+                chamadosFiltrados = chamadosFiltrados.filter(c => c.direcionamento === direcionamento);
+            }
+            
+            // Envia via POST para gerar PDF
+            try {
+                const response = await fetch('/pdf/revisoes', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ chamados: chamadosFiltrados })
+                });
+                
+                if (response.ok) {
+                    // Baixa o PDF
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `chamados_manutencao_${new Date().toISOString().slice(0,10)}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                } else {
+                    const error = await response.json();
+                    alert('Erro ao gerar PDF: ' + (error.error || 'Erro desconhecido'));
+                }
+            } catch (error) {
+                console.error('Erro ao gerar PDF:', error);
+                alert('Erro ao gerar PDF: ' + error.message);
+            }
         });
     }
 }

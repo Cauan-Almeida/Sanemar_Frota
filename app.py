@@ -1,5 +1,6 @@
 import os
 import re
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from flask import Flask, request, jsonify, render_template, redirect, url_for, Response, session, send_file
@@ -12,6 +13,7 @@ from dotenv import load_dotenv
 from collections import Counter
 import io
 import bcrypt
+from io import BytesIO
 
 # --- Funções Auxiliares ---
 def serialize_doc(doc):
@@ -40,7 +42,7 @@ def invalidate_historico_cache():
     """Limpa todo o cache do histórico quando há mudanças"""
     global historico_cache
     historico_cache.clear()
-    print('🗑️ Cache do histórico invalidado (saída/chegada/cancelamento)')
+    print('[DELETE] Cache do histórico invalidado (saída/chegada/cancelamento)')
 
 # Carrega as variáveis de ambiente do arquivo .env
 load_dotenv()
@@ -93,7 +95,7 @@ def initialize_firebase():
         credentials_json = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON')
         
         if credentials_json:
-            print("🔧 Modo PRODUÇÃO: Lendo credenciais da variável de ambiente")
+            print("[CONFIG] Modo PRODUÇÃO: Lendo credenciais da variável de ambiente")
             # Parse das credenciais JSON
             credentials_dict = json.loads(credentials_json)
             
@@ -112,11 +114,11 @@ def initialize_firebase():
             db = firestore.Client(credentials=google_credentials, project=credentials_dict['project_id'])
             bucket = firebase_storage.bucket()
             
-            print("✅ Firebase inicializado com sucesso (PRODUÇÃO)")
+            print("[OK] Firebase inicializado com sucesso (PRODUÇÃO)")
             return db, bucket
             
         else:
-            print("🔧 Modo DESENVOLVIMENTO: Lendo credenciais do arquivo local")
+            print("[CONFIG] Modo DESENVOLVIMENTO: Lendo credenciais do arquivo local")
             # Modo desenvolvimento - lê do arquivo
             if not firebase_admin._apps:
                 cred = credentials.Certificate('firebase-credentials.json')
@@ -127,11 +129,11 @@ def initialize_firebase():
             db = firestore.Client()
             bucket = firebase_storage.bucket()
             
-            print("✅ Firebase inicializado com sucesso (DESENVOLVIMENTO)")
+            print("[OK] Firebase inicializado com sucesso (DESENVOLVIMENTO)")
             return db, bucket
             
     except Exception as e:
-        print(f"❌ Erro ao inicializar Firebase: {e}")
+        print(f" Erro ao inicializar Firebase: {e}")
         import traceback
         traceback.print_exc()
         return None, None
@@ -140,14 +142,14 @@ def initialize_firebase():
 db, bucket = initialize_firebase()
 
 # ==========================================
-# 🔧 SISTEMA DE MODO DE MANUTENÇÃO
+# [CONFIG] SISTEMA DE MODO DE MANUTENÇÃO
 # ==========================================
 
 def is_maintenance_mode():
     """Verifica se o sistema está em modo de manutenção"""
     try:
         if os.path.exists('.maintenance'):
-            with open('.maintenance', 'r') as f:
+            with open('.maintenance', 'r', encoding='utf-8-sig') as f:  # utf-8-sig remove BOM automaticamente
                 content = f.read().strip().lower()
                 return content == 'on'
         return False
@@ -216,7 +218,7 @@ def maintenance_status():
 FIRESTORE_AVAILABLE = True
 
 # ==========================================
-# 💾 SISTEMA DE BACKUP DE ARQUIVOS
+# [SAVE] SISTEMA DE BACKUP DE ARQUIVOS
 # ==========================================
 # Move arquivos para pasta de backup ao invés de deletar
 
@@ -232,7 +234,7 @@ def backup_storage_file(blob_path, reason='delete'):
         str: URL do arquivo no backup, ou None se falhar
     """
     if not bucket:
-        print(f"⚠️ Backup: Storage indisponível")
+        print(f" Backup: Storage indisponível")
         return None
     
     try:
@@ -241,7 +243,7 @@ def backup_storage_file(blob_path, reason='delete'):
         
         # Verifica se arquivo existe
         if not source_blob.exists():
-            print(f"⚠️ Arquivo não existe: {blob_path}")
+            print(f" Arquivo não existe: {blob_path}")
             return None
         
         # Cria nome do backup com timestamp
@@ -256,20 +258,20 @@ def backup_storage_file(blob_path, reason='delete'):
         backup_blob.make_public()
         backup_url = backup_blob.public_url
         
-        print(f"✅ Arquivo copiado para backup: {backup_path}")
+        print(f"[OK] Arquivo copiado para backup: {backup_path}")
         
         # Agora pode deletar o original com segurança
         source_blob.delete()
-        print(f"🗑️ Original deletado: {blob_path}")
+        print(f"[DELETE] Original deletado: {blob_path}")
         
         return backup_url
         
     except Exception as e:
-        print(f"❌ Erro ao fazer backup de {blob_path}: {e}")
+        print(f" Erro ao fazer backup de {blob_path}: {e}")
         return None
 
 # ==========================================
-# 🔍 SISTEMA DE AUDITORIA
+# [SEARCH] SISTEMA DE AUDITORIA
 # ==========================================
 # Registra TODAS as ações no banco de dados:
 # - Quem fez (usuário)
@@ -291,7 +293,7 @@ def log_audit(action, collection_name, doc_id, old_data=None, new_data=None, use
         user (str): Usuário que executou a ação (pega da sessão se None)
     """
     if not db:
-        print(f"⚠️ Auditoria: Firestore indisponível, log não registrado")
+        print(f" Auditoria: Firestore indisponível, log não registrado")
         return
     
     try:
@@ -324,16 +326,16 @@ def log_audit(action, collection_name, doc_id, old_data=None, new_data=None, use
         # Salva no Firestore
         db.collection('audit_log').add(audit_doc)
         
-        print(f"✅ Auditoria: {action.upper()} em {collection_name}/{doc_id} por {user}")
+        print(f"[OK] Auditoria: {action.upper()} em {collection_name}/{doc_id} por {user}")
     
     except Exception as e:
         # Não deve interromper a operação principal
-        print(f"❌ Erro ao registrar auditoria: {e}")
+        print(f" Erro ao registrar auditoria: {e}")
         import traceback
         traceback.print_exc()
 
 # ==========================================
-# 👤 SISTEMA DE GERENCIAMENTO DE USUÁRIOS
+#  SISTEMA DE GERENCIAMENTO DE USUÁRIOS
 # ==========================================
 
 def hash_password(password):
@@ -844,7 +846,7 @@ def api_abastecimento():
                 'dataCadastro': firestore.SERVER_TIMESTAMP,
                 'viagens_totais': 0
             })
-            print(f"🚗 Veículo {placa} criado automaticamente na categoria {veiculo_categoria}")
+            print(f" Veículo {placa} criado automaticamente na categoria {veiculo_categoria}")
         
         # Registra no Firestore na coleção 'refuels' (mesma coleção dos gráficos)
         refuels_ref = db.collection('refuels')
@@ -858,10 +860,10 @@ def api_abastecimento():
             'timestamp': now_utc
         })
         
-        print(f"✅ Abastecimento registrado: {placa} - {litros}L")
+        print(f"[OK] Abastecimento registrado: {placa} - {litros}L")
         return jsonify({"message": f"Abastecimento de {litros}L registrado para {placa}"}), 200
     except Exception as e:
-        print(f"❌ Erro ao registrar abastecimento: {e}")
+        print(f" Erro ao registrar abastecimento: {e}")
         return jsonify({"error": "Erro ao registrar abastecimento"}), 500
 
 @app.route('/api/veiculos_em_curso', methods=['GET'])
@@ -888,13 +890,13 @@ def get_veiculos_em_curso():
                     categoria = veiculo_data.get('categoria', 'Outros')
             
             veiculos.append({
-                "id": doc.id,  # ✅ Adicionado ID do documento
+                "id": doc.id,  # [OK] Adicionado ID do documento
                 "veiculo": placa,
                 "motorista": data.get("motorista"),
                 "solicitante": data.get("solicitante"),
                 "trajeto": data.get("trajeto"),
                 "horarioSaida": data.get("horarioSaida"),
-                "categoria": categoria  # ✅ Categoria do veículo
+                "categoria": categoria  # [OK] Categoria do veículo
             })
         
         return jsonify(veiculos), 200
@@ -904,7 +906,7 @@ def get_veiculos_em_curso():
         return jsonify({"error": "Ocorreu um erro ao buscar os veículos em curso."}), 500
 
 # ==========================================
-# 👤 API DE GERENCIAMENTO DE USUÁRIOS
+#  API DE GERENCIAMENTO DE USUÁRIOS
 # ==========================================
 
 @app.route('/api/usuarios', methods=['GET'])
@@ -1074,7 +1076,7 @@ def delete_usuario(user_id):
         return jsonify({"error": str(e)}), 500
 
 # ==========================================
-# 📋 API DE LOGS DE AUDITORIA
+# [LIST] API DE LOGS DE AUDITORIA
 # ==========================================
 
 @app.route('/api/audit-logs', methods=['GET'])
@@ -1143,22 +1145,22 @@ def get_historico():
         placa_filtro = request.args.get('placa', '').strip()
         motorista_filtro = request.args.get('motorista', '').strip()
         
-        # ✅ PAGINAÇÃO SERVER-SIDE para economizar quota
+        # [OK] PAGINAÇÃO SERVER-SIDE para economizar quota
         page = int(request.args.get('page', 1))
-        limit = int(request.args.get('limit', 500))  # ✅ AUMENTADO DE 50 PARA 500
+        limit = int(request.args.get('limit', 500))  # [OK] AUMENTADO DE 50 PARA 500
 
-        # ✅ SE NÃO TEM FILTROS, BUSCA DO MÊS ATUAL
+        # [OK] SE NÃO TEM FILTROS, BUSCA DO MÊS ATUAL
         if not data_filtro and not mes_filtro and not ano_filtro:
             now_local = datetime.now(LOCAL_TZ)
             mes_filtro = str(now_local.month)
             ano_filtro = str(now_local.year)
-            print(f'📅 Sem filtro de data: buscando mês atual {mes_filtro}/{ano_filtro}')
+            print(f'[DATE] Sem filtro de data: buscando mês atual {mes_filtro}/{ano_filtro}')
 
-        # ✅ CACHE de 5 minutos - invalidado automaticamente em saídas/chegadas/cancelamentos
+        # [OK] CACHE de 5 minutos - invalidado automaticamente em saídas/chegadas/cancelamentos
         now = time.time()
         cache_key = f"{mes_filtro}_{ano_filtro}_{placa_filtro}_{motorista_filtro}_{page}"
         
-        # 🔥 BYPASS DE CACHE para requisições real-time (com parâmetro _t recente)
+        #  BYPASS DE CACHE para requisições real-time (com parâmetro _t recente)
         bypass_cache = False
         timestamp_param = request.args.get('_t')
         if timestamp_param:
@@ -1167,17 +1169,17 @@ def get_historico():
                 time_diff = now - request_timestamp
                 if time_diff < 10:  # Se a requisição foi feita nos últimos 10 segundos
                     bypass_cache = True
-                    print(f'⚡ BYPASS CACHE - Requisição real-time detectada (há {time_diff:.1f}s)')
+                    print(f'[FAST] BYPASS CACHE - Requisição real-time detectada (há {time_diff:.1f}s)')
             except (ValueError, TypeError):
                 pass
         
         # Verifica se tem cache válido (só usa se não for bypass)
         if not bypass_cache and cache_key in historico_cache and historico_cache[cache_key]['expires'] > now:
             cached = historico_cache[cache_key]['data']
-            print(f'⚡ Cache hit: {mes_filtro}/{ano_filtro} - economiza leituras Firestore')
+            print(f'[FAST] Cache hit: {mes_filtro}/{ano_filtro} - economiza leituras Firestore')
             return jsonify(cached), 200
         
-        print(f'🔄 Cache miss: buscando {mes_filtro}/{ano_filtro} do Firestore')
+        print(f'[RELOAD] Cache miss: buscando {mes_filtro}/{ano_filtro} do Firestore')
 
         # Começa a query básica
         query = db.collection('saidas')
@@ -1185,7 +1187,7 @@ def get_historico():
         # Flag para saber se aplicamos filtros complexos (que exigem filtro local)
         needs_local_filter = False
         
-        # ✅ 1. SEMPRE aplica filtro de MÊS/ANO primeiro (base de todas as buscas)
+        # [OK] 1. SEMPRE aplica filtro de MÊS/ANO primeiro (base de todas as buscas)
         if mes_filtro and ano_filtro:
             try:
                 mes = int(mes_filtro)
@@ -1207,23 +1209,23 @@ def get_historico():
                 query = query.where(filter=firestore.FieldFilter('timestampSaida', '>=', start_utc))
                 query = query.where(filter=firestore.FieldFilter('timestampSaida', '<=', end_utc))
                 
-                print(f'📅 Filtro de mês: {mes}/{ano} ({start_local} até {end_local})')
+                print(f'[DATE] Filtro de mês: {mes}/{ano} ({start_local} até {end_local})')
             except ValueError as e:
-                print(f'⚠️ Erro no filtro de mês/ano: {e}')
+                print(f' Erro no filtro de mês/ano: {e}')
                 pass
         
-        # ✅ 2. Aplica filtro de DATA ESPECÍFICA (refina o mês para um dia específico)
+        # [OK] 2. Aplica filtro de DATA ESPECÍFICA (refina o mês para um dia específico)
         if data_filtro:
             try:
                 # Converte a data local para UTC para a consulta
                 data_obj = datetime.strptime(data_filtro, '%d/%m/%Y')
                 
-                # ✅ VALIDA: data deve estar dentro do mês selecionado
+                # [OK] VALIDA: data deve estar dentro do mês selecionado
                 if mes_filtro and ano_filtro:
                     mes = int(mes_filtro)
                     ano = int(ano_filtro)
                     if data_obj.month != mes or data_obj.year != ano:
-                        print(f'⚠️ Data {data_filtro} fora do mês {mes}/{ano} - ignorando filtro de data')
+                        print(f' Data {data_filtro} fora do mês {mes}/{ano} - ignorando filtro de data')
                         data_filtro = None  # Ignora data fora do mês
                 
                 if data_filtro:  # Se ainda é válida
@@ -1237,24 +1239,24 @@ def get_historico():
                     query = db.collection('saidas')
                     query = query.where(filter=firestore.FieldFilter('timestampSaida', '>=', start_utc))
                     query = query.where(filter=firestore.FieldFilter('timestampSaida', '<=', end_utc))
-                    print(f'📅 Filtro de data específica: {data_filtro} dentro de {mes}/{ano}')
+                    print(f'[DATE] Filtro de data específica: {data_filtro} dentro de {mes}/{ano}')
             except ValueError:
-                print(f'⚠️ Data inválida: {data_filtro}')
+                print(f' Data inválida: {data_filtro}')
                 pass
 
-        # ✅ 3. Aplica filtro de PLACA (se houver)
+        # [OK] 3. Aplica filtro de PLACA (se houver)
         # Como já temos filtro de timestamp, precisamos fazer filtro local para placa
         if placa_filtro:
             needs_local_filter = True
 
-        # ✅ 4. Motorista sempre filtrado localmente (mais flexível - case insensitive, partial match)
+        # [OK] 4. Motorista sempre filtrado localmente (mais flexível - case insensitive, partial match)
         if motorista_filtro:
             needs_local_filter = True
 
-        # ✅ 5. Ordena e Executa a query
+        # [OK] 5. Ordena e Executa a query
         query = query.order_by('timestampSaida', direction=firestore.Query.DESCENDING)
         
-        # ✅ REMOVE PAGINAÇÃO COM OFFSET (causa o bug de retornar poucos registros)
+        # [OK] REMOVE PAGINAÇÃO COM OFFSET (causa o bug de retornar poucos registros)
         # Retorna TODOS os registros do mês (até o limite de 500)
         historico_docs = query.limit(limit).stream() 
 
@@ -1263,9 +1265,9 @@ def get_historico():
         
         for doc in historico_docs:
             data = serialize_doc(doc.to_dict())
-            data['id'] = doc.id  # ✅ ADICIONA O ID DO DOCUMENTO
+            data['id'] = doc.id  # [OK] ADICIONA O ID DO DOCUMENTO
             
-            # ✅ FILTROS LOCAIS (aplicados após buscar do Firestore)
+            # [OK] FILTROS LOCAIS (aplicados após buscar do Firestore)
             # Filtro de placa
             if placa_filtro:
                 placa_doc = data.get('veiculo', '')
@@ -1296,10 +1298,10 @@ def get_historico():
             data['categoria'] = veiculos_cache_map.get(placa, 'Outros')
             historico.append(data)
         
-        # ✅ Busca TOTAL de registros (para paginação) - usa COUNT do Firestore (1 leitura!)
+        # [OK] Busca TOTAL de registros (para paginação) - usa COUNT do Firestore (1 leitura!)
         count_query = db.collection('saidas')
         
-        # ✅ SEMPRE aplica filtro de mês no count (mesma lógica da query principal)
+        # [OK] SEMPRE aplica filtro de mês no count (mesma lógica da query principal)
         if mes_filtro and ano_filtro:
             try:
                 mes = int(mes_filtro)
@@ -1330,32 +1332,32 @@ def get_historico():
             except ValueError:
                 pass
         
-        # ⚠️ Filtros locais (placa e motorista) não podem ser aplicados no count
+        #  Filtros locais (placa e motorista) não podem ser aplicados no count
         # O count será aproximado se houver filtros locais
         # Para ter count exato com filtros locais, usamos len(historico)
         if needs_local_filter:
             total_count = len(historico)
-            print(f"📊 COUNT com filtros locais: {total_count} registros")
+            print(f"[STATS] COUNT com filtros locais: {total_count} registros")
         else:
             # Conta total de registros (busca apenas IDs, mais eficiente que documentos completos)
             try:
                 # Tenta usar COUNT do Firestore (SDK mais recente)
                 count_result = count_query.count().get()
                 total_count = count_result[0][0].value
-                print(f"✅ COUNT otimizado: {total_count} registros totais (1 leitura)")
+                print(f"[OK] COUNT otimizado: {total_count} registros totais (1 leitura)")
             except Exception as count_error:
                 # Fallback: busca apenas 1 campo (timestampSaida) ao invés do doc completo
-                print(f"⚠️ COUNT falhou ({count_error}), usando contagem manual...")
+                print(f" COUNT falhou ({count_error}), usando contagem manual...")
                 docs_count = list(count_query.select(['timestampSaida']).stream())
                 total_count = len(docs_count)
-                print(f"📊 Contagem manual: {total_count} registros totais")
+                print(f"[STATS] Contagem manual: {total_count} registros totais")
         
         # DEBUG: Verifica contagem
-        print(f"📄 Página {page}: retornando {len(historico)} registros de {total_count} totais")
+        print(f"[Pagina] {page}: retornando {len(historico)} registros de {total_count} totais")
         if placa_filtro:
-            print(f"🔍 Filtro de placa aplicado: {placa_filtro}")
+            print(f"[SEARCH] Filtro de placa aplicado: {placa_filtro}")
         if motorista_filtro:
-            print(f"🔍 Filtro de motorista aplicado: {motorista_filtro}")
+            print(f"[SEARCH] Filtro de motorista aplicado: {motorista_filtro}")
 
         # Ordena localmente: primeiro por status (em_curso primeiro), depois por timestamp (mais recente primeiro)
         def sort_key(item):
@@ -1377,7 +1379,7 @@ def get_historico():
         
         historico_final = sorted(historico, key=sort_key)
 
-        # ✅ Salva no cache (5 minutos) - APENAS se não tem filtros E é página 1
+        # [OK] Salva no cache (5 minutos) - APENAS se não tem filtros E é página 1
         response_data = {
             'historico': historico_final,
             'total': total_count,
@@ -1391,9 +1393,9 @@ def get_historico():
                 'data': response_data,
                 'expires': time.time() + 300  # 5 minutos
             }
-            print(f'💾 Cache salvo: {mes_filtro}/{ano_filtro} por 5min ({len(historico_final)} registros)')
+            print(f'[SAVE] Cache salvo: {mes_filtro}/{ano_filtro} por 5min ({len(historico_final)} registros)')
         else:
-            print(f'✅ Sem cache (tem filtros): {len(historico_final)} registros')
+            print(f'[OK] Sem cache (tem filtros): {len(historico_final)} registros')
 
         return jsonify(response_data), 200
 
@@ -1455,8 +1457,8 @@ def post_motorista():
             'secao': secao,
             'visivel_para_motoristas': visivel,
             'status': 'nao_credenciado',
-            'status_ativo': True,  # ✅ Novo campo: Ativo por padrão
-            'cnh_url': None,  # ✅ Novo campo: URL da CNH
+            'status_ativo': True,  # [OK] Novo campo: Ativo por padrão
+            'cnh_url': None,  # [OK] Novo campo: URL da CNH
             'dataCadastro': firestore.SERVER_TIMESTAMP
         })
 
@@ -1533,7 +1535,7 @@ def delete_motorista(motorista_id):
         # Salva dados antigos para auditoria
         motorista_data = motorista_doc.to_dict()
         
-        # 💾 BACKUP: Se tem CNH anexada, mover para pasta de backup
+        # [SAVE] BACKUP: Se tem CNH anexada, mover para pasta de backup
         backup_urls = []
         if motorista_data.get('cnh_url'):
             try:
@@ -1552,9 +1554,9 @@ def delete_motorista(motorista_id):
                                 'url_original': cnh_url,
                                 'url_backup': backup_url
                             })
-                            print(f"✅ CNH do motorista {motorista_data.get('nome')} salva em backup")
+                            print(f"[OK] CNH do motorista {motorista_data.get('nome')} salva em backup")
             except Exception as e:
-                print(f"⚠️ Erro ao fazer backup da CNH: {e}")
+                print(f" Erro ao fazer backup da CNH: {e}")
         
         # Adiciona URLs de backup nos dados de auditoria
         motorista_data['_backups'] = backup_urls
@@ -1613,7 +1615,7 @@ def upload_cnh(motorista_id):
         for old_blob in blobs_to_delete:
             if 'cnh' in old_blob.name:
                 old_blob.delete()
-                print(f"🗑️ Arquivo antigo deletado: {old_blob.name}")
+                print(f"[DELETE] Arquivo antigo deletado: {old_blob.name}")
         
         # Criar nome do arquivo no Storage com timestamp para evitar cache
         timestamp = int(datetime.now().timestamp())
@@ -1632,8 +1634,8 @@ def upload_cnh(motorista_id):
         # Obter URL pública
         cnh_url = blob.public_url
         
-        print(f"✅ CNH salva em: {blob_name}")
-        print(f"🔗 URL gerada: {cnh_url}")
+        print(f"[OK] CNH salva em: {blob_name}")
+        print(f" URL gerada: {cnh_url}")
         
         # Atualizar documento do motorista com a URL
         motorista_ref.update({
@@ -1768,7 +1770,7 @@ def update_saida(saida_id):
             # Converte para UTC para salvar no Firestore
             ts_saida_utc = ts_saida.astimezone(timezone.utc)
         except Exception as e:
-            print(f"❌ Erro ao converter timestampSaida: {e}")
+            print(f" Erro ao converter timestampSaida: {e}")
             return jsonify({"error": f"Formato de data inválido: {e}"}), 400
 
         # Prepara dados para atualização
@@ -1801,17 +1803,17 @@ def update_saida(saida_id):
         # Atualiza no Firestore
         saida_ref.update(update_data)
         
-        # 🔥 LIMPA CACHE após edição
+        #  LIMPA CACHE após edição
         dashboard_cache.clear()
         historico_cache['expires'] = 0
-        print("🗑️ Cache do dashboard e histórico invalidados após edição")
+        print("[DELETE] Cache do dashboard e histórico invalidados após edição")
         
-        print(f"✅ Saída {saida_id} atualizada com sucesso")
-        print(f"📅 Timestamp salvo (UTC): {update_data['timestampSaida']}")
+        print(f"[OK] Saída {saida_id} atualizada com sucesso")
+        print(f"[DATE] Timestamp salvo (UTC): {update_data['timestampSaida']}")
         return jsonify({"message": "Saída atualizada com sucesso.", "id": saida_id}), 200
 
     except Exception as e:
-        print(f"❌ Erro ao atualizar saída: {e}")
+        print(f" Erro ao atualizar saída: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -1838,16 +1840,16 @@ def delete_saida(saida_id):
         # Deleta o documento
         saida_ref.delete()
         
-        # 🔥 LIMPA CACHE após exclusão
+        #  LIMPA CACHE após exclusão
         dashboard_cache.clear()
         historico_cache['expires'] = 0
-        print("🗑️ Cache do dashboard e histórico invalidados após exclusão")
+        print("[DELETE] Cache do dashboard e histórico invalidados após exclusão")
         
-        print(f"🗑️ Saída {saida_id} excluída com sucesso")
+        print(f"[DELETE] Saída {saida_id} excluída com sucesso")
         return jsonify({"message": "Saída excluída com sucesso."}), 200
 
     except Exception as e:
-        print(f"❌ Erro ao excluir saída: {e}")
+        print(f" Erro ao excluir saída: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -1884,16 +1886,16 @@ def atualizar_saida_rapido(saida_id):
         
         saida_ref.update(update_data)
         
-        # 🔥 LIMPA CACHE após edição
+        #  LIMPA CACHE após edição
         dashboard_cache.clear()
         historico_cache['expires'] = 0
-        print("🗑️ Cache do dashboard e histórico invalidados após edição rápida")
+        print("[DELETE] Cache do dashboard e histórico invalidados após edição rápida")
         
-        print(f"✅ Saída {saida_id} atualizada rapidamente (solicitante/trajeto)")
+        print(f"[OK] Saída {saida_id} atualizada rapidamente (solicitante/trajeto)")
         return jsonify({"message": "Saída atualizada com sucesso.", "id": saida_id}), 200
 
     except Exception as e:
-        print(f"❌ Erro ao atualizar saída rápido: {e}")
+        print(f" Erro ao atualizar saída rápido: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -2019,7 +2021,7 @@ def post_refuel():
                 'viagens_totais': 0,
                 'total_refuels': 1
             })
-            print(f"✅ Veículo {veiculo} criado automaticamente via abastecimento rápido")
+            print(f"[OK] Veículo {veiculo} criado automaticamente via abastecimento rápido")
         else:
             # Veículo existe, atualizar
             vdoc = q[0]
@@ -2074,7 +2076,7 @@ def get_refuels_for_veiculo(placa):
         
         return jsonify({ 'items': items, 'total': total, 'page': page, 'page_size': page_size }), 200
     except Exception as e:
-        print(f"❌ Erro ao buscar refuels: {e}")
+        print(f" Erro ao buscar refuels: {e}")
         return jsonify({"error": "Ocorreu um erro ao buscar abastecimentos."}), 500
 
 
@@ -2477,7 +2479,7 @@ def delete_veiculo(placa):
         vdoc = q[0]
         veiculo_data = vdoc.to_dict()
         
-        # 💾 BACKUP: Se tem documento anexado, mover para pasta de backup
+        # [SAVE] BACKUP: Se tem documento anexado, mover para pasta de backup
         backup_urls = []
         if veiculo_data.get('documento_url'):
             try:
@@ -2496,9 +2498,9 @@ def delete_veiculo(placa):
                                 'url_original': documento_url,
                                 'url_backup': backup_url
                             })
-                            print(f"✅ Documento do veículo {placa_norm} salvo em backup")
+                            print(f"[OK] Documento do veículo {placa_norm} salvo em backup")
             except Exception as e:
-                print(f"⚠️ Erro ao fazer backup do documento: {e}")
+                print(f" Erro ao fazer backup do documento: {e}")
         
         # Adiciona URLs de backup nos dados de auditoria
         veiculo_data['_backups'] = backup_urls
@@ -2508,7 +2510,7 @@ def delete_veiculo(placa):
         
         # Deletar documento do Firestore
         vdoc.reference.delete()
-        print(f"✅ Veículo {placa_norm} excluído com sucesso")
+        print(f"[OK] Veículo {placa_norm} excluído com sucesso")
         
         return jsonify({
             "message": "Veículo excluído com sucesso.",
@@ -2516,7 +2518,7 @@ def delete_veiculo(placa):
         }), 200
         
     except Exception as e:
-        print(f"❌ Erro ao excluir veículo: {e}")
+        print(f" Erro ao excluir veículo: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({"error": "Ocorreu um erro ao excluir o veículo."}), 500
@@ -2632,7 +2634,7 @@ def upload_documento_veiculo(veiculo_id):
         for old_blob in blobs_to_delete:
             if 'documento' in old_blob.name:
                 old_blob.delete()
-                print(f"🗑️ Arquivo antigo deletado: {old_blob.name}")
+                print(f"[DELETE] Arquivo antigo deletado: {old_blob.name}")
         
         # Criar nome do arquivo no Storage com timestamp para evitar cache
         timestamp = int(datetime.now().timestamp())
@@ -2651,8 +2653,8 @@ def upload_documento_veiculo(veiculo_id):
         # Obter URL pública
         documento_url = blob.public_url
         
-        print(f"✅ Documento salvo em: {blob_name}")
-        print(f"🔗 URL gerada: {documento_url}")
+        print(f"[OK] Documento salvo em: {blob_name}")
+        print(f" URL gerada: {documento_url}")
         
         # Atualizar documento do veículo com a URL
         veiculo_ref.update({
@@ -2715,7 +2717,7 @@ def toggle_veiculo_status(veiculo_id):
         
         # Se não encontrar por ID, tentar por placa
         if not veiculo_doc.exists:
-            print(f"⚠️ Veículo não encontrado por ID: {veiculo_id}, tentando por placa...")
+            print(f" Veículo não encontrado por ID: {veiculo_id}, tentando por placa...")
             placas_query = db.collection('veiculos').where(
                 filter=firestore.FieldFilter('placa', '==', veiculo_id.upper())
             ).limit(1).stream()
@@ -2779,16 +2781,16 @@ def get_dashboard_stats():
         # Cache deve ser diferente para cada mês
         cache_key = month_param if month_param else 'default'
         
-        # ✅ CACHE ATIVO: 5 minutos (300s) - Atualiza apenas quando necessário
+        # [OK] CACHE ATIVO: 5 minutos (300s) - Atualiza apenas quando necessário
         # Invalidado automaticamente em novas saídas/chegadas
         # Garante que a chave existe no cache
         if cache_key not in dashboard_cache:
             dashboard_cache[cache_key] = {'data': None, 'expires': 0}
         
         if dashboard_cache[cache_key].get('expires', 0) > now and dashboard_cache[cache_key].get('data'):
-            print(f'✅ Dashboard do CACHE (mês: {cache_key}) - economia ~160 leituras')
+            print(f'[OK] Dashboard do CACHE (mês: {cache_key}) - economia ~160 leituras')
             return jsonify(dashboard_cache[cache_key]['data']), 200
-        print(f'� Recalculando dashboard (cache expirado: {cache_key})')
+        print(f' Recalculando dashboard (cache expirado: {cache_key})')
             
         # OTIMIZAÇÃO: Lê apenas motoristas e veículos (poucos docs)
         motoristas_docs = list(db.collection('motoristas').stream())
@@ -2796,11 +2798,11 @@ def get_dashboard_stats():
 
         now_datetime = datetime.now(timezone.utc)  # Para comparações de data
         
-        # ✅ CORREÇÃO: start_of_today deve ser 00:00 no fuso LOCAL, depois converter para UTC
+        # [OK] CORREÇÃO: start_of_today deve ser 00:00 no fuso LOCAL, depois converter para UTC
         now_local = datetime.now(LOCAL_TZ)
         start_of_today_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
         start_of_today = start_of_today_local.astimezone(timezone.utc)  # Converte para UTC
-        print(f"🕐 Hoje LOCAL: {start_of_today_local} → UTC: {start_of_today}")
+        print(f"[TIME] Hoje LOCAL: {start_of_today_local} → UTC: {start_of_today}")
         
         month_start = None
         month_end = None
@@ -2809,7 +2811,7 @@ def get_dashboard_stats():
                 year, month = month_param.split('-')
                 year = int(year)
                 month = int(month)
-                print(f"🔍 Filtrando dashboard por mês: {month_param} (ano={year}, mês={month})")
+                print(f"[SEARCH] Filtrando dashboard por mês: {month_param} (ano={year}, mês={month})")
                 
                 # início do mês no fuso local (00:00 do primeiro dia)
                 month_start_local = datetime(year, month, 1, 0, 0, 0, tzinfo=LOCAL_TZ)
@@ -2820,15 +2822,15 @@ def get_dashboard_stats():
                     next_month_local = datetime(year, month + 1, 1, 0, 0, 0, tzinfo=LOCAL_TZ)
                 month_end_local = next_month_local - timedelta(seconds=1)
                 
-                print(f"📅 Período local: {month_start_local} até {month_end_local}")
+                print(f"[DATE] Período local: {month_start_local} até {month_end_local}")
                 
                 # converter para UTC para comparar com timestamps armazenados em UTC
                 month_start = month_start_local.astimezone(timezone.utc)
                 month_end = month_end_local.astimezone(timezone.utc)
                 
-                print(f"📅 Período UTC: {month_start} até {month_end}")
+                print(f"[DATE] Período UTC: {month_start} até {month_end}")
             except Exception as e:
-                print(f"❌ Erro ao parsear mês: {e}")
+                print(f" Erro ao parsear mês: {e}")
                 month_start = None
                 month_end = None
         
@@ -2837,30 +2839,30 @@ def get_dashboard_stats():
         window_end = month_end if month_end else now_datetime
 
         # OTIMIZAÇÃO: Query com LIMIT AGRESSIVO (50 docs max)
-        print(f"🔎 Buscando saídas entre {window_start} e {window_end}")
+        print(f"[FIND] Buscando saídas entre {window_start} e {window_end}")
         query_mes = db.collection('saidas').where(filter=And([
             firestore.FieldFilter('timestampSaida', '>=', window_start),
             firestore.FieldFilter('timestampSaida', '<=', window_end)
-        ])).limit(50)  # ✅ REDUZIDO PARA 50 (economia massiva)
+        ])).limit(50)  # [OK] REDUZIDO PARA 50 (economia massiva)
         saidas_mes_docs = list(query_mes.stream())
         saidas_mes = [doc.to_dict() for doc in saidas_mes_docs]
-        print(f"✅ Encontrou {len(saidas_mes)} saídas no período (LIMIT 50)")
+        print(f"[OK] Encontrou {len(saidas_mes)} saídas no período (LIMIT 50)")
         
         # DEBUG: Mostra as primeiras 3 datas para verificar
         if saidas_mes:
             for i, s in enumerate(saidas_mes[:3]):
                 ts = s.get('timestampSaida')
-                print(f"  📅 Saída {i+1}: {ts} (tipo: {type(ts)})")
+                print(f"  [DATE] Saída {i+1}: {ts} (tipo: {type(ts)})")
         elif month_param:
             # Se não encontrou nada no mês filtrado, mostra TODAS as datas disponíveis
-            print(f"⚠️ Não encontrou registros para {month_param}. Listando TODAS as datas disponíveis:")
+            print(f" Não encontrou registros para {month_param}. Listando TODAS as datas disponíveis:")
             all_saidas = list(db.collection('saidas').limit(50).stream())
             for i, doc in enumerate(all_saidas[:10]):
                 data = doc.to_dict()
                 ts = data.get('timestampSaida')
-                print(f"  📅 Registro {i+1}: {ts}")
+                print(f"  [DATE] Registro {i+1}: {ts}")
         
-        # ✅ CORREÇÃO: Viagens HOJE deve ser uma query SEPARADA (não usar saidas_mes)
+        # [OK] CORREÇÃO: Viagens HOJE deve ser uma query SEPARADA (não usar saidas_mes)
         # porque "HOJE" sempre mostra o dia atual, independente do filtro de mês
         end_of_today = start_of_today + timedelta(days=1) - timedelta(seconds=1)
         query_hoje = db.collection('saidas').where(filter=And([
@@ -2868,7 +2870,7 @@ def get_dashboard_stats():
             firestore.FieldFilter('timestampSaida', '<=', end_of_today)
         ])).stream()
         viagens_hoje = len(list(query_hoje))
-        print(f"📊 Viagens HOJE: {viagens_hoje} (entre {start_of_today} e {end_of_today})")
+        print(f"[STATS] Viagens HOJE: {viagens_hoje} (entre {start_of_today} e {end_of_today})")
         
         viagens_em_curso = 0
         total_horas_em_rua_seconds = 0
@@ -2940,8 +2942,8 @@ def get_dashboard_stats():
         
         # Debug: verificar se os IDs estão sendo adicionados
         if historico_recente:
-            print(f'📋 Histórico recente: {len(historico_recente)} registros')
-            print(f'🔍 Primeiro registro tem ID? {historico_recente[0].get("id") is not None}')
+            print(f'[LIST] Histórico recente: {len(historico_recente)} registros')
+            print(f'[SEARCH] Primeiro registro tem ID? {historico_recente[0].get("id") is not None}')
         
         historico_final = sorted(historico_recente, key=lambda x: x.get('status') == 'em_curso', reverse=True)
 
@@ -2987,14 +2989,14 @@ def get_dashboard_stats():
         # Salva no cache (5 minutos) - POR MÊS
         cache_timestamp = time.time()
         
-        # ✅ CACHE REATIVADO: 5 minutos (300 segundos)
+        # [OK] CACHE REATIVADO: 5 minutos (300 segundos)
         # Garante que a chave existe antes de salvar
         if cache_key not in dashboard_cache:
             dashboard_cache[cache_key] = {}
             
         dashboard_cache[cache_key]['data'] = stats
         dashboard_cache[cache_key]['expires'] = cache_timestamp + 300  # 5 minutos
-        print(f'� Dashboard no cache por 5min (mês: {cache_key})')
+        print(f' Dashboard no cache por 5min (mês: {cache_key})')
 
         return jsonify(stats)
 
@@ -3010,7 +3012,7 @@ def clear_dashboard_cache():
     try:
         global dashboard_cache
         dashboard_cache.clear()
-        print(f'🗑️ Cache do dashboard limpo manualmente')
+        print(f'[DELETE] Cache do dashboard limpo manualmente')
         return jsonify({"message": "Cache limpo com sucesso"}), 200
     except Exception as e:
         print(f"Erro ao limpar cache: {e}")
@@ -3077,8 +3079,25 @@ def handle_saida(veiculo_placa, motorista_nome, solicitante, trajeto, horario=No
     try:
         # Normaliza placa recebida
         veiculo_placa = normalize_plate(veiculo_placa) if veiculo_placa else veiculo_placa
-        # REGRA DE NEGÓCIO: Verifica se o veículo já está em curso
+        
+        #  PROTEÇÃO ANTI-DUPLICATA: Verifica se já existe saída recente (últimos 2 minutos)
+        now_utc = datetime.now(timezone.utc)
+        dois_minutos_atras = now_utc - timedelta(minutes=2)
+        
         saidas_ref = db.collection('saidas')
+        duplicata_query = saidas_ref.where(filter=And([
+            firestore.FieldFilter('veiculo', '==', veiculo_placa),
+            firestore.FieldFilter('motorista', '==', motorista_nome),
+            firestore.FieldFilter('timestampSaida', '>=', dois_minutos_atras)
+        ])).limit(1).stream()
+        
+        saidas_recentes = list(duplicata_query)
+        if len(saidas_recentes) > 0:
+            saida_duplicada = saidas_recentes[0].to_dict()
+            horario_duplicata = saida_duplicada.get('horarioSaida', 'N/A')
+            return f" Saída duplicada bloqueada! Este veículo com este motorista já tem um registro de saída recente (às {horario_duplicata}). Aguarde 2 minutos para registrar nova saída."
+        
+        # REGRA DE NEGÓCIO: Verifica se o veículo já está em curso
         viagem_em_curso = saidas_ref.where(filter=And([
             firestore.FieldFilter('veiculo', '==', veiculo_placa),
             firestore.FieldFilter('status', '==', 'em_curso')
@@ -3168,10 +3187,10 @@ def handle_saida(veiculo_placa, motorista_nome, solicitante, trajeto, horario=No
             'timestampChegada': None
         })
 
-        # ✅ INVALIDA O CACHE DO DASHBOARD e HISTÓRICO após nova saída
+        # [OK] INVALIDA O CACHE DO DASHBOARD e HISTÓRICO após nova saída
         dashboard_cache.clear()
         historico_cache.clear()  # Limpa TODAS as chaves do cache
-        print("🗑️ Cache do dashboard e histórico invalidados após nova saída")
+        print("[DELETE] Cache do dashboard e histórico invalidados após nova saída")
 
         return f"Saída do veículo {veiculo_placa} registrada com sucesso."
 
@@ -3263,7 +3282,7 @@ def handle_chegada(veiculo_placa, horario=None, litros=None, odometro=None):
                         'dataCadastro': firestore.SERVER_TIMESTAMP,
                         'viagens_totais': 0
                     })
-                    print(f"✅ Veículo {veiculo_placa} criado automaticamente via abastecimento")
+                    print(f"[OK] Veículo {veiculo_placa} criado automaticamente via abastecimento")
                 elif odometro_val is not None:
                     # Atualiza o ultimo odometro no veiculo existente
                     vdoc = q[0]
@@ -3274,10 +3293,10 @@ def handle_chegada(veiculo_placa, horario=None, litros=None, odometro=None):
             print(f"Erro ao registrar refuel na chegada: {e}")
             # não falha a chegada por causa do refuel
 
-        # ✅ INVALIDA O CACHE DO DASHBOARD e HISTÓRICO após chegada
+        # [OK] INVALIDA O CACHE DO DASHBOARD e HISTÓRICO após chegada
         dashboard_cache.clear()
         historico_cache.clear()  # Limpa TODAS as chaves do cache
-        print("🗑️ Cache do dashboard e histórico invalidados após chegada")
+        print("[DELETE] Cache do dashboard e histórico invalidados após chegada")
 
         return return_msg
 
@@ -3294,10 +3313,10 @@ def handle_chegada(veiculo_placa, horario=None, litros=None, odometro=None):
 @requires_auth
 def get_km_mensal():
     """Lista todos os registros de KM mensal, opcionalmente filtrados por veículo, mês ou ano."""
-    print("🔍 [KM MENSAL] Iniciando requisição GET /api/km-mensal")
+    print("[SEARCH] [KM MENSAL] Iniciando requisição GET /api/km-mensal")
     
     if not db:
-        print("❌ [KM MENSAL] Erro: DB não conectado")
+        print(" [KM MENSAL] Erro: DB não conectado")
         return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
     
     try:
@@ -3305,7 +3324,7 @@ def get_km_mensal():
         mes_ano = request.args.get('mes_ano')  # formato: YYYY-MM
         ano = request.args.get('ano')  # formato: YYYY (novo filtro)
         
-        print(f"📋 [KM MENSAL] Filtros: placa={placa}, mes_ano={mes_ano}, ano={ano}")
+        print(f"[LIST] [KM MENSAL] Filtros: placa={placa}, mes_ano={mes_ano}, ano={ano}")
         
         km_ref = db.collection('km_mensal')
         
@@ -3325,12 +3344,12 @@ def get_km_mensal():
         # Ordena se possível (pode falhar se faltarem índices)
         try:
             if not placa and not mes_ano and not ano:
-                print("📊 [KM MENSAL] Ordenando no Firestore")
+                print("[STATS] [KM MENSAL] Ordenando no Firestore")
                 km_ref = km_ref.order_by('mes_ano', direction=firestore.Query.DESCENDING)
         except:
-            print("⚠️ [KM MENSAL] Não foi possível ordenar no Firestore")
+            print(" [KM MENSAL] Não foi possível ordenar no Firestore")
         
-        print("🔄 [KM MENSAL] Buscando documentos...")
+        print("[RELOAD] [KM MENSAL] Buscando documentos...")
         docs = km_ref.stream()
         registros = []
         for doc in docs:
@@ -3341,15 +3360,15 @@ def get_km_mensal():
                 data['data_registro'] = data['data_registro'].isoformat()
             registros.append(data)
         
-        print(f"✅ [KM MENSAL] Encontrados {len(registros)} registros")
+        print(f"[OK] [KM MENSAL] Encontrados {len(registros)} registros")
         
         # Ordena em Python sempre
-        print("📊 [KM MENSAL] Ordenando em Python")
+        print("[STATS] [KM MENSAL] Ordenando em Python")
         registros.sort(key=lambda x: x.get('mes_ano', ''), reverse=True)
         
         return jsonify(registros), 200
     except Exception as e:
-        print(f"❌ [KM MENSAL] Erro: {e}")
+        print(f" [KM MENSAL] Erro: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
@@ -3651,9 +3670,9 @@ def delete_multa(multa_id):
                         bucket = firebase_storage.bucket()
                         blob = bucket.blob(file_path)
                         blob.delete()
-                        print(f"✅ Documento da multa {multa_id} deletado do storage: {file_path}")
+                        print(f"[OK] Documento da multa {multa_id} deletado do storage: {file_path}")
             except Exception as e:
-                print(f"⚠️ Erro ao deletar documento do storage: {e}")
+                print(f" Erro ao deletar documento do storage: {e}")
         
         multa_ref.delete()
         return jsonify({"message": "Multa deletada com sucesso."}), 200
@@ -3709,9 +3728,9 @@ def upload_documento_multa(multa_id):
                         bucket = firebase_storage.bucket()
                         old_blob = bucket.blob(old_file_path)
                         old_blob.delete()
-                        print(f"✅ Documento antigo da multa deletado: {old_file_path}")
+                        print(f"[OK] Documento antigo da multa deletado: {old_file_path}")
             except Exception as e:
-                print(f"⚠️ Erro ao deletar documento antigo: {e}")
+                print(f" Erro ao deletar documento antigo: {e}")
         
         # Gerar nome único para o arquivo
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -3733,7 +3752,7 @@ def upload_documento_multa(multa_id):
             'documento_updated_at': datetime.now(timezone.utc)
         })
         
-        print(f"✅ Documento da multa {multa_id} enviado: {safe_filename}")
+        print(f"[OK] Documento da multa {multa_id} enviado: {safe_filename}")
         
         return jsonify({
             "message": "Documento enviado com sucesso!",
@@ -3741,7 +3760,7 @@ def upload_documento_multa(multa_id):
         }), 200
         
     except Exception as e:
-        print(f"❌ Erro ao fazer upload do documento da multa: {e}")
+        print(f" Erro ao fazer upload do documento da multa: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({"error": "Erro ao fazer upload do documento."}), 500
@@ -3867,7 +3886,7 @@ def revisoes():
             
             db.collection('revisoes').add(revisao)
             
-            print(f"✅ Revisão cadastrada: {placa} - {revisao['tipo_revisao']}")
+            print(f"[OK] Revisão cadastrada: {placa} - {revisao['tipo_revisao']}")
             return jsonify({"message": "Revisão cadastrada com sucesso!"}), 201
             
         except ValueError as ve:
@@ -3924,7 +3943,7 @@ def revisao_detail(revisao_id):
             
             revisao_ref.update(update_data)
             
-            print(f"✅ Revisão {revisao_id} atualizada")
+            print(f"[OK] Revisão {revisao_id} atualizada")
             return jsonify({"message": "Revisão atualizada com sucesso!"}), 200
             
         except ValueError as ve:
@@ -3941,7 +3960,7 @@ def revisao_detail(revisao_id):
             
             revisao_ref.delete()
             
-            print(f"✅ Revisão {revisao_id} deletada")
+            print(f"[OK] Revisão {revisao_id} deletada")
             return jsonify({"message": "Revisão deletada com sucesso."}), 200
             
         except Exception as e:
@@ -3962,6 +3981,7 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from io import BytesIO
 
 @app.route('/pdf/motoristas', methods=['GET'])
+@requires_auth
 def pdf_motoristas():
     """Gera PDF com lista de todos os motoristas"""
     if not db:
@@ -4061,6 +4081,7 @@ def pdf_motoristas():
 
 
 @app.route('/pdf/veiculos', methods=['GET'])
+@requires_auth
 def pdf_veiculos():
     """Gera PDF com lista de veículos (com filtro de status)"""
     if not db:
@@ -4192,6 +4213,7 @@ def pdf_veiculos():
 
 
 @app.route('/pdf/abastecimentos', methods=['GET'])
+@requires_auth
 def pdf_abastecimentos():
     """Gera PDF com lista de abastecimentos (filtros opcionais via query params)"""
     if not db:
@@ -4225,9 +4247,9 @@ def pdf_abastecimentos():
                     dt_inicio_local = dt_inicio_local.replace(tzinfo=LOCAL_TZ)
                 dt_inicio_utc = dt_inicio_local.astimezone(timezone.utc)
                 filters.append(firestore.FieldFilter('timestamp', '>=', dt_inicio_utc))
-                print(f'📅 Filtro data_inicio: {data_inicio} (local) -> {dt_inicio_utc} (UTC)')
+                print(f'[DATE] Filtro data_inicio: {data_inicio} (local) -> {dt_inicio_utc} (UTC)')
             except Exception as e:
-                print(f'⚠️ Erro ao converter data_inicio: {e}')
+                print(f' Erro ao converter data_inicio: {e}')
                 pass
         
         if data_fim:
@@ -4238,15 +4260,15 @@ def pdf_abastecimentos():
                     dt_fim_local = dt_fim_local.replace(tzinfo=LOCAL_TZ)
                 dt_fim_utc = dt_fim_local.astimezone(timezone.utc)
                 filters.append(firestore.FieldFilter('timestamp', '<=', dt_fim_utc))
-                print(f'📅 Filtro data_fim: {data_fim} (local) -> {dt_fim_utc} (UTC)')
+                print(f'[DATE] Filtro data_fim: {data_fim} (local) -> {dt_fim_utc} (UTC)')
             except Exception as e:
-                print(f'⚠️ Erro ao converter data_fim: {e}')
+                print(f' Erro ao converter data_fim: {e}')
                 pass
         
         if filters:
             query = query.where(filter=And(filters))
         elif not data_inicio and not data_fim:
-            # ⚠️ SEGURANÇA: Se não tem filtro de data, busca apenas do mês atual
+            #  SEGURANÇA: Se não tem filtro de data, busca apenas do mês atual
             now_local = datetime.now(LOCAL_TZ)
             primeiro_dia = now_local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             ultimo_dia = (primeiro_dia.replace(month=primeiro_dia.month % 12 + 1, day=1) - timedelta(days=1)).replace(hour=23, minute=59, second=59)
@@ -4258,7 +4280,7 @@ def pdf_abastecimentos():
                 firestore.FieldFilter('timestamp', '>=', primeiro_dia_utc),
                 firestore.FieldFilter('timestamp', '<=', ultimo_dia_utc)
             ]))
-            print(f'⚠️ Sem filtros: buscando apenas mês atual ({primeiro_dia.strftime("%m/%Y")})')
+            print(f' Sem filtros: buscando apenas mês atual ({primeiro_dia.strftime("%m/%Y")})')
         
         # Limitar a 500 registros
         refuels_docs = list(query.order_by('timestamp', direction=firestore.Query.DESCENDING).limit(500).stream())
@@ -4390,6 +4412,7 @@ def pdf_abastecimentos():
 
 
 @app.route('/pdf/saidas', methods=['GET'])
+@requires_auth
 def pdf_saidas():
     """Gera PDF com lista de saídas (filtros opcionais via query params)"""
     if not db:
@@ -4436,9 +4459,9 @@ def pdf_saidas():
                     dt_inicio_local = dt_inicio_local.replace(tzinfo=LOCAL_TZ)
                 dt_inicio_utc = dt_inicio_local.astimezone(timezone.utc)
                 filters.append(firestore.FieldFilter('timestampSaida', '>=', dt_inicio_utc))
-                print(f'📅 Filtro data_inicio: {data_inicio} (local) -> {dt_inicio_utc} (UTC)')
+                print(f'[DATE] Filtro data_inicio: {data_inicio} (local) -> {dt_inicio_utc} (UTC)')
             except Exception as e:
-                print(f'⚠️ Erro ao converter data_inicio: {e}')
+                print(f' Erro ao converter data_inicio: {e}')
                 pass
         
         if data_fim:
@@ -4450,15 +4473,15 @@ def pdf_saidas():
                     dt_fim_local = dt_fim_local.replace(tzinfo=LOCAL_TZ)
                 dt_fim_utc = dt_fim_local.astimezone(timezone.utc)
                 filters.append(firestore.FieldFilter('timestampSaida', '<=', dt_fim_utc))
-                print(f'📅 Filtro data_fim: {data_fim} (local) -> {dt_fim_utc} (UTC)')
+                print(f'[DATE] Filtro data_fim: {data_fim} (local) -> {dt_fim_utc} (UTC)')
             except Exception as e:
-                print(f'⚠️ Erro ao converter data_fim: {e}')
+                print(f' Erro ao converter data_fim: {e}')
                 pass
         
         if filters:
             query = query.where(filter=And(filters))
         elif not data_inicio and not data_fim:
-            # ⚠️ SEGURANÇA: Se não tem filtro de data, busca apenas do mês atual
+            #  SEGURANÇA: Se não tem filtro de data, busca apenas do mês atual
             now_local = datetime.now(LOCAL_TZ)
             primeiro_dia = now_local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             ultimo_dia = (primeiro_dia.replace(month=primeiro_dia.month % 12 + 1, day=1) - timedelta(days=1)).replace(hour=23, minute=59, second=59)
@@ -4470,12 +4493,12 @@ def pdf_saidas():
                 firestore.FieldFilter('timestampSaida', '>=', primeiro_dia_utc),
                 firestore.FieldFilter('timestampSaida', '<=', ultimo_dia_utc)
             ]))
-            print(f'⚠️ Sem filtros: buscando apenas mês atual ({primeiro_dia.strftime("%m/%Y")})')
+            print(f' Sem filtros: buscando apenas mês atual ({primeiro_dia.strftime("%m/%Y")})')
         
-        # ✅ LIMITE MÁXIMO: 500 registros para proteger quota
+        # [OK] LIMITE MÁXIMO: 500 registros para proteger quota
         saidas_docs = list(query.order_by('timestampSaida', direction=firestore.Query.DESCENDING).limit(500).stream())
         
-        print(f'📄 Gerando PDF com {len(saidas_docs)} registros')
+        print(f'[PDF] Gerando com {len(saidas_docs)} registros')
         
         saidas = []
         for doc in saidas_docs:
@@ -4534,7 +4557,7 @@ def pdf_saidas():
                     except:
                         pass
             
-            status_text = '✅ Finalizada' if s.get('status') == 'finalizada' else '🚗 Em Curso'
+            status_text = '[OK] Finalizada' if s.get('status') == 'finalizada' else ' Em Curso'
             
             # Buscar trajeto/destino
             destino = s.get('trajeto') or s.get('destino') or '-'
@@ -4583,6 +4606,7 @@ def pdf_saidas():
 
 
 @app.route('/pdf/multas', methods=['GET'])
+@requires_auth
 def pdf_multas():
     """Gera PDF com lista de multas (filtros opcionais via query params)"""
     if not db:
@@ -4613,9 +4637,9 @@ def pdf_multas():
                     dt_inicio_local = dt_inicio_local.replace(tzinfo=LOCAL_TZ)
                 dt_inicio_utc = dt_inicio_local.astimezone(timezone.utc)
                 filters.append(firestore.FieldFilter('data_vencimento', '>=', dt_inicio_utc))
-                print(f'📅 Filtro data_inicio: {data_inicio} (local) -> {dt_inicio_utc} (UTC)')
+                print(f'[DATE] Filtro data_inicio: {data_inicio} (local) -> {dt_inicio_utc} (UTC)')
             except Exception as e:
-                print(f'⚠️ Erro ao converter data_inicio: {e}')
+                print(f' Erro ao converter data_inicio: {e}')
                 pass
         
         if data_fim:
@@ -4626,15 +4650,15 @@ def pdf_multas():
                     dt_fim_local = dt_fim_local.replace(tzinfo=LOCAL_TZ)
                 dt_fim_utc = dt_fim_local.astimezone(timezone.utc)
                 filters.append(firestore.FieldFilter('data_vencimento', '<=', dt_fim_utc))
-                print(f'📅 Filtro data_fim: {data_fim} (local) -> {dt_fim_utc} (UTC)')
+                print(f'[DATE] Filtro data_fim: {data_fim} (local) -> {dt_fim_utc} (UTC)')
             except Exception as e:
-                print(f'⚠️ Erro ao converter data_fim: {e}')
+                print(f' Erro ao converter data_fim: {e}')
                 pass
         
         if filters:
             query = query.where(filter=And(filters))
         elif not data_inicio and not data_fim:
-            # ⚠️ SEGURANÇA: Se não tem filtro de data, busca apenas do mês atual
+            #  SEGURANÇA: Se não tem filtro de data, busca apenas do mês atual
             now_local = datetime.now(LOCAL_TZ)
             primeiro_dia = now_local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             ultimo_dia = (primeiro_dia.replace(month=primeiro_dia.month % 12 + 1, day=1) - timedelta(days=1)).replace(hour=23, minute=59, second=59)
@@ -4646,7 +4670,7 @@ def pdf_multas():
                 firestore.FieldFilter('data_vencimento', '>=', primeiro_dia_utc),
                 firestore.FieldFilter('data_vencimento', '<=', ultimo_dia_utc)
             ]))
-            print(f'⚠️ Sem filtros: buscando apenas mês atual ({primeiro_dia.strftime("%m/%Y")})')
+            print(f' Sem filtros: buscando apenas mês atual ({primeiro_dia.strftime("%m/%Y")})')
         
         # Limitar a 500 registros
         multas_docs = list(query.order_by('data_vencimento', direction=firestore.Query.DESCENDING).limit(500).stream())
@@ -4707,8 +4731,8 @@ def pdf_multas():
             # Status text
             status_map = {
                 'pendente': '⏳ Pendente',
-                'paga': '✅ Paga',
-                'contestada': '⚖️ Contestada'
+                'paga': '[OK] Paga',
+                'contestada': ' Contestada'
             }
             status_text = status_map.get(m.get('status', 'pendente'), '⏳ Pendente')
             
@@ -4780,68 +4804,107 @@ def pdf_multas():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/pdf/revisoes', methods=['GET'])
+@app.route('/pdf/revisoes', methods=['GET', 'POST'])
+@requires_auth
 def pdf_revisoes():
-    """Gera PDF com lista de revisões (filtros opcionais via query params)"""
+    """Gera PDF com lista de chamados de manutenção (filtros opcionais via query params ou POST)"""
+    print("\n" + "="*60)
+    print("[PDF] INICIANDO GERACAO DE PDF DE REVISOES")
+    print("="*60)
+    
     if not db:
+        print("[ERRO] Banco de dados não conectado")
         return jsonify({"error": "Banco de dados não conectado"}), 500
     
+    def sanitize_text(text):
+        """Remove apenas caracteres problemáticos, mantém texto legível"""
+        if not text:
+            return '-'
+        try:
+            text = str(text)
+            # Remove apenas emojis e caracteres de controle, mantém acentos
+            import unicodedata
+            # Normaliza e remove categorias problemáticas (emojis, símbolos)
+            cleaned = ''.join(
+                char for char in text 
+                if unicodedata.category(char)[0] not in ('C', 'S') or char in ' \n\t'
+            )
+            return cleaned.strip() if cleaned.strip() else str(text).encode('ascii', 'ignore').decode('ascii')
+        except:
+            return str(text)[:50]  # Retorna primeiros 50 chars se falhar
+    
     try:
-        # Filtros opcionais
-        veiculo = request.args.get('veiculo')
-        status = request.args.get('status')  # 'em_dia', 'proxima', 'atrasada'
+        # Inicializa variáveis de filtro
+        placa = ''
+        status_chamado = None
+        categoria = None
+        aprovacao = None
+        direcionamento = None
         
-        # Query base
-        query = db.collection('revisoes')
-        
-        # Aplicar filtro de veículo
-        if veiculo:
-            query = query.where('placa', '==', veiculo)
-        
-        # Buscar revisões
-        revisoes_docs = list(query.order_by('data_revisao', direction=firestore.Query.DESCENDING).limit(50).stream())
-        
-        revisoes = []
-        for doc in revisoes_docs:
-            r = doc.to_dict()
-            r['id'] = doc.id
+        # Se for POST, pega dados do body (vindo do frontend/LocalStorage)
+        if request.method == 'POST':
+            data = request.get_json()
+            chamados = data.get('chamados', [])
+            print(f"[PDF] Recebidos {len(chamados)} chamados do LocalStorage")
+        else:
+            # Se for GET, busca do Firestore (modo antigo)
+            # Filtros opcionais (novos filtros do sistema de chamados)
+            placa = request.args.get('placa', '').strip()
+            status_chamado = request.args.get('status')  # 'pendente', 'andamento', 'resolvido'
+            categoria = request.args.get('categoria')  # 'pneu', 'revisao', 'mecanica', 'lataria'
+            aprovacao = request.args.get('aprovacao')  # 'aprovado', 'falta_aprovacao'
+            direcionamento = request.args.get('direcionamento')  # 'direcionado', 'nao_direcionado', 'sem_direcionamento'
             
-            # Calcular status dinâmico usando KM Mensal
-            if 'km_proxima_revisao' in r and 'placa' in r:
-                km_docs = db.collection('km_mensal').where('placa', '==', r['placa']).order_by('mes_ano', direction=firestore.Query.DESCENDING).limit(1).stream()
-                km_atual = 0
-                
-                for km_doc in km_docs:
-                    km_data = km_doc.to_dict()
-                    km_atual = km_data.get('km_valor', 0) or 0
-                    break
-                
-                km_proxima = r.get('km_proxima_revisao', 0)
-                
-                if km_atual > 0:
-                    if km_atual >= km_proxima:
-                        r['status'] = 'atrasada'
-                    elif km_atual >= (km_proxima - 1000):
-                        r['status'] = 'proxima'
-                    else:
-                        r['status'] = 'em_dia'
-                    
-                    r['km_atual'] = km_atual
-                    r['km_restante'] = km_proxima - km_atual
-                else:
-                    r['status'] = 'em_dia'
-                    r['km_atual'] = 0
-                    r['km_restante'] = km_proxima
+            # Query base na coleção de chamados
+            query = db.collection('revisoes')
             
-            # Aplicar filtro de status se especificado
-            if status and r.get('status', '') != status:
-                continue
+            # Aplicar filtros do Firestore quando possível
+            if placa:
+                query = query.where('plate', '==', placa.upper())
             
-            revisoes.append(r)
+            if status_chamado:
+                query = query.where('status', '==', status_chamado)
+            
+            if categoria:
+                query = query.where('category', '==', categoria)
+            
+            # Buscar chamados
+            try:
+                chamados_docs = list(query.limit(100).stream())
+            except Exception as e:
+                print(f"[PDF] Erro ao buscar chamados: {e}")
+                query = db.collection('revisoes')
+                chamados_docs = list(query.limit(100).stream())
+            
+            print(f"[PDF] {len(chamados_docs)} chamados encontrados no Firestore")
+            
+            chamados = []
+            for doc in chamados_docs:
+                c = doc.to_dict()
+                c['id'] = doc.id
+                
+                # Aplicar filtros de aprovação e direcionamento (não suportados no Firestore diretamente)
+                if aprovacao:
+                    c_aprovacao = c.get('aprovacao', '')
+                    if aprovacao == 'aprovado' and c_aprovacao != 'aprovado':
+                        continue
+                    elif aprovacao == 'falta_aprovacao' and c_aprovacao != 'falta_aprovacao':
+                        continue
+                
+                if direcionamento:
+                    c_direcionamento = c.get('direcionamento', '')
+                    if direcionamento == 'direcionado' and c_direcionamento != 'direcionado':
+                        continue
+                    elif direcionamento == 'nao_direcionado' and c_direcionamento != 'nao_direcionado':
+                        continue
+                    elif direcionamento == 'sem_direcionamento' and c_direcionamento != 'sem_direcionamento':
+                        continue
+                
+                chamados.append(c)
         
         # Criar PDF em paisagem
         buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=1.5*cm, leftMargin=1.5*cm, topMargin=2*cm, bottomMargin=2*cm)
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=1*cm, leftMargin=1*cm, topMargin=2*cm, bottomMargin=2*cm)
         elements = []
         
         # Estilos
@@ -4850,80 +4913,112 @@ def pdf_revisoes():
             'CustomTitle',
             parent=styles['Heading1'],
             fontSize=18,
-            textColor=colors.HexColor('#1f2937'),
-            spaceAfter=30,
+            textColor=colors.HexColor('#7c3aed'),
+            spaceAfter=20,
             alignment=TA_CENTER
         )
         
-        # Título
-        titulo = "RELATÓRIO DE REVISÕES PERIÓDICAS"
-        if veiculo:
-            titulo += f" - Veículo: {veiculo}"
-        if status:
-            status_texto = {'em_dia': 'Em Dia', 'proxima': 'Próximas', 'atrasada': 'Atrasadas'}.get(status, status)
-            titulo += f" - Status: {status_texto}"
+        # Título (SEM ACENTOS)
+        titulo = "RELATORIO DE CHAMADOS DE MANUTENCAO"
+        filtros_aplicados = []
+        if placa:
+            filtros_aplicados.append(f"Veiculo: {placa}")
+        if status_chamado:
+            status_map = {'pendente': 'Pendente', 'andamento': 'Em Andamento', 'resolvido': 'Resolvido'}
+            filtros_aplicados.append(f"Status: {status_map.get(status_chamado, status_chamado)}")
+        if categoria:
+            cat_map = {'pneu': 'Pneus', 'revisao': 'Revisao', 'mecanica': 'Mecanica', 'lataria': 'Lataria'}
+            filtros_aplicados.append(f"Categoria: {cat_map.get(categoria, categoria)}")
+        if aprovacao:
+            apr_map = {'aprovado': 'Aprovados', 'falta_aprovacao': 'Falta Aprovacao'}
+            filtros_aplicados.append(f"Aprovacao: {apr_map.get(aprovacao, aprovacao)}")
+        if direcionamento:
+            dir_map = {'direcionado': 'Direcionado', 'nao_direcionado': 'Nao Direcionado', 'sem_direcionamento': 'Sem Direcionamento'}
+            filtros_aplicados.append(f"Direcionamento: {dir_map.get(direcionamento, direcionamento)}")
+        
+        if filtros_aplicados:
+            titulo += f" ({', '.join(filtros_aplicados)})"
         
         elements.append(Paragraph(titulo, title_style))
         elements.append(Paragraph(f"Gerado em: {datetime.now(LOCAL_TZ).strftime('%d/%m/%Y %H:%M')}", styles['Normal']))
-        elements.append(Spacer(1, 0.5*cm))
+        elements.append(Spacer(1, 0.4*cm))
         
-        # Tabela
-        data = [['Status', 'Veículo', 'Tipo', 'KM Revisão', 'Data', 'KM Próxima', 'KM Restante', 'Oficina']]
+        # Tabela (SEM ACENTOS)
+        data = [['Status', 'Placa', 'Motorista', 'Categoria', 'Titulo', 'KM', 'Aprovacao', 'Direcionamento', 'Data']]
         
-        if len(revisoes) == 0:
-            data.append(['Nenhuma revisão encontrada', '', '', '', '', '', '', ''])
+        if len(chamados) == 0:
+            data.append(['', '', '', '', '', '', '', '', ''])
+            data.append(['', '', 'NENHUM CHAMADO ENCONTRADO NO FIRESTORE', '', '', '', '', '', ''])
+            data.append(['', '', '', '', '', '', '', '', ''])
+            data.append(['', 'Os chamados estao salvos apenas no LocalStorage do navegador.', '', '', '', '', '', '', ''])
+            data.append(['', 'Para gerar PDF, e necessario cadastrar chamados via sistema.', '', '', '', '', '', '', ''])
         
-        for r in revisoes:
-            data_revisao = r.get('data_revisao')
-            data_rev_str = '-'
-            if data_revisao:
-                if isinstance(data_revisao, datetime):
-                    data_rev_str = data_revisao.strftime('%d/%m/%Y')
-                else:
-                    try:
-                        data_rev_str = datetime.fromisoformat(str(data_revisao)).strftime('%d/%m/%Y')
-                    except:
-                        pass
-            
-            # Status text
+        for c in chamados:
+            # Status (SEM EMOJIS) - LocalStorage usa 'mainStatus' em português
             status_map = {
-                'em_dia': '✅ Em dia',
-                'proxima': '⚠️ Próxima',
-                'atrasada': '🚨 Atrasada'
+                'pendente': 'Pendente',
+                'andamento': 'Em Andamento',
+                'resolvido': 'Resolvido'
             }
-            status_text = status_map.get(r.get('status', 'em_dia'), '✅ Em dia')
+            status_text = status_map.get(c.get('mainStatus', 'pendente'), 'Pendente')
             
-            km_restante_str = '-'
-            if 'km_restante' in r:
-                if r['km_restante'] < 0:
-                    km_restante_str = f"{abs(r['km_restante']):,} km atrasado".replace(',', '.')
-                else:
-                    km_restante_str = f"{r['km_restante']:,} km".replace(',', '.')
+            # Categoria (SEM EMOJIS)
+            cat_map = {
+                'pneu': 'Pneu',
+                'revisao': 'Revisao',
+                'mecanica': 'Mecanica',
+                'lataria': 'Lataria'
+            }
+            cat_text = cat_map.get(c.get('category', ''), '-')
+            
+            # Aprovação - LocalStorage tem campo direto
+            approval_status = c.get('aprovacao', '')
+            apr_map = {
+                'aprovado': 'Aprovado',
+                'falta_aprovacao': 'Pendente'
+            }
+            apr_text = apr_map.get(approval_status, '-')
+            
+            # Direcionamento - LocalStorage tem campo direto
+            assignment_status = c.get('direcionamento', '')
+            dir_map = {
+                'direcionado': 'Sim',
+                'nao_direcionado': 'Aguardando',
+                'sem_direcionamento': 'Sem'
+            }
+            dir_text = dir_map.get(assignment_status, '-')
+            
+            # Data - LocalStorage tem campo 'date' como string
+            data_str = c.get('date', '-')
+            # Se for "Não informada" ou vazio, mostra "-"
+            if not data_str or data_str.lower() in ['não informada', 'nao informada', '']:
+                data_str = '-'
             
             data.append([
                 status_text,
-                r.get('placa', '-') or '-',
-                r.get('tipo_revisao', '-') or '-',
-                f"{r.get('km_revisao', 0):,}".replace(',', '.') if r.get('km_revisao') else '-',
-                data_rev_str,
-                f"{r.get('km_proxima_revisao', 0):,}".replace(',', '.') if r.get('km_proxima_revisao') else '-',
-                km_restante_str,
-                r.get('oficina', '-') or '-'
+                sanitize_text(c.get('plate', '-')),
+                sanitize_text(c.get('driver', '-')),
+                cat_text,
+                sanitize_text(c.get('title', '-'))[:30],  # Limita título a 30 chars
+                sanitize_text(c.get('km', '-')),
+                apr_text,
+                dir_text,
+                data_str
             ])
         
-        table = Table(data, colWidths=[3*cm, 3*cm, 4*cm, 3*cm, 3*cm, 3*cm, 3.5*cm, 4*cm])
+        table = Table(data, colWidths=[2.5*cm, 2.5*cm, 3.5*cm, 2.5*cm, 5*cm, 2*cm, 2.5*cm, 2.5*cm, 2.5*cm])
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#7c3aed')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
             ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
             ('GRID', (0, 0), (-1, -1), 1, colors.black),
             ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 9),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
         ]))
         elements.append(table)
         
@@ -4931,7 +5026,7 @@ def pdf_revisoes():
         doc.build(elements)
         buffer.seek(0)
         
-        filename = f'revisoes_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+        filename = f'chamados_manutencao_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
         return Response(
             buffer.getvalue(),
             mimetype='application/pdf',
@@ -4940,7 +5035,11 @@ def pdf_revisoes():
         
     except Exception as e:
         print(f"Erro ao gerar PDF de revisões: {e}")
-        return jsonify({"error": str(e)}), 500
+        import traceback
+        traceback.print_exc()
+        # Retorna erro sem caracteres especiais
+        error_msg = str(e).encode('ascii', 'ignore').decode('ascii')
+        return jsonify({"error": error_msg if error_msg else "Erro ao gerar PDF"}), 500
 
 
 @app.route('/pdf/km-mensal', methods=['GET'])
@@ -4960,7 +5059,7 @@ def gerar_pdf_km_mensal():
         mes_filtro = request.args.get('mes')  # Formato: YYYY-MM
         ano_filtro = request.args.get('ano')  # Formato: YYYY
         
-        print(f"📊 [PDF KM] Gerando PDF com filtros: mes={mes_filtro}, ano={ano_filtro}")
+        print(f"[STATS] [PDF KM] Gerando PDF com filtros: mes={mes_filtro}, ano={ano_filtro}")
         
         # Buscar dados de km mensal da coleção km_mensal
         km_ref = db.collection('km_mensal')
@@ -4986,7 +5085,7 @@ def gerar_pdf_km_mensal():
                 'observacao': data.get('observacao', '')
             })
         
-        print(f"📦 [PDF KM] Encontrados {len(registros)} registros")
+        print(f" [PDF KM] Encontrados {len(registros)} registros")
         
         # Criar PDF
         buffer = BytesIO()
@@ -5064,7 +5163,7 @@ def gerar_pdf_km_mensal():
             filename_base += f'_{ano_filtro}'
         filename = f'{filename_base}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
         
-        print(f"✅ [PDF KM] PDF gerado: {filename}")
+        print(f"[OK] [PDF KM] PDF gerado: {filename}")
         
         return Response(
             buffer.getvalue(),
@@ -5073,7 +5172,7 @@ def gerar_pdf_km_mensal():
         )
         
     except Exception as e:
-        print(f"❌ [PDF KM] Erro ao gerar PDF: {e}")
+        print(f" [PDF KM] Erro ao gerar PDF: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
@@ -5081,7 +5180,7 @@ def gerar_pdf_km_mensal():
 
 from waitress import serve
 
-# ✅ Endpoint de health check para UptimeRobot/Render
+# [OK] Endpoint de health check para UptimeRobot/Render
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint - mantém servidor acordado no Render"""
@@ -5090,6 +5189,25 @@ def health_check():
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "service": "Frota Sanemar"
     }), 200
+
+# Handler de erro global
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """Captura todas as exceções não tratadas para evitar crashes"""
+    import traceback
+    error_trace = traceback.format_exc()
+    print(f"\n[ERRO] Exceção capturada:")
+    print(error_trace)
+    
+    # Sanitiza erro para ASCII
+    try:
+        error_msg = str(e).encode('ascii', 'ignore').decode('ascii')
+        if not error_msg:
+            error_msg = "Erro interno do servidor"
+    except:
+        error_msg = "Erro interno do servidor"
+    
+    return jsonify({"error": error_msg}), 500
 
 if __name__ == '__main__':
     print("RODOUUUUUUUUUUU")
