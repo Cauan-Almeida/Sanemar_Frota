@@ -579,76 +579,27 @@
             </svg>
         </button>
 
-        <!-- Botão de DEBUG - Encontrar Footer Duplicado (apenas mobile) -->
-        <button id="debug-footer-btn" onclick="debugFooters()" style="position: fixed; bottom: 20px; right: 20px; z-index: 99999; background: #ef4444; color: white; padding: 12px 16px; border-radius: 50%; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.5); border: none; font-size: 20px; display: none;">
-            🐛
-        </button>
 
-        <script>
-            // Mostra botão de debug apenas no mobile
-            if (window.innerWidth <= 768) {
-                document.getElementById('debug-footer-btn').style.display = 'block';
-            }
-
-            function debugFooters() {
-                let report = '🔍 ELEMENTOS FIXOS NO BOTTOM:\n\n';
-                let count = 0;
-                
-                document.querySelectorAll('*').forEach(el => {
-                    const style = window.getComputedStyle(el);
-                    const position = style.position;
-                    const bottom = style.bottom;
-                    
-                    if ((position === 'fixed' || position === 'absolute') && 
-                        (bottom === '0px' || bottom === '0')) {
-                        count++;
-                        el.style.border = '5px solid red';
-                        el.style.boxShadow = '0 0 20px red';
-                        
-                        report += `${count}. ${el.tagName}\n`;
-                        report += `   ID: ${el.id || 'sem ID'}\n`;
-                        report += `   Classes: ${el.className || 'sem classes'}\n`;
-                        report += `   Position: ${position}\n`;
-                        report += `   Z-index: ${style.zIndex}\n\n`;
-                    }
-                });
-                
-                report += `\n📊 TOTAL: ${count} elementos\n\n`;
-                report += 'Os elementos estão com BORDA VERMELHA.\n';
-                report += 'Me envie um print da tela!';
-                
-                alert(report);
-                
-                // Copia para área de transferência
-                if (navigator.clipboard) {
-                    navigator.clipboard.writeText(report).then(() => {
-                        setTimeout(() => alert('✅ Relatório copiado! Cole em uma mensagem para mim.'), 500);
-                    });
-                }
-            }
-        </script>
 
         <!-- Main Content -->
         <div class="flex-1 flex flex-col overflow-hidden">
             <header class="glass shadow-xl p-6 pl-24 flex justify-between items-center animate-fade-in">
-                <button id="open-sidebar" class="hidden text-gray-600 hover:text-indigo-600 md:hidden transition-colors">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
-                </button>
                 <div class="flex items-center gap-4">
                     <img src="/static/Logo_frota_sanemar.png" alt="Sanemar Frota" class="h-12 w-12 rounded-xl shadow-lg">
                     <h1 id="main-title" class="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent"></h1>
                 </div>
                 <div class="flex items-center gap-4">
-                    <button id="theme-toggle-btn" class="px-4 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-xl font-semibold shadow-lg transition-all transform hover:scale-105" title="Alternar tema claro/escuro">
-                        <span class="dark-mode-icon hidden">🌙</span>
-                        <span class="light-mode-icon">☀️</span>
-                    </button>
                     <button id="refresh-cache-btn" class="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white rounded-xl font-semibold shadow-lg transition-all transform hover:scale-105" title="Atualizar dados (limpa cache)">
                         🔄 Atualizar
                     </button>
                     <div class="hidden md:block text-sm text-slate-900 font-bold">
                         <span id="current-date"></span>
                     </div>
+                    <!-- Botão de tema discreto no canto -->
+                    <button id="theme-toggle-btn" class="p-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg transition-all opacity-70 hover:opacity-100" title="Alternar tema claro/escuro">
+                        <span class="dark-mode-icon hidden text-lg">🌙</span>
+                        <span class="light-mode-icon text-lg">☀️</span>
+                    </button>
                 </div>
             </header>
 
@@ -2440,21 +2391,36 @@
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js').then(registration => {
-                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                    console.log('[SW v15] Registrado com sucesso:', registration.scope);
                     
                     // Detecta atualização do Service Worker
                     registration.addEventListener('updatefound', () => {
                         const newWorker = registration.installing;
                         newWorker.addEventListener('statechange', () => {
                             if (newWorker.state === 'activated' && navigator.serviceWorker.controller) {
-                                // Nova versão ativada - mostra toast
-                                showUpdateToast();
+                                console.log('[SW v15] 🔄 Nova versão detectada!');
+                                showUpdateModal();
                             }
                         });
                     });
                 }, err => {
-                    console.log('ServiceWorker registration failed: ', err);
+                    console.warn('[SW v15] Falha no registro:', err);
                 });
+                
+                // Escuta mensagens do Service Worker
+                navigator.serviceWorker.addEventListener('message', event => {
+                    if (event.data.type === 'SW_UPDATED') {
+                        console.log('[SW v15] 📢 Mensagem recebida: Nova versão', event.data.version);
+                        showUpdateModal();
+                    }
+                });
+                
+                // Verifica atualizações a cada 30 segundos
+                setInterval(() => {
+                    navigator.serviceWorker.getRegistration().then(reg => {
+                        if (reg) reg.update();
+                    });
+                }, 30000);
             });
         }
         
