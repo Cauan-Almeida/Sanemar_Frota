@@ -60,6 +60,9 @@ def requires_auth(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if not session.get('logged_in') or session.get('user_type') != 'admin':
+            # Se for rota API, retorna JSON 401 ao invés de redirecionar
+            if request.path.startswith('/api/'):
+                return jsonify({"error": "Autenticação necessária", "authenticated": False}), 401
             return redirect(url_for('login_page', next=request.url))
         return f(*args, **kwargs)
     return decorated
@@ -69,6 +72,9 @@ def requires_auth_historico(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if not session.get('logged_in') or session.get('user_type') not in ['admin', 'historico']:
+            # Se for rota API, retorna JSON 401 ao invés de redirecionar
+            if request.path.startswith('/api/'):
+                return jsonify({"error": "Autenticação necessária", "authenticated": False}), 401
             return redirect(url_for('login_page', next=request.url))
         return f(*args, **kwargs)
     return decorated
@@ -722,7 +728,6 @@ def veiculo_detalhes(placa):
 # --- API Endpoints ---
 
 @app.route('/api/saida', methods=['POST'])
-@requires_auth
 def api_saida():
     if not db:
         return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
@@ -764,7 +769,6 @@ def api_saida():
 
 
 @app.route('/api/chegada', methods=['POST'])
-@requires_auth
 def api_chegada():
     if not db:
         return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
@@ -798,7 +802,6 @@ def api_chegada():
         return jsonify({"error": response_message}), 500
 
 @app.route('/api/abastecimento', methods=['POST'])
-@requires_auth
 def api_abastecimento():
     """Rota para registrar abastecimento rápido"""
     if not db:
@@ -862,7 +865,6 @@ def api_abastecimento():
         return jsonify({"error": "Erro ao registrar abastecimento"}), 500
 
 @app.route('/api/veiculos_em_curso', methods=['GET'])
-@requires_auth
 def get_veiculos_em_curso():
     if not db:
         return jsonify({"error": "Conexão com o banco de dados não foi estabelecida."}), 500
