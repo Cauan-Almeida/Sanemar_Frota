@@ -46,11 +46,7 @@ async function loadVeiculosTab() {
     console.log('🚗 loadVeiculosTab() chamada');
     try {
         console.log('📡 Fazendo fetch para /api/veiculos...');
-        const res = await fetch('/api/veiculos');
-        console.log('📥 Resposta recebida:', res.status, res.statusText);
-        if (!res.ok) throw new Error('Erro ao carregar veículos');
-        const veiculos = await res.json();
-        
+        const veiculos = await window.safeFetchJSON('/api/veiculos');
         console.log('📦 Veículos carregados:', veiculos.length, 'veículos');
         
         // Guardar no cache
@@ -92,11 +88,9 @@ async function renderVeiculos(veiculos) {
     console.log('🔄 Buscando últimos abastecimentos para ordenação...');
     const veiculosComData = await Promise.all(veiculosAtivos.map(async (v) => {
         try {
-            const res = await fetch(`/api/veiculos/${encodeURIComponent(v.placa)}/refuels?page=1&page_size=1`);
-            if (res.ok) {
-                const data = await res.json();
-                const ultimoAbastecimento = data.items && data.items[0] ? data.items[0].timestamp : null;
-                return { ...v, ultimoAbastecimento };
+            const data = await window.safeFetchJSON(`/api/veiculos/${encodeURIComponent(v.placa)}/refuels?page=1&page_size=1`);
+            const ultimoAbastecimento = data.items && data.items[0] ? data.items[0].timestamp : null;
+            return { ...v, ultimoAbastecimento };
             }
         } catch (e) {
             console.error(`Erro ao buscar último abastecimento de ${v.placa}:`, e);
@@ -175,10 +169,8 @@ async function criarCardVeiculo(v, ativo) {
     // Buscar últimos abastecimentos
     let refuels = [];
     try {
-        const refuelsRes = await fetch(`/api/veiculos/${encodeURIComponent(placa)}/refuels?page=1&page_size=3`);
-        if (refuelsRes.ok) {
-            const refuelsData = await refuelsRes.json();
-            refuels = refuelsData.items || [];
+        const refuelsData = await window.safeFetchJSON(`/api/veiculos/${encodeURIComponent(placa)}/refuels?page=1&page_size=3`);
+        refuels = refuelsData.items || [];
             
             // Ordenar do mais recente para o mais antigo (garantia adicional)
             refuels.sort((a, b) => {

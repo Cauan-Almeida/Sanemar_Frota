@@ -1971,6 +1971,37 @@
         window.historicoCompleto = [];
         window.categoriaAtiva = 'todos';
         console.log('✅ Cache global iniciado IMEDIATAMENTE');
+        
+        // 🛡️ FETCH SEGURO - Valida JSON antes de parsear
+        async function safeFetchJSON(url, options = {}) {
+            try {
+                const response = await fetch(url, options);
+                
+                // Verifica Content-Type
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    console.error('❌ Erro: Esperava JSON mas recebeu:', contentType);
+                    console.error('URL:', url);
+                    console.error('Status:', response.status);
+                    
+                    // Tenta ler o corpo como texto para debug
+                    const text = await response.text();
+                    console.error('Resposta (primeiros 200 chars):', text.substring(0, 200));
+                    
+                    throw new Error(`Servidor retornou ${contentType} ao invés de JSON`);
+                }
+                
+                // Se passou na validação, parseia o JSON
+                return await response.json();
+            } catch (error) {
+                console.error('❌ Erro em safeFetchJSON:', error);
+                throw error;
+            }
+        }
+        
+        // Exporta para uso global em TODOS os arquivos JS
+        window.safeFetchJSON = safeFetchJSON;
+        console.log('✅ safeFetchJSON disponível globalmente');
     </script>
 
     <script src="/static/toast.js?v=13.0"></script>
@@ -2696,8 +2727,7 @@
             // Busca dados do histórico se não estiverem no cache
             if (window.historicoCache.length === 0) {
                 console.log('📥 Cache vazio, buscando da API...');
-                const response = await fetch('/api/historico');
-                window.historicoCache = await response.json();
+                window.historicoCache = await safeFetchJSON('/api/historico');
                 console.log('✅ Cache atualizado:', window.historicoCache.length, 'registros');
             }
 

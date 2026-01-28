@@ -285,19 +285,14 @@ async function initRealtimeListeners() {
                         console.error('❌ window.loadHistoricoData não está disponível!');
                         console.log('🔍 Tentando buscar diretamente da API...');
                         
-                        const response = await fetch('/api/historico?page=1&per_page=20&_=' + Date.now());
-                        if (response.ok) {
-                            const data = await response.json();
-                            console.log('✅ Dados recebidos da API:', data.items?.length, 'registros');
-                            
-                            if (typeof window.populateHistoryTable === 'function') {
-                                window.populateHistoryTable(data.items || []);
-                                console.log('✅ Tabela atualizada via window.populateHistoryTable');
-                            } else {
-                                console.error('❌ window.populateHistoryTable também não está disponível!');
-                            }
+                        const data = await window.safeFetchJSON('/api/historico?page=1&per_page=20&_=' + Date.now());
+                        console.log('✅ Dados recebidos da API:', data.items?.length, 'registros');
+                        
+                        if (typeof window.populateHistoryTable === 'function') {
+                            window.populateHistoryTable(data.items || []);
+                            console.log('✅ Tabela atualizada via window.populateHistoryTable');
                         } else {
-                            console.error('❌ Erro ao buscar da API:', response.status);
+                            console.error('❌ window.populateHistoryTable também não está disponível!');
                         }
                     }
                     
