@@ -200,8 +200,9 @@ def activate_maintenance():
 def deactivate_maintenance():
     """Desativa o modo de manutenção (sem autenticação para poder reativar o sistema)"""
     try:
-        with open('.maintenance', 'w') as f:
-            f.write('off')
+        # Remove o arquivo completamente para garantir desativação
+        if os.path.exists('.maintenance'):
+            os.remove('.maintenance')
         return jsonify({"success": True, "message": "Modo de manutenção DESATIVADO"}), 200
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
