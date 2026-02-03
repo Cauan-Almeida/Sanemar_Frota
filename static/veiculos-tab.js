@@ -1,5 +1,7 @@
 // JavaScript para a aba de Veículos no Dashboard
 
+console.log('✅ veiculos-tab.js carregado!');
+
 let editingPlaca = null;
 let veiculosViewMode = 'card'; // 'card' ou 'lista'
 let veiculosCache = []; // Cache dos veículos
@@ -80,40 +82,11 @@ async function renderVeiculos(veiculos) {
         return;
     }
     
-    // Separar ativos e inativos
-    let veiculosAtivos = veiculos.filter(v => v.status_ativo !== false);
+    // Separar ativos e inativos (ordenar por placa)
+    const veiculosAtivos = veiculos.filter(v => v.status_ativo !== false).sort((a, b) => a.placa.localeCompare(b.placa));
     const veiculosInativos = veiculos.filter(v => v.status_ativo === false).sort((a, b) => a.placa.localeCompare(b.placa));
     
-    // Buscar último abastecimento de cada veículo ativo para ordenar
-    console.log('🔄 Buscando últimos abastecimentos para ordenação...');
-    const veiculosComData = await Promise.all(veiculosAtivos.map(async (v) => {
-        try {
-            const data = await window.safeFetchJSON(`/api/veiculos/${encodeURIComponent(v.placa)}/refuels?page=1&page_size=1`);
-            const ultimoAbastecimento = data.items && data.items[0] ? data.items[0].timestamp : null;
-            return { ...v, ultimoAbastecimento };
-            }
-        } catch (e) {
-            console.error(`Erro ao buscar último abastecimento de ${v.placa}:`, e);
-        }
-        return { ...v, ultimoAbastecimento: null };
-    }));
-    
-    // Ordenar por data do último abastecimento (mais recente primeiro)
-    veiculosAtivos = veiculosComData.sort((a, b) => {
-        // Veículos com abastecimento vêm primeiro
-        if (a.ultimoAbastecimento && !b.ultimoAbastecimento) return -1;
-        if (!a.ultimoAbastecimento && b.ultimoAbastecimento) return 1;
-        
-        // Se ambos têm abastecimento, ordena por data (mais recente primeiro)
-        if (a.ultimoAbastecimento && b.ultimoAbastecimento) {
-            return new Date(b.ultimoAbastecimento) - new Date(a.ultimoAbastecimento);
-        }
-        
-        // Se nenhum tem, ordena por placa
-        return a.placa.localeCompare(b.placa);
-    });
-    
-    console.log('✅ Veículos ordenados por último abastecimento');
+    console.log('✅ Veículos ordenados por placa');
     
     if (veiculosViewMode === 'card') {
         // Restaurar grid para modo card
@@ -128,11 +101,12 @@ async function renderVeiculos(veiculos) {
 
 // Renderizar como CARDS
 async function renderVeiculosCards(grid, veiculosAtivos, veiculosInativos) {
-    // Renderizar ativos
-    for (const v of veiculosAtivos) {
-        const card = await criarCardVeiculo(v, true);
-        grid.appendChild(card);
-    }
+    // Criar todos os cards em paralelo para carregar muito mais rápido
+    const cardsAtivosPromises = veiculosAtivos.map(v => criarCardVeiculo(v, true));
+    const cardsAtivos = await Promise.all(cardsAtivosPromises);
+    
+    // Adicionar cards ativos ao grid
+    cardsAtivos.forEach(card => grid.appendChild(card));
     
     // Divisor para inativos
     if (veiculosInativos.length > 0) {
@@ -141,11 +115,10 @@ async function renderVeiculosCards(grid, veiculosAtivos, veiculosInativos) {
         divisor.innerHTML = `📦 VEÍCULOS INATIVOS (${veiculosInativos.length})`;
         grid.appendChild(divisor);
         
-        // Renderizar inativos
-        for (const v of veiculosInativos) {
-            const card = await criarCardVeiculo(v, false);
-            grid.appendChild(card);
-        }
+        // Criar cards inativos em paralelo
+        const cardsInativosPromises = veiculosInativos.map(v => criarCardVeiculo(v, false));
+        const cardsInativos = await Promise.all(cardsInativosPromises);
+        cardsInativos.forEach(card => grid.appendChild(card));
     }
 }
 
@@ -171,27 +144,26 @@ async function criarCardVeiculo(v, ativo) {
     try {
         const refuelsData = await window.safeFetchJSON(`/api/veiculos/${encodeURIComponent(placa)}/refuels?page=1&page_size=3`);
         refuels = refuelsData.items || [];
-            
-            // Ordenar do mais recente para o mais antigo (garantia adicional)
-            refuels.sort((a, b) => {
-                const getTimestamp = (item) => {
-                    const possibleFields = ['timestamp', 'timestampChegada', 'timestampSaida', 'data', 'created_at'];
-                    for (const field of possibleFields) {
-                        if (item[field]) {
-                            const date = new Date(item[field]);
-                            if (!isNaN(date.getTime())) {
-                                return date.getTime();
-                            }
+        
+        // Ordenar do mais recente para o mais antigo (garantia adicional)
+        refuels.sort((a, b) => {
+            const getTimestamp = (item) => {
+                const possibleFields = ['timestamp', 'timestampChegada', 'timestampSaida', 'data', 'created_at'];
+                for (const field of possibleFields) {
+                    if (item[field]) {
+                        const date = new Date(item[field]);
+                        if (!isNaN(date.getTime())) {
+                            return date.getTime();
                         }
                     }
-                    return 0;
-                };
-                
-                const dateA = getTimestamp(a);
-                const dateB = getTimestamp(b);
-                return dateB - dateA; // Mais recente primeiro
-            });
-        }
+                }
+                return 0;
+            };
+            
+            const dateA = getTimestamp(a);
+            const dateB = getTimestamp(b);
+            return dateB - dateA; // Mais recente primeiro
+        });
     } catch (e) {
         console.error('Erro ao buscar abastecimentos:', e);
     }

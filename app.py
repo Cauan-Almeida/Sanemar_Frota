@@ -1954,8 +1954,8 @@ def motorista_html_redirect():
 @app.route('/veiculos')
 @requires_auth
 def veiculos_page():
-    """Renderiza a página de veículos, que é parte do dashboard."""
-    return render_template('dashboard.html', active_tab='veiculos')
+    """Renderiza a página de veículos standalone."""
+    return render_template('veiculos.html')
 
 
 @app.route('/api/veiculos/refuel', methods=['POST'])

@@ -10,10 +10,10 @@
     <style>
         * { font-family: 'Inter', sans-serif; }
         body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
-        /* Removidas todas as animações e transições para carregamento mais rápido */
+        /* Removido TODAS as animações e transições para performance máxima */
         .card-hover:hover { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
-        /* Desabilita transições globalmente nesta página */
-        * { transition: none !important; }
+        /* CSS minimalista - SEM transições ou animações */
+        * { transition: none !important; animation: none !important; }
         button:hover, a:hover { transform: none !important; }
     </style>
 </head>
@@ -190,14 +190,28 @@
             return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
         }
 
-        // Carregar veículos
+        // Carregar veículos - OTIMIZADA para carregar TODOS DE UMA VEZ
         async function loadVeiculos() {
+            console.log('🚗 loadVeiculos() chamada');
+            const grid = document.getElementById('veiculos-grid');
+            
+            if (!grid) {
+                console.error('❌ Elemento veiculos-grid não encontrado!');
+                return;
+            }
+
+            // Mostrar loading
+            grid.innerHTML = '<div class="col-span-full text-center"><p class="text-white text-xl">⏳ Carregando veículos...</p></div>';
+
             try {
                 const res = await fetch('/api/veiculos');
-                if (!res.ok) throw new Error('Erro ao carregar veículos');
+                if (!res.ok) {
+                    throw new Error(`Erro HTTP ${res.status}: ${res.statusText}`);
+                }
                 const veiculos = await res.json();
+                console.log('📦 Veículos carregados:', veiculos.length, 'veículos');
+                console.log('📋 Dados:', veiculos);
 
-                const grid = document.getElementById('veiculos-grid');
                 grid.innerHTML = '';
 
                 if (veiculos.length === 0) {
@@ -205,39 +219,26 @@
                     return;
                 }
 
-                // Para cada veículo, buscar métricas
-                for (const v of veiculos) {
+                // OTIMIZAÇÃO: Criar todos os cards em paralelo com Promise.all
+                // Isso carrega TODOS os veículos ao mesmo tempo, não um por vez
+                const cardPromises = veiculos.map(async (v) => {
                     const placa = v.placa;
                     
-                    // Buscar métricas
-                    let metrics = {};
-                    try {
-                        const metricsRes = await fetch(`/api/veiculos/${encodeURIComponent(placa)}/metrics`);
-                        if (metricsRes.ok) {
-                            metrics = await metricsRes.json();
-                        }
-                    } catch (e) {
-                        console.error('Erro ao buscar métricas:', e);
-                    }
-
-                    // Buscar últimos abastecimentos
-                    let refuels = [];
-                    try {
-                        const refuelsRes = await fetch(`/api/veiculos/${encodeURIComponent(placa)}/refuels?page=1&page_size=3`);
-                        if (refuelsRes.ok) {
-                            const refuelsData = await refuelsRes.json();
-                            refuels = refuelsData.items || [];
-                        }
-                    } catch (e) {
-                        console.error('Erro ao buscar abastecimentos:', e);
-                    }
+                    // Buscar métricas e abastecimentos em paralelo
+                    const [metrics, refuelsData] = await Promise.all([
+                        fetch(`/api/veiculos/${encodeURIComponent(placa)}/metrics`)
+                            .then(r => r.ok ? r.json() : {})
+                            .catch(e => { console.error('Erro métricas:', e); return {}; }),
+                        fetch(`/api/veiculos/${encodeURIComponent(placa)}/refuels?page=1&page_size=3`)
+                            .then(r => r.ok ? r.json() : { items: [] })
+                            .catch(e => { console.error('Erro abastecimentos:', e); return { items: [] }; })
+                    ]);
+                    
+                    const refuels = refuelsData.items || [];
 
                     const card = document.createElement('div');
                     card.className = 'bg-white rounded-2xl shadow-xl p-6 card-hover cursor-pointer';
                     card.onclick = () => window.location.href = `/veiculos/${encodeURIComponent(placa)}`;
-                    
-                    // Debug log
-                    console.log('🚗 Veículo:', placa, '| ID:', v.id, '| Documento:', v.documento_url);
                     
                     // Botões de documento
                     const documentoButtons = v.documento_url
@@ -260,7 +261,7 @@
                         : '<span class="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-bold">⭕ Inativo</span>';
                     
                     const statusButton = `<button class="text-lg hover:scale-110 transition-all" onclick="event.stopPropagation(); toggleVeiculoStatus('${v.id}', ${!statusAtivo})" title="${statusAtivo ? 'Desativar' : 'Ativar'}">
-                        ${statusAtivo ? '⏸️' : '▶️'}
+                        ${statusAtivo ? '📦' : '✅'}
                     </button>`;
                     
                     const categoriaEmoji = {
@@ -341,12 +342,32 @@
                         </div>
                     `;
                     
-                    grid.appendChild(card);
-                }
+                    return card;
+                });
+
+                // Aguardar TODOS os cards serem criados
+                const cards = await Promise.all(cardPromises);
+                
+                // Adicionar todos os cards de uma vez no DOM
+                cards.forEach(card => grid.appendChild(card));
+                
+                console.log('✅ Todos os veículos carregados de uma vez!');
 
             } catch (err) {
-                console.error('Erro ao carregar veículos:', err);
-                alert('Erro ao carregar veículos.');
+                console.error('❌ Erro ao carregar veículos:', err);
+                console.error('❌ Stack:', err.stack);
+                const grid = document.getElementById('veiculos-grid');
+                if (grid) {
+                    grid.innerHTML = `
+                        <div class="col-span-full text-center">
+                            <p class="text-red-500 text-xl mb-2">❌ Erro ao carregar veículos</p>
+                            <p class="text-white">${err.message}</p>
+                            <button onclick="loadVeiculos()" class="mt-4 px-6 py-3 bg-blue-500 text-white rounded-xl font-semibold">
+                                🔄 Tentar Novamente
+                            </button>
+                        </div>
+                    `;
+                }
             }
         }
 
@@ -734,9 +755,15 @@
         window.visualizarDocumentoVeiculo = visualizarDocumentoVeiculo;
         window.fecharModalVisualizarDocVeiculo = fecharModalVisualizarDocVeiculo;
         window.toggleVeiculoStatus = toggleVeiculoStatus;
+        window.loadVeiculos = loadVeiculos; // Expor para debug
+        window.openEditVeiculo = openEditVeiculo;
 
-        // Carregar ao iniciar
-        loadVeiculos();
+        // Carregar ao iniciar - COM DELAY PARA DEBUG
+        console.log('🔵 Script carregado, iniciando loadVeiculos...');
+        setTimeout(() => {
+            console.log('🚀 Executando loadVeiculos()');
+            loadVeiculos();
+        }, 100);
     </script>
 </body>
 </html>
